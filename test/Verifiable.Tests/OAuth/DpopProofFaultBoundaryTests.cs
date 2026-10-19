@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
@@ -73,23 +74,73 @@ internal sealed class DpopProofFaultBoundaryTests
 
     /// <summary>
     /// RFC 7515 section 7.1: a compact JWS whose protected header or signature segment is empty carries no header or signature to
-    /// verify, which the verification answers as not verifying, without handing the empty text to the decoder.
+    /// verify, which the verification answers as not verifying, without handing the empty text to the decoder. The producer writes
+    /// each segment as intended under one key: the proof itself, which the key verifies (the positive control); the same claims
+    /// signed over an empty protected header, the signature a real one over that signing input; and the proof's header and claims
+    /// with no signature written. The decoder the verification is handed fails on empty text, so an empty segment reaching it
+    /// would surface as that fault.
     /// </summary>
-    /// <returns>A task completing once both serializations are judged.</returns>
+    /// <returns>A task completing once the serializations are judged.</returns>
     [TestMethod]
     public async Task AJwsWithAnEmptyHeaderOrSignatureSegmentDoesNotVerify()
     {
-        var proof = await BuildProofAsync().ConfigureAwait(false);
-        var parts = proof.Split('.');
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using var publicKey = keys.PublicKey;
         using var privateKey = keys.PrivateKey;
 
-        var emptySignature = await Jws.VerifyAsync($"{parts[0]}.{parts[1]}.", TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
-        var emptyHeader = await Jws.VerifyAsync($".{parts[1]}.{parts[2]}", TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        var proof = await BuildProofAsync(DpopTestSupport.Serializer, keys).ConfigureAwait(false);
+        var parts = proof.Split('.');
 
+        using var emptyHeaderSignature = await privateKey.SignAsync(Encoding.ASCII.GetBytes($".{parts[1]}"), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        var emptyHeaderJws = $".{parts[1]}.{TestSetup.Base64UrlEncoder(emptyHeaderSignature.AsReadOnlySpan())}";
+        var emptySignatureJws = $"{parts[0]}.{parts[1]}.";
+        var decoder = DecoderRefusingToBeHandedEmptyText();
+
+        var verifies = await Jws.VerifyAsync(proof, decoder, BaseMemoryPool.Shared, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        var emptyHeader = await Jws.VerifyAsync(emptyHeaderJws, decoder, BaseMemoryPool.Shared, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        var emptySignature = await Jws.VerifyAsync(emptySignatureJws, decoder, BaseMemoryPool.Shared, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verifies, "The positive control: the key verifies the proof the producer signed under it.");
+        Assert.IsFalse(emptyHeader, "An empty protected header segment does not verify, its signature a real one over its signing input.");
         Assert.IsFalse(emptySignature, "An empty signature segment does not verify.");
-        Assert.IsFalse(emptyHeader, "An empty protected header segment does not verify.");
+    }
+
+
+    /// <summary>
+    /// RFC 7517 section 4.3 and RFC 9449 section 4.3: an embedded key carrying a <c>use</c> outside the registered vocabulary beside
+    /// <c>key_ops</c>, or one whose certificate's key the judgement compares none of, has a relation the validation does not
+    /// establish. Such a proof is refused as <see cref="DpopProofValidationFailureReason.UnsupportedOrUnestablished"/>, its part
+    /// refusal naming the member and the detailed defect, never as <see cref="DpopProofValidationFailureReason.Malformed"/>, which
+    /// asserts a proof not well formed; the producer writes the members into the header before signing.
+    /// </summary>
+    /// <returns>A task completing once the proof is judged.</returns>
+    [TestMethod]
+    public async Task AProofWhoseKeyRelationIsUnestablishedIsRefusedAsSuchNeverAsMalformed()
+    {
+        var serializer = DpopTestSupport.Serializer with
+        {
+            SerializeHeader = header =>
+            {
+                var written = new Dictionary<string, object?>(DpopTestSupport.Serializer.SerializeHeader(header), StringComparer.Ordinal);
+                var jwk = Assert.IsInstanceOfType<Dictionary<string, object>>(written[WellKnownJoseHeaderNames.Jwk]);
+
+                written[WellKnownJoseHeaderNames.Jwk] = new Dictionary<string, object>(jwk, StringComparer.Ordinal)
+                {
+                    [WellKnownJwkMemberNames.Use] = "x-attestation",
+                    [WellKnownJwkMemberNames.KeyOps] = new[] { "verify" }
+                };
+
+                return written;
+            }
+        };
+
+        var proof = await BuildProofAsync(serializer).ConfigureAwait(false);
+
+        var result = await ValidateAsync(proof, TestSetup.Base64UrlDecoder).ConfigureAwait(false);
+        var refusal = result.PartRefusal as DpopProofMemberRefusal;
+
+        Assert.AreEqual(DpopProofValidationFailureReason.UnsupportedOrUnestablished, result.FailureReason);
+        Assert.AreEqual(DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished, refusal?.Defect, "The part refusal names the detailed defect.");
     }
 
 
@@ -179,9 +230,22 @@ internal sealed class DpopProofFaultBoundaryTests
     /// <summary>Builds and signs a proof for a POST to the target, issued now, under a fresh P-256 key, written by the serializer given.</summary>
     /// <param name="serializer">The serializer writing the proof's header and claims before signing.</param>
     /// <returns>The compact proof.</returns>
-    private async Task<string> BuildProofAsync(DpopJwsPartSerializer serializer)
+    private Task<string> BuildProofAsync(DpopJwsPartSerializer serializer) => BuildProofAsync(serializer, TestKeyMaterialProvider.CreateFreshP256KeyMaterial());
+
+
+    /// <summary>A decoder decoding as the library's test wiring does, which fails when it is handed empty text.</summary>
+    /// <returns>The decoder.</returns>
+    private static DecodeDelegate DecoderRefusingToBeHandedEmptyText() => static (source, pool) =>
+        source.IsEmpty ? throw new InvalidOperationException("The decoder was handed an empty segment.") : TestSetup.Base64UrlDecoder(source, pool);
+
+
+    /// <summary>Builds and signs a proof for a POST to the target, issued now, under the P-256 key given, written by the serializer given.</summary>
+    /// <param name="serializer">The serializer writing the proof's header and claims before signing.</param>
+    /// <param name="keys">The key the proof is signed under, its public half embedded.</param>
+    /// <returns>The compact proof.</returns>
+    private async Task<string> BuildProofAsync(DpopJwsPartSerializer serializer, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys)
     {
-        var key = new DpopKey(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        var key = new DpopKey(keys, WellKnownJwaValues.Es256);
         var claims = new DpopProofClaims
         {
             Htm = WellKnownHttpMethods.Post,

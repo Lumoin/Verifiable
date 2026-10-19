@@ -181,20 +181,18 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-6.3">Token
     /// Status List, Section 6.3</see>: "The Status CBOR structure is a Map that MUST include at least one
     /// data item that refers to a status mechanism." A structure with no data item states nothing at all,
-    /// so the verifier refuses it as a malformed presentation rather than reading it as a credential that
-    /// references no Status List.
+    /// so the verifier refuses it as a malformed presentation, the status reading's refusal its typed defect, rather than
+    /// reading it as a credential that references no Status List.
     /// </summary>
+    /// <returns>A task completing once the presentation is read.</returns>
     [TestMethod]
     public async Task AStatusStructureWithNoMechanismIsRefusedAtTheParseBoundary()
     {
-        FormatException refusal = await Assert.ThrowsExactlyAsync<FormatException>(
-            async () => await ParseStatusPresentationAsync(
-                SdCwtWireFixtures.BuildStatusWithNoMechanism()).ConfigureAwait(false),
-            "Section 6.3's \"MUST include at least one data item\" makes an empty Status structure malformed, " +
-            "which the parse boundary reports as a format failure rather than as an absent status.").ConfigureAwait(false);
+        var reading = await ReadStatusPresentationAsync(SdCwtWireFixtures.BuildStatusWithNoMechanism()).ConfigureAwait(false);
 
-        Assert.IsNotNull(refusal.Message,
-            "The malformed status structure is reported with a message the seat can log.");
+        Assert.AreEqual(SdCwtPresentationDefect.CredentialClaimMalformed, reading.Error,
+            "Section 6.3's \"MUST include at least one data item\" makes an empty Status structure malformed, " +
+            "which the parse boundary answers as the claim's defect rather than as an absent status.");
     }
 
 
@@ -208,11 +206,11 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
     [TestMethod]
     public async Task AStatusListIndexEncodedAsATextStringIsRefusedAtTheParseBoundary()
     {
-        _ = await Assert.ThrowsExactlyAsync<FormatException>(
-            async () => await ParseStatusPresentationAsync(
-                SdCwtWireFixtures.BuildStatusWithRawStatusList("42", StatusListUri)).ConfigureAwait(false),
+        var reading = await ReadStatusPresentationAsync(SdCwtWireFixtures.BuildStatusWithRawStatusList("42", StatusListUri)).ConfigureAwait(false);
+
+        Assert.AreEqual(SdCwtPresentationDefect.CredentialClaimMalformed, reading.Error,
             "Section 6.3 requires idx to be an unsigned integer (major type 0); a text string leaves that " +
-            "value domain and must not be coerced into an index.").ConfigureAwait(false);
+            "value domain and must not be coerced into an index.");
     }
 
 
@@ -226,11 +224,11 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
     [TestMethod]
     public async Task AStatusListUriThatIsNotAConformingUriIsRefusedAtTheParseBoundary()
     {
-        _ = await Assert.ThrowsExactlyAsync<FormatException>(
-            async () => await ParseStatusPresentationAsync(
-                SdCwtWireFixtures.BuildStatusWithRawStatusList(CredentialIndex, "not a uri")).ConfigureAwait(false),
+        var reading = await ReadStatusPresentationAsync(SdCwtWireFixtures.BuildStatusWithRawStatusList(CredentialIndex, "not a uri")).ConfigureAwait(false);
+
+        Assert.AreEqual(SdCwtPresentationDefect.CredentialClaimMalformed, reading.Error,
             "Section 6.3 requires uri to be a URI conforming to RFC 3986; a value that is not one cannot " +
-            "identify a Status List Token and must not be carried as if it did.").ConfigureAwait(false);
+            "identify a Status List Token and must not be carried as if it did.");
     }
 
 
@@ -539,6 +537,22 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
     /// <returns>The parsed presentation.</returns>
     private async ValueTask<VpTokenParsed> ParseStatusPresentationAsync(IReadOnlyDictionary<string, object>? status)
     {
+        var verification = await ReadStatusPresentationAsync(status).ConfigureAwait(false);
+
+        Assert.IsTrue(verification.IsSuccess, $"The presentation reads; refused as {verification.Error}.");
+
+        return verification.Value;
+    }
+
+
+    /// <summary>
+    /// Parse boundary: the reading of a presentation of an SD-CWT carrying <paramref name="status"/>, as
+    /// <see cref="SdCwtVpTokenVerification.VerifyAsync"/> answers it, the presentation read or its typed defect.
+    /// </summary>
+    /// <param name="status">The Status structure the issuer states, or <see langword="null"/> for none.</param>
+    /// <returns>The reading.</returns>
+    private async ValueTask<Verifiable.Core.Result<VpTokenParsed, SdCwtPresentationDefect>> ReadStatusPresentationAsync(IReadOnlyDictionary<string, object>? status)
+    {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> holderKeys =
@@ -561,7 +575,7 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
                 TimeProvider.GetUtcNow(),
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-            return await SdCwtVpTokenVerification.VerifyAsync(
+            var verification = await SdCwtVpTokenVerification.VerifyAsync(
                 vpTokenValue,
                 EmployeeCwtQueryId,
                 SdCwtVpFixture.BuildSeams(issuerKeys.PublicKey),
@@ -569,6 +583,8 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
                 saltReuseSeam: null,
                 Pool,
                 TestContext.CancellationToken).ConfigureAwait(false);
+
+            return verification;
         }
         finally
         {

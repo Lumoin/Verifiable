@@ -1,7 +1,5 @@
-using System.Buffers;
 using System.Security;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Trust;
@@ -69,8 +67,8 @@ public static class FederationBoundJarKeyResolver
     /// </param>
     /// <param name="jarHeader">
     /// The JAR's unverified JOSE protected header. Its <c>kid</c> parameter
-    /// drives the jwks lookup in chain[0]; absent <c>kid</c> selects the
-    /// first key.
+    /// drives the jwks lookup in chain[0]; an absent <c>kid</c> selects the
+    /// set's sole signing key, a set of more than one refused as ambiguous.
     /// </param>
     /// <param name="validateChain">
     /// Delegate that walks the inline chain. See
@@ -153,8 +151,20 @@ public static class FederationBoundJarKeyResolver
     /// an already-validated chain's subject Entity Configuration. Useful
     /// when the caller has its own chain-walking pipeline and only needs
     /// the final key-extraction step. Production callers typically go
-    /// through <see cref="ResolveAsync"/>.
+    /// through <see cref="ResolveAsync"/>. The key is selected from the
+    /// subject's decoded <c>jwks</c> claim by the library's one JWK Set
+    /// selection (<see cref="FederationKeyResolver"/>), the set judged whole:
+    /// the key of the JAR header's <c>kid</c>, or the set's sole signing key
+    /// when the header names none (RFC 7515 section 4.1.4); a set holding an
+    /// element that is no object, a <c>kid</c> on more than one key, more than
+    /// one key with no <c>kid</c> named, private or symmetric material, or a
+    /// selected key the library reconstructs no key from resolves no key.
     /// </summary>
+    /// <param name="validatedChain">The validated chain, its subject's Entity Configuration first.</param>
+    /// <param name="jarHeader">The JAR's unverified protected header, whose <c>kid</c> names the key.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's coordinates.</param>
+    /// <param name="memoryPool">The pool the key material is rented from.</param>
+    /// <returns>The key, which the caller owns and disposes, or <see langword="null"/>.</returns>
     public static PublicKeyMemory? ResolveJarSigningKey(
         TrustChain validatedChain,
         UnverifiedJwtHeader jarHeader,
@@ -166,72 +176,14 @@ public static class FederationBoundJarKeyResolver
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        if(validatedChain.Statements.Count == 0)
+        if(validatedChain.Statements.Count == 0
+            || !validatedChain.Statements[0].Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out var jwksClaim))
         {
             return null;
         }
 
-        EntityStatement subjectStatement = validatedChain.Statements[0];
+        var targetKid = jarHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out var kidObj) && kidObj is string kid ? kid : null;
 
-        if(!subjectStatement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out object? jwksObj)
-            || jwksObj is not IReadOnlyDictionary<string, object> jwksDict
-            || !jwksDict.TryGetValue("keys", out object? keysObj)
-            || keysObj is not IEnumerable<object> keys)
-        {
-            return null;
-        }
-
-        string? targetKid = null;
-        if(jarHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
-            && kidObj is string kid)
-        {
-            targetKid = kid;
-        }
-
-        Dictionary<string, object>? matchedJwk = null;
-        foreach(object item in keys)
-        {
-            if(item is not IReadOnlyDictionary<string, object> jwk)
-            {
-                continue;
-            }
-
-            if(targetKid is null)
-            {
-                matchedJwk = CopyJwk(jwk);
-                break;
-            }
-
-            if(jwk.TryGetValue("kid", out object? jwkKidObj)
-                && jwkKidObj is string jwkKid
-                && string.Equals(jwkKid, targetKid, StringComparison.Ordinal))
-            {
-                matchedJwk = CopyJwk(jwk);
-                break;
-            }
-        }
-
-        if(matchedJwk is null)
-        {
-            return null;
-        }
-
-        (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-            CryptoFormatConversions.DefaultJwkToAlgorithmConverter(matchedJwk, memoryPool, base64UrlDecoder);
-
-        Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
-
-        return new PublicKeyMemory(keyMaterial, tag);
-    }
-
-
-    private static Dictionary<string, object> CopyJwk(IReadOnlyDictionary<string, object> source)
-    {
-        Dictionary<string, object> result = new(source.Count, StringComparer.Ordinal);
-        foreach(KeyValuePair<string, object> kvp in source)
-        {
-            result[kvp.Key] = kvp.Value;
-        }
-        return result;
+        return FederationKeyResolver.SigningKeyOfSet(jwksClaim, targetKid, base64UrlDecoder, memoryPool);
     }
 }

@@ -1,7 +1,5 @@
-using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vp;
@@ -66,17 +64,19 @@ internal static class Oid4VciHeaderKeyResolution
 
 
     /// <summary>
-    /// Resolves the §F.1 header key reference from the already-extracted header pieces, enforcing the
-    /// mutual exclusivity (exactly one of <c>jwk</c>/<c>kid</c>/<c>x5c</c>), rejecting a <c>jwk</c> that
-    /// carries private/symmetric material, and dispatching to the matching reference mode. Never throws
-    /// on untrusted header content — a malformed reference is a typed <see cref="Outcome"/>.
+    /// Resolves the §F.1 header key reference from the protected header read once by its decoded members
+    /// (<see cref="JwtHeader.Read"/>), so a <c>jwk</c>, <c>kid</c> or <c>x5c</c> whose name is written with an escape is the
+    /// member it decodes to (RFC 8259 section 8.3): enforcing the mutual exclusivity (exactly one of <c>jwk</c>/<c>kid</c>/<c>x5c</c>),
+    /// refusing a reference of another kind than its member is defined as (a <c>jwk</c> that is no object, a <c>kid</c> that is
+    /// no string, an <c>x5c</c> that is no array of strings), rejecting a <c>jwk</c> that carries private/symmetric material,
+    /// and dispatching to the matching reference mode. A malformed reference is a typed <see cref="Outcome"/>; the library's
+    /// reconstruction's refusal of the <c>jwk</c> and the decoder's refusal of one of its members as no base64url text are an
+    /// invalid reference; the <c>x5c</c> parser's refusal of the chain (its <see cref="FormatException"/>) and the chain
+    /// validator's refusal of it (its <see cref="System.Security.SecurityException"/>) leave the reference unresolved. Any other
+    /// failure of a delegate the caller supplied - the decoder, the allocator, the parser, the validator, the <c>kid</c>
+    /// resolver - cancellation among them, is a fault and surfaces as one.
     /// </summary>
-    /// <param name="hasJwk">Whether the header carries a <c>jwk</c>.</param>
-    /// <param name="hasKid">Whether the header carries a <c>kid</c>.</param>
-    /// <param name="hasX5c">Whether the header carries an <c>x5c</c>.</param>
-    /// <param name="jwkMembers">The parsed <c>jwk</c> members when <paramref name="hasJwk"/>; otherwise <see langword="null"/>.</param>
-    /// <param name="kid">The <c>kid</c> value when <paramref name="hasKid"/>; otherwise <see langword="null"/>.</param>
-    /// <param name="x5cValues">The <c>x5c</c> certificate values when <paramref name="hasX5c"/>; otherwise <see langword="null"/>.</param>
+    /// <param name="header">The protected header, read by its decoded members.</param>
     /// <param name="algorithm">The JWS <c>alg</c> header value, threaded to the <c>kid</c> resolver.</param>
     /// <param name="resolveKid">Resolves the <c>kid</c> reference mode, or <see langword="null"/> when that mode is unsupported.</param>
     /// <param name="x509Verification">Resolves the <c>x5c</c> reference mode, or <see langword="null"/> when that mode is unsupported.</param>
@@ -86,12 +86,7 @@ internal static class Oid4VciHeaderKeyResolution
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The resolved key, or the reason it could not be resolved.</returns>
     public static async ValueTask<Outcome> ResolveAsync(
-        bool hasJwk,
-        bool hasKid,
-        bool hasX5c,
-        Dictionary<string, object>? jwkMembers,
-        string? kid,
-        List<string>? x5cValues,
+        JwtHeader header,
         string algorithm,
         ResolveKidKeyDelegate? resolveKid,
         Oid4VciProofX509Verification? x509Verification,
@@ -100,49 +95,70 @@ internal static class Oid4VciHeaderKeyResolution
         BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(header);
+
+        var hasJwk = header.TryGetValue(WellKnownJoseHeaderNames.Jwk, out var jwkValue);
+        var hasKid = header.TryGetValue(WellKnownJwkMemberNames.Kid, out var kidValue);
+        var hasX5c = header.TryGetValue(WellKnownJwkMemberNames.X5c, out var x5cValue);
+
         //§F.1: kid/jwk/x5c are mutually exclusive — exactly one MUST identify the key.
-        int referenceCount = (hasJwk ? 1 : 0) + (hasKid ? 1 : 0) + (hasX5c ? 1 : 0);
-        if(referenceCount != 1)
+        if((hasJwk ? 1 : 0) + (hasKid ? 1 : 0) + (hasX5c ? 1 : 0) != 1)
         {
             return Outcome.Failed(HeaderKeyResolutionStatus.InvalidKeyReference);
         }
 
         if(hasJwk)
         {
-            if(jwkMembers is null)
+            if(jwkValue is not IReadOnlyDictionary<string, object?> jwkMembers)
             {
                 return Outcome.Failed(HeaderKeyResolutionStatus.InvalidKeyReference);
             }
 
             //§F.4: "the header parameter does not contain a private key". Reject private/symmetric
-            //jwk material BEFORE reconstructing the key.
+            //jwk material BEFORE reconstructing the key, whatever the kind of its value.
             if(WellKnownJwkMemberNames.ContainsPrivateOrSymmetricMember(jwkMembers.Keys))
             {
                 return Outcome.Failed(HeaderKeyResolutionStatus.JwkContainsPrivateKey);
             }
 
+            //The reconstructed key's ownership passes to the outcome, which the caller disposes; until it does, a failure on the
+            //way releases the key here.
+            PublicKeyMemory? jwkKey = null;
             try
             {
-                return Outcome.Resolved(ReconstructKeyFromJwk(jwkMembers, base64UrlDecoder, memoryPool));
+                jwkKey = ReconstructedOrNone(jwkMembers, base64UrlDecoder, memoryPool);
+                if(jwkKey is null)
+                {
+                    return Outcome.Failed(HeaderKeyResolutionStatus.InvalidKeyReference);
+                }
+
+                var resolved = Outcome.Resolved(jwkKey);
+                jwkKey = null;
+
+                return resolved;
             }
-            catch
+            finally
             {
-                //jwkMembers is client-supplied wire input; any failure reconstructing a key from it is an
-                //invalid key reference rather than an internal fault.
-                return Outcome.Failed(HeaderKeyResolutionStatus.InvalidKeyReference);
+                jwkKey?.Dispose();
             }
         }
 
         if(hasX5c)
         {
+            //RFC 7515 §4.1.6: the x5c is an array of strings, each a base64 DER certificate.
+            if(x5cValue is not IReadOnlyList<object?> elements || elements.Any(static element => element is not string))
+            {
+                return Outcome.Failed(HeaderKeyResolutionStatus.InvalidKeyReference);
+            }
+
             //§F.1: the first x5c certificate contains the key the JWS is bound to. Resolve the leaf key
             //through the existing X.509 surface, validated to the context's trust anchors.
-            if(x509Verification is null || x5cValues is null || x5cValues.Count == 0)
+            if(x509Verification is null || elements.Count == 0)
             {
                 return Outcome.Failed(HeaderKeyResolutionStatus.KeyReferenceUnresolved);
             }
 
-            PublicKeyMemory? x5cKey = await ResolveKeyFromX5cAsync(x5cValues, x509Verification, context, cancellationToken)
+            var x5cKey = await ResolveKeyFromX5cAsync([.. elements.OfType<string>()], x509Verification, context, cancellationToken)
                 .ConfigureAwait(false);
 
             return x5cKey is null
@@ -150,21 +166,25 @@ internal static class Oid4VciHeaderKeyResolution
                 : Outcome.Resolved(x5cKey);
         }
 
-        if(resolveKid is not null && !string.IsNullOrEmpty(kid))
+        if(kidValue is not string kid)
+        {
+            return Outcome.Failed(HeaderKeyResolutionStatus.InvalidKeyReference);
+        }
+
+        if(resolveKid is not null && kid.Length > 0)
         {
             //§F.1: a kid names a key the deployment dereferences (typically a DID URL). Context is
             //threaded so a network-resolving kid is fetched under the context's SSRF policy.
-            PublicKeyMemory? kidKey = await resolveKid(kid, algorithm, context, cancellationToken).ConfigureAwait(false);
+            var kidKey = await resolveKid(kid, algorithm, context, cancellationToken).ConfigureAwait(false);
 
             return kidKey is null
                 ? Outcome.Failed(HeaderKeyResolutionStatus.KeyReferenceUnresolved)
                 : Outcome.Resolved(kidKey);
         }
 
-        //A kid/x5c reference whose seam is unwired (or a kid with no value) cannot be resolved.
+        //A kid reference whose seam is unwired (or a kid with no value) cannot be resolved.
         return Outcome.Failed(HeaderKeyResolutionStatus.KeyReferenceUnresolved);
     }
-
 
     /// <summary>
     /// Whether <paramref name="alg"/> is a registered asymmetric digital signature algorithm — the
@@ -184,35 +204,66 @@ internal static class Oid4VciHeaderKeyResolution
         || WellKnownJwaValues.IsEdDsa(alg);
 
 
-    //Reconstructs a PublicKeyMemory from the header's jwk members, composing the library's single
-    //JWK→algorithm converter (the same path the proof/attestation minters project FROM).
-    private static PublicKeyMemory ReconstructKeyFromJwk(
-        Dictionary<string, object> jwkMembers,
+    /// <summary>
+    /// The key the header's <c>jwk</c> states, composing the library's single JWK-to-algorithm converter (the same path the
+    /// proof and attestation minters project from), or <see langword="null"/> when the reconstruction refuses the key
+    /// (<see cref="JwkPublicKeyException"/>, or <see cref="RsaPublicKeyException"/> for an RSA key's parameters) or the decoder
+    /// refuses one of its members as no base64url text (its <see cref="FormatException"/>). A member of the JSON value
+    /// <c>null</c> is passed on as absent. Any other failure of the decoder or of the allocator is a fault and surfaces as one.
+    /// </summary>
+    /// <param name="jwkMembers">The <c>jwk</c> member's members, read by their decoded names.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's members.</param>
+    /// <param name="memoryPool">The pool the key material is rented from.</param>
+    /// <returns>The key, which the caller owns and disposes, or <see langword="null"/>.</returns>
+    private static PublicKeyMemory? ReconstructedOrNone(
+        IReadOnlyDictionary<string, object?> jwkMembers,
         DecodeDelegate base64UrlDecoder,
         BaseMemoryPool memoryPool)
     {
-        (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-            CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwkMembers, memoryPool, base64UrlDecoder);
+        var members = new Dictionary<string, object>(jwkMembers.Count, StringComparer.Ordinal);
+        foreach(var (name, value) in jwkMembers)
+        {
+            if(value is not null)
+            {
+                members[name] = value;
+            }
+        }
 
-        Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
+        try
+        {
+            var (algorithm, purpose, scheme, keyMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(members, memoryPool, base64UrlDecoder);
 
-        return new PublicKeyMemory(keyMaterial, tag);
+            return new PublicKeyMemory(keyMaterial, Tag.Create(algorithm).With(purpose).With(scheme));
+        }
+        catch(Exception exception) when(exception is FormatException or JwkPublicKeyException or RsaPublicKeyException)
+        {
+            return null;
+        }
     }
 
 
-    //Resolves the leaf PublicKeyMemory from the header's x5c chain, composing the existing X.509
-    //surface: parse + chain-validate to the issuer-supplied trust anchors / validity instant on the
-    //context. Returns null (→ KeyReferenceUnresolved) when the trust material is absent or the chain
-    //does not validate, rather than throwing. chain is a per-certificate list, not one disposable
-    //value, so it is disposed in its own finally rather than through a using declaration.
+    /// <summary>
+    /// The leaf key of the header's <c>x5c</c> chain, composing the existing X.509 surface: parse, then chain-validate to the
+    /// issuer-supplied trust anchors and validity instant on the context. <see langword="null"/> (an unresolved reference) when
+    /// the trust material is absent, the parser refuses the chain as no base64 DER certificates (its
+    /// <see cref="FormatException"/>), or the validator refuses the chain (its <see cref="System.Security.SecurityException"/>);
+    /// any other failure of the parser or of the validator, cancellation among them, is a fault and surfaces as one. The chain
+    /// is a per-certificate list, not one disposable value, so it is disposed in its own finally rather than through a using
+    /// declaration.
+    /// </summary>
+    /// <param name="x5cValues">The chain's base64 DER certificates, leaf first.</param>
+    /// <param name="x509Verification">The parser and the validator the caller supplied.</param>
+    /// <param name="context">The per-request context carrying the trust anchors and the validity instant.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The leaf key, which the caller owns and disposes, or <see langword="null"/>.</returns>
     private static async ValueTask<PublicKeyMemory?> ResolveKeyFromX5cAsync(
         List<string> x5cValues,
         Oid4VciProofX509Verification x509Verification,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<PkiCertificateMemory>? trustAnchors = context.X509TrustAnchors;
-        DateTimeOffset? validationTime = context.ValidationTime;
+        var trustAnchors = context.X509TrustAnchors;
+        var validationTime = context.ValidationTime;
         if(trustAnchors is null || validationTime is null)
         {
             return null;
@@ -223,10 +274,8 @@ internal static class Oid4VciHeaderKeyResolution
         {
             chain = x509Verification.ParseX5c(x5cValues, x509Verification.MemoryPool);
         }
-        catch
+        catch(FormatException)
         {
-            //x5cValues is client-supplied wire input; any failure parsing it into a certificate chain is
-            //an unresolved key reference rather than an internal fault.
             return null;
         }
 
@@ -236,15 +285,13 @@ internal static class Oid4VciHeaderKeyResolution
                 chain, trustAnchors, validationTime.Value, x509Verification.MemoryPool, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch
+        catch(System.Security.SecurityException)
         {
-            //x509Verification.ValidateChain is a caller-registered delegate; any failure validating the
-            //chain resolves to no key rather than an internal fault.
             return null;
         }
         finally
         {
-            foreach(PkiCertificateMemory cert in chain)
+            foreach(var cert in chain)
             {
                 cert.Dispose();
             }

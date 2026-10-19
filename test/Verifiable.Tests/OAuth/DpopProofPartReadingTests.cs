@@ -41,45 +41,49 @@ internal sealed class DpopProofPartReadingTests
     private static string CertificateOfAnotherKey { get; } = JwkCertificateFixtures.CertificateOfAnotherP256Key(IssuedAt);
 
     /// <summary>
-    /// The header refusal rows: the header's JSON text, the member the refusal names, its name and the defect - RFC 9449 section
-    /// 4.2 for the header's members, RFC 7517 section 4 and RFC 7518 section 6 for the embedded key's.
+    /// The header refusal cases: a stable name, the header's JSON text, the member the refusal names, its name and the defect -
+    /// RFC 9449 section 4.2 for the header's members, RFC 7517 section 4 and RFC 7518 section 6 for the embedded key's. A case's
+    /// header may carry a certificate the row builds fresh, so its name, never its text, is the row's identity.
     /// </summary>
-    public static IEnumerable<object[]> HeaderRefusalRows { get; } =
+    private static IReadOnlyList<HeaderRefusalCase> HeaderRefusalCases { get; } =
     [
-        [Header(TypMember(), JwkMember(EmbeddedKey)), DpopProofMember.Alg, WellKnownJoseHeaderNames.Alg, DpopProofMemberDefect.Absent],
-        [Header(Member(WellKnownJoseHeaderNames.Alg, "7"), TypMember(), JwkMember(EmbeddedKey)), DpopProofMember.Alg, WellKnownJoseHeaderNames.Alg, DpopProofMemberDefect.NotAString],
-        [Header(AlgMember(), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.Absent],
-        [Header(AlgMember(), Member(WellKnownJoseHeaderNames.Typ, "true"), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.NotAString],
-        [Header(AlgMember(), Member(WellKnownJoseHeaderNames.Typ, "null"), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.NotAString],
-        [Header(AlgMember(), TypMember()), DpopProofMember.Jwk, WellKnownJoseHeaderNames.Jwk, DpopProofMemberDefect.Absent],
-        [Header(AlgMember(), TypMember(), Member(WellKnownJoseHeaderNames.Jwk, Quoted(WellKnownKeyTypeValues.Ec))), DpopProofMember.Jwk, WellKnownJoseHeaderNames.Jwk, DpopProofMemberDefect.NotAnObject],
-        [Header(AlgMember(), TypMember(), JwkMember(KeyWith(WellKnownJwkMemberNames.Kty, "true"))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Kty, DpopProofMemberDefect.NotAString],
-        [Header(AlgMember(), TypMember(), JwkMember(KeyWith(WellKnownJwkMemberNames.Crv, "null"))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Crv, DpopProofMemberDefect.NotAString],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.D, "[\"cHJpdmF0ZQ\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.D, DpopProofMemberDefect.PrivateKeyMaterial],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.D, "7")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.D, DpopProofMemberDefect.PrivateKeyMaterial],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "\"verify\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.NotAnArrayOfStrings],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",7]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.NotAnArrayOfStrings],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, "[]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, "[\"_-_-\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Ext, "\"true\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Ext, DpopProofMemberDefect.NotABoolean],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Oth, $"[{Header(Member("r", Quoted("AQ")), Member("d", Quoted("AQ")), Member("t", Quoted("AQ")))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Oth, DpopProofMemberDefect.PrivateKeyMaterial],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Oth, "\"AQ\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Oth, DpopProofMemberDefect.PrivateKeyMaterial],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.RepeatedKeyOperation],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseEnc)), Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"sign\",\"encrypt\"]"), Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseSig))))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted("x-attestation")), Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseSig)), Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",\"x-attest\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseEnc)), Member(WellKnownJwkMemberNames.KeyOps, "[\"x-attest\",\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(WithCharacter(CertificateOfTheKey, " "))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(WithCharacter(CertificateOfTheKey, "\\t"))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(WithCharacter(CertificateOfTheKey, "\\r"))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(WithCharacter(CertificateOfTheKey, "\\n"))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Header(Member(WellKnownJwkMemberNames.Kty, Quoted(WellKnownKeyTypeValues.Okp)), Member(WellKnownJwkMemberNames.Crv, Quoted(WellKnownCurveValues.X25519)), Member(WellKnownJwkMemberNames.X, Quoted(KeyX)), Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfTheKey)}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.CertificateKeyRelationUnestablished],        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted("MIIBkTCB+wIJAOfv")}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfTheKey)},{Quoted("AAECAw==")}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfAnotherKey)}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.CertificateNotOfTheKey],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfAnotherKey)},{Quoted(CertificateOfTheKey)}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.CertificateNotOfTheKey]
+        new("Alg Absent 1", Header(TypMember(), JwkMember(EmbeddedKey)), DpopProofMember.Alg, WellKnownJoseHeaderNames.Alg, DpopProofMemberDefect.Absent),
+        new("Alg NotAString 1", Header(Member(WellKnownJoseHeaderNames.Alg, "7"), TypMember(), JwkMember(EmbeddedKey)), DpopProofMember.Alg, WellKnownJoseHeaderNames.Alg, DpopProofMemberDefect.NotAString),
+        new("Typ Absent 1", Header(AlgMember(), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.Absent),
+        new("Typ NotAString 1", Header(AlgMember(), Member(WellKnownJoseHeaderNames.Typ, "true"), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.NotAString),
+        new("Typ NotAString 2", Header(AlgMember(), Member(WellKnownJoseHeaderNames.Typ, "null"), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.NotAString),
+        new("Jwk Absent 1", Header(AlgMember(), TypMember()), DpopProofMember.Jwk, WellKnownJoseHeaderNames.Jwk, DpopProofMemberDefect.Absent),
+        new("Jwk NotAnObject 1", Header(AlgMember(), TypMember(), Member(WellKnownJoseHeaderNames.Jwk, Quoted(WellKnownKeyTypeValues.Ec))), DpopProofMember.Jwk, WellKnownJoseHeaderNames.Jwk, DpopProofMemberDefect.NotAnObject),
+        new("jwk.Kty NotAString 1", Header(AlgMember(), TypMember(), JwkMember(KeyWith(WellKnownJwkMemberNames.Kty, "true"))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Kty, DpopProofMemberDefect.NotAString),
+        new("jwk.Crv NotAString 1", Header(AlgMember(), TypMember(), JwkMember(KeyWith(WellKnownJwkMemberNames.Crv, "null"))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Crv, DpopProofMemberDefect.NotAString),
+        new("jwk.D PrivateKeyMaterial 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.D, "[\"cHJpdmF0ZQ\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.D, DpopProofMemberDefect.PrivateKeyMaterial),
+        new("jwk.D PrivateKeyMaterial 2", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.D, "7")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.D, DpopProofMemberDefect.PrivateKeyMaterial),
+        new("jwk.KeyOps NotAnArrayOfStrings 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "\"verify\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.NotAnArrayOfStrings),
+        new("jwk.KeyOps NotAnArrayOfStrings 2", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",7]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.NotAnArrayOfStrings),
+        new("jwk.X5c NotACertificateChain 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, "[]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain),
+        new("jwk.X5c NotACertificateChain 2", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, "[\"_-_-\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain),
+        new("jwk.Ext NotABoolean 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Ext, "\"true\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Ext, DpopProofMemberDefect.NotABoolean),
+        new("jwk.Oth PrivateKeyMaterial 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Oth, $"[{Header(Member("r", Quoted("AQ")), Member("d", Quoted("AQ")), Member("t", Quoted("AQ")))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Oth, DpopProofMemberDefect.PrivateKeyMaterial),
+        new("jwk.Oth PrivateKeyMaterial 2", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Oth, "\"AQ\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Oth, DpopProofMemberDefect.PrivateKeyMaterial),
+        new("jwk.KeyOps RepeatedKeyOperation 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.RepeatedKeyOperation),
+        new("jwk.KeyOps KeyOperationsInconsistentWithUse 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseEnc)), Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse),
+        new("jwk.KeyOps KeyOperationsInconsistentWithUse 2", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"sign\",\"encrypt\"]"), Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseSig))))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse),
+        new("jwk.KeyOps KeyOperationsRelationToUseUnestablished 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted("x-attestation")), Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished),
+        new("jwk.KeyOps KeyOperationsRelationToUseUnestablished 2", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseSig)), Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",\"x-attest\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished),
+        new("jwk.KeyOps KeyOperationsInconsistentWithUse 3", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseEnc)), Member(WellKnownJwkMemberNames.KeyOps, "[\"x-attest\",\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse),
+        new("jwk.X5c NotACertificateChain 3", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(WithCharacter(CertificateOfTheKey, " "))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain),
+        new("jwk.X5c NotACertificateChain 4", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(WithCharacter(CertificateOfTheKey, "\\t"))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain),
+        new("jwk.X5c NotACertificateChain 5", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(WithCharacter(CertificateOfTheKey, "\\r"))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain),
+        new("jwk.X5c NotACertificateChain 6", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(WithCharacter(CertificateOfTheKey, "\\n"))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain),
+        new("jwk.X5c CertificateKeyRelationUnestablished 1", Header(AlgMember(), TypMember(), JwkMember(Header(Member(WellKnownJwkMemberNames.Kty, Quoted(WellKnownKeyTypeValues.Okp)), Member(WellKnownJwkMemberNames.Crv, Quoted(WellKnownCurveValues.X25519)), Member(WellKnownJwkMemberNames.X, Quoted(KeyX)), Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfTheKey)}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.CertificateKeyRelationUnestablished),
+        new("jwk.X5c NotACertificateChain 7", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted("MIIBkTCB+wIJAOfv")}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain),
+        new("jwk.X5c NotACertificateChain 8", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfTheKey)},{Quoted("AAECAw==")}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain),
+        new("jwk.X5c CertificateNotOfTheKey 1", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfAnotherKey)}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.CertificateNotOfTheKey),
+        new("jwk.X5c CertificateNotOfTheKey 2", Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfAnotherKey)},{Quoted(CertificateOfTheKey)}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.CertificateNotOfTheKey)
     ];
 
+    /// <summary>The header refusal rows, each the stable name of its case.</summary>
+    public static IEnumerable<object[]> HeaderRefusalRows => HeaderRefusalCases.Select(static refusalCase => new object[] { refusalCase.Name });
 
     /// <summary>
     /// A proof the library composed reads back as it was composed: its header's <c>alg</c>, <c>typ</c> and every string member
@@ -213,14 +217,16 @@ internal sealed class DpopProofPartReadingTests
     /// and named, the place it is in, the segment and the defect, the member carried as the reader answered it; a key carrying
     /// private material is refused whatever the kind of its value.
     /// </summary>
-    /// <param name="header">The header's JSON text.</param>
-    /// <param name="member">The member the refusal identifies.</param>
-    /// <param name="memberName">The member's name.</param>
-    /// <param name="defect">The defect.</param>
+    /// <param name="headerCase">The name of the header case the row reads.</param>
     [TestMethod]
     [DynamicData(nameof(HeaderRefusalRows))]
-    public void AHeaderIsRefusedForTheMemberItLacksOrCarriesAsAnotherKind(string header, DpopProofMember member, string memberName, DpopProofMemberDefect defect)
+    public void AHeaderIsRefusedForTheMemberItLacksOrCarriesAsAnotherKind(string headerCase)
     {
+        var refusalCase = HeaderRefusalCases.Single(candidate => string.Equals(candidate.Name, headerCase, StringComparison.Ordinal));
+        var header = refusalCase.Header;
+        var member = refusalCase.Member;
+        var memberName = refusalCase.MemberName;
+        var defect = refusalCase.Defect;
         var refused = DpopProofHeader.Read(Encoding.UTF8.GetBytes(header)) as DpopProofPartRefused<DpopProofHeader>;
         var refusal = refused?.Refusal as DpopProofMemberRefusal;
 
@@ -455,4 +461,13 @@ internal sealed class DpopProofPartReadingTests
     /// <summary>The claims set's <c>htu</c>, the token endpoint.</summary>
     /// <returns>The member's JSON text.</returns>
     private static string HtuClaim() => Member(WellKnownJwtClaimNames.Htu, Quoted(Target));
+
+    /// <summary>A header refusal case: its stable name, the header's JSON text and the refusal the reading answers.</summary>
+    /// <param name="Name">The case's stable name, the row's identity.</param>
+    /// <param name="Header">The header's JSON text.</param>
+    /// <param name="Member">The member the refusal identifies.</param>
+    /// <param name="MemberName">The member's name.</param>
+    /// <param name="Defect">The defect.</param>
+    private sealed record HeaderRefusalCase(string Name, string Header, DpopProofMember Member, string MemberName, DpopProofMemberDefect Defect);
+
 }

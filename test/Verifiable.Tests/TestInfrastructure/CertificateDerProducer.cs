@@ -36,6 +36,21 @@ internal sealed record CertificateDerShape
     /// <c>tbsCertificate.signature</c>'s, <c>ecdsa-with-SHA256</c>.
     /// </summary>
     public string OuterSignatureAlgorithmOid { get; init; } = CertificateDerProducer.EcdsaWithSha256Oid;
+
+    /// <summary>
+    /// Whether the issuer <c>Name</c> is an empty <c>RDNSequence</c>, which RFC 5280 section 4.1.2.4 does not admit ("The issuer
+    /// field MUST contain a non-empty distinguished name").
+    /// </summary>
+    public bool IssuerEmpty { get; init; }
+
+    /// <summary>Whether the subject <c>Name</c> is an empty <c>RDNSequence</c>, which RFC 5280 section 4.1.2.6 admits.</summary>
+    public bool SubjectEmpty { get; init; }
+
+    /// <summary>
+    /// Writes the optional <c>issuerUniqueID</c> and <c>subjectUniqueID</c> after the <c>SubjectPublicKeyInfo</c> (RFC 5280 section
+    /// 4.1), or <see langword="null"/> for none.
+    /// </summary>
+    public Action<AsnWriter>? WriteUniqueIdentifiers { get; init; }
 }
 
 
@@ -81,7 +96,7 @@ internal static class CertificateDerProducer
 
                 writer.WriteInteger(1);
                 WriteAlgorithmIdentifier(writer, EcdsaWithSha256Oid);
-                WriteName(writer, "x5c-producer-issuer", shape.IssuerAttributeOutsideASet);
+                WriteName(writer, shape.IssuerEmpty ? null : "x5c-producer-issuer", shape.IssuerAttributeOutsideASet);
 
                 using(writer.PushSequence())
                 {
@@ -89,7 +104,7 @@ internal static class CertificateDerProducer
                     writer.WriteUtcTime(NotBefore.AddDays(1));
                 }
 
-                WriteName(writer, "x5c-producer-subject", attributeOutsideASet: false);
+                WriteName(writer, shape.SubjectEmpty ? null : "x5c-producer-subject", attributeOutsideASet: false);
 
                 using(writer.PushSequence())
                 {
@@ -102,6 +117,8 @@ internal static class CertificateDerProducer
                     writer.WriteBitString(shape.SubjectPublicKey);
                     shape.WriteFieldAfterSubjectPublicKey?.Invoke(writer);
                 }
+
+                shape.WriteUniqueIdentifiers?.Invoke(writer);
             }
 
             WriteAlgorithmIdentifier(writer, shape.OuterSignatureAlgorithmOid);
@@ -131,6 +148,23 @@ internal static class CertificateDerProducer
         KeyAlgorithmOid = WellKnownOids.EcPublicKey,
         WriteKeyParameters = writer => writer.WriteObjectIdentifier(curveOid),
         SubjectPublicKey = [EllipticCurveUtilities.UncompressedCoordinateFormat, .. x, .. y]
+    };
+
+
+    /// <summary>
+    /// The shape of a certificate whose subject public key is the elliptic-curve point given in its compressed SEC1 form (SEC 1
+    /// section 2.3.3, RFC 5480 section 2.2): an <c>id-ecPublicKey</c> on the named curve, the point <c>0x02</c> or <c>0x03</c> by the
+    /// parity of <c>y</c>, then <c>x</c>.
+    /// </summary>
+    /// <param name="curveOid">The named curve's object identifier.</param>
+    /// <param name="x">The point's x coordinate.</param>
+    /// <param name="y">The point's y coordinate.</param>
+    /// <returns>The shape.</returns>
+    public static CertificateDerShape CompressedEllipticCurveKey(string curveOid, byte[] x, byte[] y) => new()
+    {
+        KeyAlgorithmOid = WellKnownOids.EcPublicKey,
+        WriteKeyParameters = writer => writer.WriteObjectIdentifier(curveOid),
+        SubjectPublicKey = [(byte)((y[^1] & 1) == 0 ? 0x02 : 0x03), .. x]
     };
 
 
@@ -186,15 +220,21 @@ internal static class CertificateDerProducer
 
     /// <summary>
     /// Writes a <c>Name</c> of one common-name attribute: an <c>RDNSequence</c> of one <c>RelativeDistinguishedName</c> SET
-    /// holding it, or, where the row asks for it, the attribute standing directly in the <c>RDNSequence</c>.
+    /// holding it, or, where the row asks for it, the attribute standing directly in the <c>RDNSequence</c>; an empty
+    /// <c>RDNSequence</c> when no common name is given.
     /// </summary>
     /// <param name="writer">The writer.</param>
-    /// <param name="commonName">The common name.</param>
+    /// <param name="commonName">The common name, or <see langword="null"/> for an empty name.</param>
     /// <param name="attributeOutsideASet">Whether the attribute stands outside a SET.</param>
-    private static void WriteName(AsnWriter writer, string commonName, bool attributeOutsideASet)
+    private static void WriteName(AsnWriter writer, string? commonName, bool attributeOutsideASet)
     {
         using(writer.PushSequence())
         {
+            if(commonName is null)
+            {
+                return;
+            }
+
             if(attributeOutsideASet)
             {
                 WriteCommonName(writer, commonName);

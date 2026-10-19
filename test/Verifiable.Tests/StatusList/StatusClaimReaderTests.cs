@@ -12,10 +12,11 @@ namespace Verifiable.Tests.StatusList;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The reader answers three ways, and every test below pins one of them: the claim is unreadable
-/// (<see langword="false"/>), the claim names only mechanisms this library does not evaluate
-/// (<see langword="true"/> with <see cref="StatusClaim.StatusList"/> <see langword="null"/>), or the
-/// claim carries a reference a verifier can resolve. A caller whose token has no <c>status</c> claim
+/// The reader answers four ways, and every test below pins one of them: the claim is outside its rules
+/// (<see cref="StatusClaimRefused"/>), the claim names only mechanisms this library does not evaluate
+/// (<see cref="StatusClaimRead"/> with <see cref="StatusClaim.StatusList"/> <see langword="null"/>), the
+/// claim carries a reference a verifier can resolve, or it carries one whose index lies past the indices the library's lists
+/// hold (<see cref="StatusClaimIndexBeyondCapacity"/>). A caller whose token has no <c>status</c> claim
 /// at all never reaches the reader, which is the fourth state and is not this type's to report.
 /// </para>
 /// <para>
@@ -69,7 +70,8 @@ internal sealed class StatusClaimReaderTests
     {
         byte[] statusObject = Encoding.UTF8.GetBytes(SectionExampleStatusObject);
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsTrue(isRead, "A status claim carrying a status_list object with idx and uri is a well-formed reference.");
         Assert.AreEqual(0, claim!.StatusList!.Value.Index, "idx 0 is a non-negative Integer and is the index the example specifies.");
@@ -91,7 +93,8 @@ internal sealed class StatusClaimReaderTests
         byte[] statusObject = Encoding.UTF8.GetBytes(
             /*lang=json,strict*/ """{"status_list":{"idx":2147483647,"uri":"https://example.com/statuslists/1"}}""");
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsTrue(isRead, "The largest index a status list entry can be addressed by is a non-negative Integer.");
         Assert.AreEqual(int.MaxValue, claim!.StatusList!.Value.Index, "The index is carried through exactly as written.");
@@ -115,7 +118,8 @@ internal sealed class StatusClaimReaderTests
             {"status_list":{"note":"issued in batch 7","idx":42,"uri":"https://example.com/statuslists/1","aggregation_uri":"https://example.com/aggregation"}}
             """);
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsTrue(isRead, "A status_list object carrying more than idx and uri still contains the required reference.");
         Assert.AreEqual(42, claim!.StatusList!.Value.Index, "Additional members must not displace the idx that is read.");
@@ -139,7 +143,8 @@ internal sealed class StatusClaimReaderTests
             {"identifier_list":{"id":"6fc2-a3b1","uri":"https://example.com/identifierlists/1"},"status_list":{"idx":0,"uri":"https://example.com/statuslists/1"}}
             """);
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsTrue(isRead, "An object naming two status mechanisms satisfies Section 6.1's at-least-one requirement.");
         Assert.HasCount(2, claim!.Mechanisms, "Both top-level members are status mechanisms the issuer named.");
@@ -166,7 +171,8 @@ internal sealed class StatusClaimReaderTests
         byte[] statusObject = Encoding.UTF8.GetBytes(
             /*lang=json,strict*/ """{"identifier_list":{"id":"6fc2-a3b1","uri":"https://example.com/identifierlists/1"}}""");
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsTrue(isRead, "The object contains one reference to a status mechanism, which is what Section 6.1 requires.");
         Assert.IsNull(claim!.StatusList, "The claim names no status_list mechanism, so there is no reference to read.");
@@ -188,7 +194,8 @@ internal sealed class StatusClaimReaderTests
     {
         byte[] statusObject = Encoding.UTF8.GetBytes(/*lang=json,strict*/ """{}""");
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsFalse(isRead, "An object with no member contains no reference to a status mechanism, which Section 6.1 requires.");
         Assert.IsNull(claim, "A refused read leaves the claim null, never a claim naming nothing.");
@@ -212,7 +219,8 @@ internal sealed class StatusClaimReaderTests
             {"status_list":{"idx":0,"uri":"https://example.com/statuslists/1"},"status_list":{"idx":9,"uri":"https://example.com/statuslists/2"}}
             """);
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsFalse(isRead, "A repeated mechanism name makes the issuer's statement ambiguous, so no claim can be read from it.");
         Assert.IsNull(claim, "A refused read leaves the claim null, never one of the two candidate readings.");
@@ -237,7 +245,8 @@ internal sealed class StatusClaimReaderTests
             {"other_mechanism":{"status_list":{"idx":7,"uri":"https://example.com/statuslists/9"}}}
             """);
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsTrue(isRead, "The object names one status mechanism at its own level, which Section 6.1 requires.");
         Assert.HasCount(1, claim!.Mechanisms, "Only the top-level member is a status mechanism.");
@@ -263,8 +272,10 @@ internal sealed class StatusClaimReaderTests
         byte[] spaced = Encoding.UTF8.GetBytes(
             "{\n  \"status_list\" : {\n    \"idx\" : 0 ,\n    \"uri\" : \"https://example.com/statuslists/1\"\n  }\n}");
 
-        bool isCompactRead = StatusClaimReader.TryRead(compact, out StatusClaim? fromCompact);
-        bool isSpacedRead = StatusClaimReader.TryRead(spaced, out StatusClaim? fromSpaced);
+        var fromCompact = ClaimOf(compact);
+        var isCompactRead = fromCompact is not null;
+        var fromSpaced = ClaimOf(spaced);
+        var isSpacedRead = fromSpaced is not null;
 
         Assert.IsTrue(isCompactRead, "The compactly serialized claim is well-formed.");
         Assert.IsTrue(isSpacedRead, "Whitespace between structural characters is insignificant, so the same claim must still be readable.");
@@ -292,7 +303,6 @@ internal sealed class StatusClaimReaderTests
     [DataRow("""{"status_list":{"idx":0}}""", "uri is REQUIRED")]
     [DataRow("""{"status_list":{}}""", "idx and uri are both REQUIRED")]
     [DataRow("""{"status_list":{"idx":-1,"uri":"https://example.com/statuslists/1"}}""", "idx MUST specify a non-negative Integer")]
-    [DataRow("""{"status_list":{"idx":2147483648,"uri":"https://example.com/statuslists/1"}}""", "idx MUST address an entry of a Status List")]
     [DataRow("""{"status_list":{"idx":1.5,"uri":"https://example.com/statuslists/1"}}""", "idx MUST specify an Integer")]
     [DataRow("""{"status_list":{"idx":"0","uri":"https://example.com/statuslists/1"}}""", "idx MUST specify an Integer, not a String")]
     [DataRow("""{"status_list":{"idx":0,"uri":"/statuslists/1"}}""", "uri MUST be a URI conforming to RFC 3986, not a relative reference")]
@@ -307,7 +317,8 @@ internal sealed class StatusClaimReaderTests
     {
         byte[] statusObject = Encoding.UTF8.GetBytes(statusObjectJson);
 
-        bool isRead = StatusClaimReader.TryRead(statusObject, out StatusClaim? claim);
+        var claim = ClaimOf(statusObject);
+        var isRead = claim is not null;
 
         Assert.IsFalse(isRead, $"The input violates \"{violatedRequirement}\", so no status claim can be read from it.");
         Assert.IsNull(claim, "A refused read leaves the claim null, never half-populated.");
@@ -333,11 +344,59 @@ internal sealed class StatusClaimReaderTests
         int statusObjectStart = Encoding.UTF8.GetByteCount(LeadingBytes);
         int statusObjectLength = Encoding.UTF8.GetByteCount(SectionExampleStatusObject);
 
-        bool isRead = StatusClaimReader.TryRead(payload.AsSpan(statusObjectStart, statusObjectLength), out StatusClaim? claim);
+        var claim = ClaimOf(payload.AsSpan(statusObjectStart, statusObjectLength));
+        var isRead = claim is not null;
 
         Assert.IsTrue(isRead, "The status claim's own object is well-formed and must be readable in place.");
         Assert.AreEqual(0, claim!.StatusList!.Value.Index, "Only the sliced status object is read; the surrounding bytes carry a different idx.");
         Assert.AreEqual(SectionExampleUri, claim.StatusList!.Value.Uri, "Only the sliced status object is read; the surrounding bytes carry a different uri.");
         Assert.HasCount(1, claim.Mechanisms, "Only the sliced status object's own member is a mechanism the claim names.");
     }
+
+    /// <summary>
+    /// Token Status List section 6.2: "The idx (index) claim MUST specify a non-negative Integer" - an integer whatever its
+    /// spelling, bounded from below alone. An index of a list the library holds is read as the reference, whether written as
+    /// <c>3</c>, <c>3.0</c>, <c>3e0</c> or <c>-0</c>, up to <see cref="int.MaxValue"/>; a non-negative integer past that,
+    /// <c>2147483648</c> or <c>2^64</c>, is a well-formed reference to an entry no list the library reads holds, answered as
+    /// such, never as a claim outside the rules; a negative or fractional index is outside them.
+    /// </summary>
+    /// <param name="indexJson">The <c>idx</c> as written.</param>
+    /// <param name="expected">What the reading answers: the index read, beyond capacity, or refused.</param>
+    [TestMethod]
+    [DataRow("0", "0", DisplayName = "Zero")]
+    [DataRow("-0", "0", DisplayName = "Negative zero")]
+    [DataRow("3.0", "3", DisplayName = "An integer with a fraction of zeros")]
+    [DataRow("3e0", "3", DisplayName = "An integer with an exponent")]
+    [DataRow("2147483647", "2147483647", DisplayName = "The largest index a list holds")]
+    [DataRow("2147483648", "beyond", DisplayName = "One past the largest index a list holds")]
+    [DataRow("18446744073709551616", "beyond", DisplayName = "Two to the sixty-fourth")]
+    [DataRow("1e40", "beyond", DisplayName = "An integer written with a large exponent")]
+    [DataRow("-1", "refused", DisplayName = "A negative integer")]
+    [DataRow("1.5", "refused", DisplayName = "A fraction")]
+    public void AnIndexIsReadOverTheIntegerDomainItsSectionDefines(string indexJson, string expected)
+    {
+        var reading = StatusClaimReader.Read(Encoding.UTF8.GetBytes("{\"status_list\":{\"idx\":" + indexJson + ",\"uri\":\"" + SectionExampleUri + "\"}}"));
+
+        switch(expected)
+        {
+            case "beyond":
+                var beyond = Assert.IsInstanceOfType<StatusClaimIndexBeyondCapacity>(reading, indexJson);
+                Assert.AreEqual(SectionExampleUri, beyond.ListLocation, indexJson);
+                break;
+            case "refused":
+                _ = Assert.IsInstanceOfType<StatusClaimRefused>(reading, indexJson);
+                break;
+            default:
+                var read = Assert.IsInstanceOfType<StatusClaimRead>(reading, indexJson);
+                Assert.AreEqual(int.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), read.Claim.StatusList?.Index, indexJson);
+                break;
+        }
+    }
+
+
+    /// <summary>The claim a reading answers, or <see langword="null"/> when it answers none.</summary>
+    /// <param name="statusObject">The claim's value as UTF-8 JSON.</param>
+    /// <returns>The claim, or <see langword="null"/>.</returns>
+    private static StatusClaim? ClaimOf(ReadOnlySpan<byte> statusObject) =>
+        StatusClaimReader.Read(statusObject) is StatusClaimRead { Claim: var claim } ? claim : null;
 }

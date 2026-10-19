@@ -98,8 +98,15 @@ public static class KbCwtVerification
     /// <param name="saltReuseSeam">The commitment-reuse detection seam guarding against a replayed disclosure salt, or <see langword="null"/> to skip that check.</param>
     /// <param name="pool">Memory pool for cryptographic allocations.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The parsed and crypto-verified KBT contents.</returns>
-    public static async ValueTask<SdCwtKbtVerificationResult> VerifyAsync(
+    /// <returns>
+    /// The parsed and crypto-verified KBT contents, each check's outcome carried as it came out; or the defect of a presentation
+    /// whose part the reading that owns its wire shape refused (<see cref="SdCwtPresentationDefect"/>): the KBT COSE_Sign1, the
+    /// embedded SD-CWT and its extraction, the holder key, the KBT claims, or the embedded token's <c>iss</c>, <c>vct</c> or
+    /// <c>status</c>, each refused by its seam's <see cref="FormatException"/>. Only those readings' refusals are answered so: a
+    /// failure of the issuer-key resolver, of the credential's verification, of the Sig_structure encoder, of a signature or
+    /// digest backend or of the allocator, cancellation among them, is a fault and surfaces as one, whatever its type.
+    /// </returns>
+    public static async ValueTask<Result<SdCwtKbtVerificationResult, SdCwtPresentationDefect>> VerifyAsync(
         ReadOnlyMemory<byte> kbtToken,
         ParseCoseSign1Delegate parseCoseSign1,
         ExtractKcwtFromKbtDelegate extractKcwt,
@@ -131,21 +138,53 @@ public static class KbCwtVerification
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        //Every reading of the presentation's wire shape is one seam, its refusal of the bytes it is handed its FormatException;
+        //each is caught around that seam alone and answered as the defect of the part it reads, so no failure of a delegate
+        //composed beyond the readings is ever answered as a malformed presentation.
         //Parse the KBT COSE_Sign1 from the wire bytes. The message owns its
         //pool-routed protected-header and signature carriers; dispose it once
         //the holder-signature check and claim reads are done.
-        using CoseSign1Message parsedKbt = parseCoseSign1(kbtToken, pool);
+        CoseSign1Message kbtMessage;
+        try
+        {
+            kbtMessage = parseCoseSign1(kbtToken, pool);
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<SdCwtKbtVerificationResult, SdCwtPresentationDefect>(SdCwtPresentationDefect.KeyBindingTokenMalformed);
+        }
+
+        using var parsedKbt = kbtMessage;
 
         //Extract and parse the embedded presentation SD-CWT from the kcwt
         //protected-header parameter. The parsed token owns its disclosures;
         //dispose it after collecting the disclosed claims.
-        ReadOnlyMemory<byte> embeddedSdCwt = extractKcwt(parsedKbt.ProtectedHeader.AsReadOnlyMemory());
-        using SdToken<ReadOnlyMemory<byte>> embeddedToken = parseSdCwt(embeddedSdCwt);
+        SdToken<ReadOnlyMemory<byte>> embeddedSdCwtToken;
+        try
+        {
+            embeddedSdCwtToken = parseSdCwt(extractKcwt(parsedKbt.ProtectedHeader.AsReadOnlyMemory()));
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<SdCwtKbtVerificationResult, SdCwtPresentationDefect>(SdCwtPresentationDefect.EmbeddedCredentialMalformed);
+        }
+
+        using var embeddedToken = embeddedSdCwtToken;
 
         //Reconstruct the holder public key from the embedded SD-CWT cnf COSE_Key
         //and verify the KBT holder signature against it.
-        bool holderSignatureValid = false;
-        using(PublicKeyMemory? holderPublicKey = extractHolderKey(embeddedToken, pool))
+        PublicKeyMemory? holderKey;
+        try
+        {
+            holderKey = extractHolderKey(embeddedToken, pool);
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<SdCwtKbtVerificationResult, SdCwtPresentationDefect>(SdCwtPresentationDefect.HolderKeyMalformed);
+        }
+
+        var holderSignatureValid = false;
+        using(var holderPublicKey = holderKey)
         {
             if(holderPublicKey is not null)
             {
@@ -158,22 +197,39 @@ public static class KbCwtVerification
         }
 
         //Read the session-binding claims (aud/iat/cnonce) from the KBT payload.
-        KbtCwtClaims kbtClaims = readKbtClaims(parsedKbt.Payload);
+        KbtCwtClaims kbtClaims;
+        try
+        {
+            kbtClaims = readKbtClaims(parsedKbt.Payload);
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<SdCwtKbtVerificationResult, SdCwtPresentationDefect>(SdCwtPresentationDefect.KeyBindingClaimsMalformed);
+        }
 
         //Resolve the issuer key from the embedded SD-CWT iss claim, then verify the
         //embedded SD-CWT in full: issuer signature plus per-disclosure digest binding.
         //The digest binding is performed by the existing SD-CWT verification — not
         //reimplemented here.
-        string? issuer = extractIssuer(embeddedToken);
-        string? credentialType = extractCredentialType(embeddedToken);
-
         //Token Status List Section 6.3's Status structure, read off the same embedded token that was
         //parsed above. This is a decode of what the issuer wrote, so it happens at the parse boundary
         //regardless of what the issuer signature check below concludes — the twin of the mdoc path,
         //where the Mobile Security Object's status member decodes with the rest of the object. The
         //ordering Section 8.3 states governs the FETCH of the Status List Token, which is the
         //verifier's own later step over a credential whose signature held.
-        StatusClaim? status = extractStatus(embeddedToken);
+        string? issuer;
+        string? credentialType;
+        StatusClaim? status;
+        try
+        {
+            issuer = extractIssuer(embeddedToken);
+            credentialType = extractCredentialType(embeddedToken);
+            status = extractStatus(embeddedToken);
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<SdCwtKbtVerificationResult, SdCwtPresentationDefect>(SdCwtPresentationDefect.CredentialClaimMalformed);
+        }
 
         PublicKeyMemory? issuerPublicKey = issuer is not null ? resolveIssuerKey(issuer) : null;
 
@@ -247,7 +303,7 @@ public static class KbCwtVerification
             }
         }
 
-        return new SdCwtKbtVerificationResult
+        return Result.Success<SdCwtKbtVerificationResult, SdCwtPresentationDefect>(new SdCwtKbtVerificationResult
         {
             HolderSignatureValid = holderSignatureValid,
             CredentialSignatureValid = credentialSignatureValid,
@@ -262,6 +318,6 @@ public static class KbCwtVerification
             UnconditionallyDisclosedPaths = unconditionallyDisclosedPaths,
             MinimumDisclosureSaltLengthBytes = minimumSaltLength,
             SaltReused = saltReused
-        };
+        });
     }
 }

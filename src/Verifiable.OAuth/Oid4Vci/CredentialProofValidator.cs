@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
@@ -37,19 +36,6 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// </remarks>
 public static class CredentialProofValidator
 {
-    /// <summary>
-    /// The UTF-8 name of the §F.1 OPTIONAL <c>kid</c> key-reference JOSE header, one of the headers whose mutual
-    /// exclusivity §F.1 mandates. Only its presence is detected here, for the exactly-one rule; dereferencing it is the
-    /// deployment's job through the key-resolution delegate.
-    /// </summary>
-    private static ReadOnlySpan<byte> KidHeaderUtf8 => "kid"u8;
-
-    /// <summary>
-    /// The UTF-8 name of the §F.1 OPTIONAL <c>x5c</c> key-reference JOSE header, one of the headers whose mutual
-    /// exclusivity §F.1 mandates. Only its presence is detected here, for the exactly-one rule; its chain is resolved
-    /// through <see cref="Oid4VciProofX509Verification"/>.
-    /// </summary>
-    private static ReadOnlySpan<byte> X5cHeaderUtf8 => "x5c"u8;
 
     /// <summary>
     /// Resolves the holder public key a <c>jwt</c> proof references through its <c>kid</c> JOSE
@@ -490,64 +476,42 @@ public static class CredentialProofValidator
             return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.Malformed);
         }
 
-        string? typ;
-        string? alg;
-        bool hasJwk;
-        bool hasKid;
-        bool hasX5c;
-        string? kid;
-        List<string>? x5cValues;
-        Dictionary<string, object>? jwkMembers;
-        string? audience;
-        var issuedAt = default(NumericDate);
-        string? nonce;
+        //RFC 7515 §4 / RFC 7519 §4: the header and the claims set are each read once as the one JSON object they are, by their
+        //decoded member names (RFC 8259 §8.3), a repeated name at any depth, including inside a nested "jwk", or a name or string
+        //naming no Unicode text refusing the proof before any member is read, so typ/alg/kid/jwk/x5c/aud/nonce are never read from
+        //a first occurrence while a second goes unnoticed, and an escaped name is the member it decodes to. A segment the decoder
+        //refuses as no base64url text is a malformed proof; any other failure of the decoder or of the allocator is a fault and
+        //surfaces as one, cancellation among them.
+        JwtHeader header;
+        JsonTopLevelMembers claims;
 
-        try
+        using(var headerOwner = JwsSegmentDecoding.DecodedOrNone(parts[0], base64UrlDecoder, memoryPool))
+        using(var payloadOwner = JwsSegmentDecoding.DecodedOrNone(parts[1], base64UrlDecoder, memoryPool))
         {
-            using IMemoryOwner<byte> headerOwner = base64UrlDecoder(parts[0], memoryPool);
-            ReadOnlySpan<byte> header = headerOwner.Memory.Span;
-
-            using IMemoryOwner<byte> payloadOwner = base64UrlDecoder(parts[1], memoryPool);
-            ReadOnlySpan<byte> payload = payloadOwner.Memory.Span;
-
-            //RFC 7515 §4 / RFC 7519 §4: gate both the header and the claims set for well-formedness — a
-            //repeated name at any nesting depth, including inside a nested "jwk" — before extracting a
-            //single field from either, so typ/alg/kid/jwk/aud/nonce selection below never runs against a
-            //first occurrence while a duplicate second occurrence goes unnoticed. The claims set is read as
-            //the one JSON object it is, so its claims are read as its members.
-            if(!JwkJsonReader.IsWellFormedJsonDocument(header) || JwkJsonReader.ReadTopLevelMembers(payload) is not JsonTopLevelMembers claims)
+            if(headerOwner is null
+                || payloadOwner is null
+                || JwtHeader.Read(headerOwner.Memory.Span) is not JwtPartRead<JwtHeader> { Part: var readHeader }
+                || JwkJsonReader.ReadTopLevelMembers(payloadOwner.Memory.Span) is not JsonTopLevelMembers readClaims)
             {
                 return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.Malformed);
             }
 
-            //§F.1: "iat: REQUIRED (number)", a NumericDate (RFC 7519 Section 2). One the claims set carries that names no date -
-            //a string of digits, another kind of value, a count no clock represents - makes the proof malformed, never one read
-            //as carrying no iat; an omitted iat is answered by the window check below.
-            if(NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Iat, out issuedAt) is NumericDateReadResult.Malformed)
-            {
-                return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.Malformed);
-            }
-
-            typ = JwkJsonReader.ExtractStringValue(header, WellKnownJoseHeaderNames.TypUtf8);
-            alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
-            hasJwk = JwkJsonReader.ContainsKey(header, WellKnownJoseHeaderNames.JwkUtf8);
-            hasKid = JwkJsonReader.ContainsKey(header, KidHeaderUtf8);
-            hasX5c = JwkJsonReader.ContainsKey(header, X5cHeaderUtf8);
-            kid = hasKid ? JwkJsonReader.ExtractStringValue(header, KidHeaderUtf8) : null;
-            x5cValues = hasX5c ? JwkJsonReader.ExtractStringArrayProperty(header, X5cHeaderUtf8) : null;
-            jwkMembers = hasJwk
-                ? JwkJsonReader.ExtractObjectProperties(header, WellKnownJoseHeaderNames.JwkUtf8)
-                : null;
-
-            audience = claims.Find(WellKnownJwtClaimNames.Aud) is JsonMemberString { Text: var audienceText } ? audienceText : null;
-            nonce = claims.Find(WellKnownJwtClaimNames.Nonce) is JsonMemberString { Text: var nonceText } ? nonceText : null;
+            header = readHeader;
+            claims = readClaims;
         }
-        catch
+
+        //§F.1: "iat: REQUIRED (number)", a NumericDate (RFC 7519 Section 2). One the claims set carries that names no date -
+        //a string of digits, another kind of value, a count no clock represents - makes the proof malformed, never one read
+        //as carrying no iat; an omitted iat is answered by the window check below.
+        if(NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Iat, out var issuedAt) is NumericDateReadResult.Malformed)
         {
-            //The proof is client-supplied wire input, structurally unverified at this point; any
-            //decode/read failure is a malformed proof rather than an internal fault.
             return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.Malformed);
         }
+
+        var typ = header.TryGetValue(WellKnownJoseHeaderNames.Typ, out var typValue) ? typValue as string : null;
+        var alg = header.TryGetValue(WellKnownJwkMemberNames.Alg, out var algValue) ? algValue as string : null;
+        var audience = claims.Find(WellKnownJwtClaimNames.Aud) is JsonMemberString { Text: var audienceText } ? audienceText : null;
+        var nonce = claims.Find(WellKnownJwtClaimNames.Nonce) is JsonMemberString { Text: var nonceText } ? nonceText : null;
 
         //§F.4: "the key proof is explicitly typed using header parameters as defined for that
         //proof type" — §F.1 fixes that typing to typ = openid4vci-proof+jwt, compared as the RFC 7515
@@ -578,12 +542,7 @@ public static class CredentialProofValidator
         //via the X.509 surface, kid via the deployment delegate); the validator owns the reconstructed
         //key and disposes it after the verify call.
         Oid4VciHeaderKeyResolution.Outcome resolution = await Oid4VciHeaderKeyResolution.ResolveAsync(
-            hasJwk,
-            hasKid,
-            hasX5c,
-            jwkMembers,
-            kid,
-            x5cValues,
+            header,
             alg,
             resolveProofKey is null ? null : new Oid4VciHeaderKeyResolution.ResolveKidKeyDelegate(resolveProofKey.Invoke),
             x509Verification,
@@ -674,7 +633,7 @@ public static class CredentialProofValidator
         //The bound key the issued Credential binds to: the RFC 7638 thumbprint of the proof's key.
         //For the kid/x5c modes the resolver reconstructed the same key family, so the thumbprint is
         //computed off the embedded jwk only — those modes carry no jwk and yield no thumbprint here.
-        string? thumbprint = hasJwk && jwkMembers is not null
+        string? thumbprint = header.TryGetValue(WellKnownJoseHeaderNames.Jwk, out var jwkValue) && jwkValue is IReadOnlyDictionary<string, object?> jwkMembers
             ? DpopJwkUtilities.ComputeThumbprintFromJwk(
                 ToStringValuedJwk(jwkMembers), base64UrlEncoder, memoryPool)
             : null;
@@ -702,10 +661,11 @@ public static class CredentialProofValidator
     /// thumbprint helper consumes.
     /// </summary>
     /// <param name="jwkMembers">The <c>jwk</c> header's members.</param>
-    private static Dictionary<string, string> ToStringValuedJwk(Dictionary<string, object> jwkMembers)
+    /// <returns>The string-valued members.</returns>
+    private static Dictionary<string, string> ToStringValuedJwk(IReadOnlyDictionary<string, object?> jwkMembers)
     {
         Dictionary<string, string> stringValued = new(jwkMembers.Count, StringComparer.Ordinal);
-        foreach(KeyValuePair<string, object> member in jwkMembers)
+        foreach(KeyValuePair<string, object?> member in jwkMembers)
         {
             if(member.Value is string value)
             {

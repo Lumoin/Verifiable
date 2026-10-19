@@ -97,6 +97,79 @@ internal sealed class MdocVpTokenVerificationTests
     }
 
 
+    /// <summary>
+    /// The mdoc presentation's readings answer their own refusals as the presentation's typed defect: a <c>vp_token</c> value the
+    /// decoder refuses as no base64url text, and one decoding to bytes that are no <c>DeviceResponse</c>; a failure of a delegate
+    /// the verification composes beyond its readings - the IACA trust resolver - surfaces as the fault it is, a
+    /// <see cref="FormatException"/> among them, never answered as a malformed presentation.
+    /// </summary>
+    /// <param name="rowCase">The presentation or the failing delegate.</param>
+    /// <returns>A task completing once the presentation is judged.</returns>
+    [TestMethod]
+    [DataRow("not-base64url", DisplayName = "A vp_token value that is no base64url text")]
+    [DataRow("not-a-device-response", DisplayName = "A value decoding to no DeviceResponse")]
+    [DataRow("resolver-format-fault", DisplayName = "The trust resolver fails with a FormatException")]
+    public async Task AReadingRefusalIsTheDefectAndATrustResolverFaultSurfaces(string rowCase)
+    {
+        var issuerKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var deviceKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        try
+        {
+            var (vpTokenValue, transmittedNonce) = await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
+
+            using var nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+
+            switch(rowCase)
+            {
+                case "not-base64url":
+                    Assert.AreEqual(MdocPresentationDefect.NotBase64UrlText, (await ReadAsync("e", MdocVpFixture.TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false)).Error);
+                    break;
+                case "not-a-device-response":
+                    Assert.AreEqual(MdocPresentationDefect.DeviceResponseMalformed, (await ReadAsync(Base64Url.EncodeToString("no cbor structure"u8), MdocVpFixture.TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false)).Error);
+                    break;
+                default:
+                    _ = await Assert.ThrowsExactlyAsync<FormatException>(
+                        () => ReadAsync(vpTokenValue, static (_, _) => throw new FormatException("The trust resolver failed."), nonceOwner.Memory)).ConfigureAwait(false);
+                    break;
+            }
+        }
+        finally
+        {
+            DisposeKeyMaterial(issuerKeys);
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
+    /// <summary>Reads a <c>vp_token</c> value with the trust resolver given, answering the reading as it comes out.</summary>
+    /// <param name="vpTokenValue">The value.</param>
+    /// <param name="resolveIssuerKey">The trust resolver.</param>
+    /// <param name="mdocGeneratedNonce">The transmitted <c>mdoc_generated_nonce</c>.</param>
+    /// <returns>The reading, whose success the caller disposes.</returns>
+    private async Task<Verifiable.Core.Result<MdocVpVerificationResult, MdocPresentationDefect>> ReadAsync(
+        string vpTokenValue, ResolveMdocIssuerKeyDelegate resolveIssuerKey, ReadOnlyMemory<byte> mdocGeneratedNonce) =>
+        await MdocVpTokenVerification.VerifyAsync(
+            vpTokenValue,
+            new CredentialQueryId(PidCredentialQueryId),
+            resolveIssuerKey,
+            extractTrustedAuthorityEvidence: null,
+            VerifierClientId,
+            VerifierResponseUri,
+            AuthorizationRequestNonce,
+            mdocGeneratedNonce,
+            MdocCborDeviceResponseReader.Read,
+            Oid4VpMdocSessionTranscriptEncoder.Encode,
+            MdocVpFixture.DecodeElementValue,
+            CoseSerialization.ParseCoseSign1,
+            CoseSerialization.ParseCoseSign1AllowingNilPayload,
+            MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes,
+            CoseSerialization.BuildSigStructure,
+            TestSetup.Base64UrlDecoder,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
     [TestMethod]
     public async Task UntrustedIssuerKeyFailsCredentialSignature()
     {
@@ -243,13 +316,13 @@ internal sealed class MdocVpTokenVerificationTests
     /// </param>
     /// <param name="mdocGeneratedNonce">The transmitted <c>mdoc_generated_nonce</c>.</param>
     /// <returns>The parsed presentation and the IACA trust resolution the caller disposes.</returns>
-    private ValueTask<MdocVpVerificationResult> VerifyAsync(
+    private async ValueTask<MdocVpVerificationResult> VerifyAsync(
         string vpTokenValue,
         ResolveMdocIssuerKeyDelegate resolveIssuerKey,
         ExtractMdocTrustedAuthorityEvidenceDelegate? extractTrustedAuthorityEvidence,
         ReadOnlyMemory<byte> mdocGeneratedNonce)
     {
-        return MdocVpTokenVerification.VerifyAsync(
+        var verification = await MdocVpTokenVerification.VerifyAsync(
             vpTokenValue,
             new CredentialQueryId(PidCredentialQueryId),
             resolveIssuerKey,
@@ -267,7 +340,11 @@ internal sealed class MdocVpTokenVerificationTests
             CoseSerialization.BuildSigStructure,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verification.IsSuccess, $"The presentation reads; refused as {verification.Error}.");
+
+        return verification.Value;
     }
 
 

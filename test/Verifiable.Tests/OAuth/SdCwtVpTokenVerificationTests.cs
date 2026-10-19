@@ -89,9 +89,7 @@ internal sealed class SdCwtVpTokenVerificationTests
         string vpTokenValue = await ProduceVpTokenAsync(
             issuerPrivate, holderPublic, holderPrivate).ConfigureAwait(false);
 
-        VpTokenParsed parsed = await SdCwtVpTokenVerification.VerifyAsync(
-            vpTokenValue, new CredentialQueryId(EmployeeCwtCredentialQueryId), SdCwtVpFixture.BuildSeams(issuerPublic),
-            TestSetup.Base64UrlDecoder, saltReuseSeam: null, Pool, TestContext.CancellationToken).ConfigureAwait(false);
+        VpTokenParsed parsed = await VerifyAsync(vpTokenValue, SdCwtVpFixture.BuildSeams(issuerPublic)).ConfigureAwait(false);
 
         Assert.IsTrue(parsed.KbJwtSignatureValid, "The KBT holder signature must verify.");
         Assert.IsTrue(parsed.CredentialSignatureValid,
@@ -138,9 +136,7 @@ internal sealed class SdCwtVpTokenVerificationTests
 
         //The trust framework resolves a key that did not sign the credential — the embedded
         //SD-CWT issuer signature fails, but the holder signature is independent and holds.
-        VpTokenParsed parsed = await SdCwtVpTokenVerification.VerifyAsync(
-            vpTokenValue, new CredentialQueryId(EmployeeCwtCredentialQueryId), SdCwtVpFixture.BuildSeams(wrongIssuerPublic),
-            TestSetup.Base64UrlDecoder, saltReuseSeam: null, Pool, TestContext.CancellationToken).ConfigureAwait(false);
+        VpTokenParsed parsed = await VerifyAsync(vpTokenValue, SdCwtVpFixture.BuildSeams(wrongIssuerPublic)).ConfigureAwait(false);
 
         Assert.IsTrue(parsed.KbJwtSignatureValid,
             "The holder signature is independent of the issuer key and must still verify.");
@@ -608,7 +604,7 @@ internal sealed class SdCwtVpTokenVerificationTests
         VpTokenParsed parsed = await VerifyAsync(vpTokenValue, seams).ConfigureAwait(false);
 
         using IMemoryOwner<byte> keyBindingTokenBytes = TestSetup.Base64UrlDecoder(vpTokenValue, Pool);
-        SdCwtKbtVerificationResult result = await KbCwtVerification.VerifyAsync(
+        var verification = await KbCwtVerification.VerifyAsync(
             keyBindingTokenBytes.Memory,
             seams.ParseCoseSign1,
             seams.ExtractKcwt,
@@ -624,6 +620,10 @@ internal sealed class SdCwtVpTokenVerificationTests
             saltReuseSeam: null,
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verification.IsSuccess, $"The Key Binding Token reads; refused as {verification.Error}.");
+
+        var result = verification.Value;
 
         Assert.IsNotNull(result.Status,
             "Section 8.3 step 1: the Key Binding verification reads the status claim off the embedded token it parsed.");
@@ -641,6 +641,76 @@ internal sealed class SdCwtVpTokenVerificationTests
 
 
     /// <summary>
+    /// The SD-CWT presentation's readings answer their own refusals as the presentation's typed defect: a <c>vp_token</c> value the
+    /// decoder refuses as no base64url text, and a Key Binding Token carrying no embedded SD-CWT in its <c>kcwt</c> protected-header
+    /// parameter, which the extraction refuses with its <see cref="FormatException"/>; a failure of a
+    /// delegate the verification composes beyond its readings - the issuer-key resolver, the credential's verification - surfaces
+    /// as the fault it is, a <see cref="FormatException"/> among them, never answered as a malformed presentation.
+    /// </summary>
+    /// <param name="rowCase">The presentation or the failing delegate.</param>
+    /// <returns>A task completing once the presentation is judged.</returns>
+    [TestMethod]
+    [DataRow("not-base64url", DisplayName = "A vp_token value that is no base64url text")]
+    [DataRow("no-kcwt", DisplayName = "A Key Binding Token carrying no kcwt")]
+    [DataRow("resolver-format-fault", DisplayName = "The issuer-key resolver fails with a FormatException")]
+    [DataRow("verification-format-fault", DisplayName = "The credential's verification fails with a FormatException")]
+    public async Task AReadingRefusalIsTheDefectAndACallbackFaultSurfaces(string rowCase)
+    {
+        var issuerKeys = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var issuerPublic = issuerKeys.PublicKey;
+        using var issuerPrivate = issuerKeys.PrivateKey;
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var holderPublic = holderKeys.PublicKey;
+        using var holderPrivate = holderKeys.PrivateKey;
+
+        var vpTokenValue = await ProduceVpTokenAsync(issuerPrivate, holderPublic, holderPrivate).ConfigureAwait(false);
+        var seams = SdCwtVpFixture.BuildSeams(issuerPublic);
+
+        switch(rowCase)
+        {
+            case "not-base64url":
+                Assert.AreEqual(SdCwtPresentationDefect.NotBase64UrlText, (await ReadAsync("e", seams).ConfigureAwait(false)).Error);
+                break;
+            case "no-kcwt":
+                Assert.AreEqual(SdCwtPresentationDefect.EmbeddedCredentialMalformed, (await ReadAsync(KeyBindingTokenCarryingNoKcwt(), seams).ConfigureAwait(false)).Error);
+                break;
+            case "resolver-format-fault":
+                _ = await Assert.ThrowsExactlyAsync<FormatException>(
+                    () => ReadAsync(vpTokenValue, seams with { ResolveIssuerKey = static _ => throw new FormatException("The resolver failed.") })).ConfigureAwait(false);
+                break;
+            default:
+                _ = await Assert.ThrowsExactlyAsync<FormatException>(
+                    () => ReadAsync(vpTokenValue, seams with { VerifyCredential = static (_, _, _, _) => throw new FormatException("The verification failed.") })).ConfigureAwait(false);
+                break;
+        }
+    }
+
+
+    /// <summary>
+    /// The base64url text of a COSE_Sign1 (RFC 9052 section 4.2) the producer writes with an empty protected header, so it carries
+    /// no <c>kcwt</c> parameter and no embedded SD-CWT: a Key Binding Token whose embedded credential's extraction refuses it.
+    /// </summary>
+    /// <returns>The <c>vp_token</c> value.</returns>
+    private static string KeyBindingTokenCarryingNoKcwt()
+    {
+        //tag 18 (COSE_Sign1), an array of four: the protected header as a byte string holding the empty map, the empty unprotected
+        //map, an eleven-octet payload and a 64-octet signature.
+        byte[] coseSign1 = [0xD2, 0x84, 0x41, 0xA0, 0xA0, 0x4B, .. "kbt payload"u8, 0x58, 0x40, .. new byte[64]];
+
+        return Base64Url.EncodeToString(coseSign1);
+    }
+
+
+    /// <summary>Reads a <c>vp_token</c> value with the seams given, answering the reading as it comes out.</summary>
+    /// <param name="vpTokenValue">The value.</param>
+    /// <param name="seams">The seams.</param>
+    /// <returns>The reading.</returns>
+    private async Task<Verifiable.Core.Result<VpTokenParsed, SdCwtPresentationDefect>> ReadAsync(string vpTokenValue, SdCwtVpVerificationSeams seams) =>
+        await SdCwtVpTokenVerification.VerifyAsync(
+            vpTokenValue, new CredentialQueryId(EmployeeCwtCredentialQueryId), seams, TestSetup.Base64UrlDecoder, saltReuseSeam: null, Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+    /// <summary>
     /// Verifier side: runs the OID4VP SD-CWT VP-token verification over the wire value with
     /// <paramref name="seams"/>, under the credential query identifier this class presents against.
     /// </summary>
@@ -649,7 +719,7 @@ internal sealed class SdCwtVpTokenVerificationTests
     /// <returns>The parsed and crypto-verified presentation.</returns>
     private async ValueTask<VpTokenParsed> VerifyAsync(string vpTokenValue, SdCwtVpVerificationSeams seams)
     {
-        return await SdCwtVpTokenVerification.VerifyAsync(
+        var verification = await SdCwtVpTokenVerification.VerifyAsync(
             vpTokenValue,
             new CredentialQueryId(EmployeeCwtCredentialQueryId),
             seams,
@@ -657,5 +727,9 @@ internal sealed class SdCwtVpTokenVerificationTests
             saltReuseSeam: null,
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verification.IsSuccess, $"The presentation reads; refused as {verification.Error}.");
+
+        return verification.Value;
     }
 }

@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Globalization;
 using System.Text;
 using Verifiable.JCose;
 
@@ -57,12 +56,14 @@ public static class StatusClaimReader
     /// refused. A caller whose token carries no <c>status</c> member does not call this reader; it
     /// establishes that from the members of the claims set it read.
     /// </param>
-    /// <param name="claim">On success, the claim as read; otherwise <see langword="null"/>.</param>
     /// <returns>
-    /// <see langword="true"/> when the value is one JSON object carrying at least one top-level member
-    /// (Section 6.1), repeating no member name at any depth and naming Unicode text throughout, and any
-    /// <c>status_list</c> member is an object whose <c>uri</c> is a string conforming to RFC 3986 and whose
-    /// <c>idx</c> is a non-negative integer (Section 6.2); <see langword="false"/> otherwise — never throws
+    /// The claim as read (<see cref="StatusClaimRead"/>) when the value is one JSON object carrying at least one top-level member
+    /// (Section 6.1), repeating no member name at any depth and naming Unicode text throughout, and any <c>status_list</c> member
+    /// is an object whose <c>uri</c> is a string conforming to RFC 3986 and whose <c>idx</c> is a non-negative integer (Section
+    /// 6.2) - an integer whatever its spelling, <c>3</c>, <c>3.0</c>, <c>3e0</c> and <c>-0</c> among them; the refusal of a
+    /// value outside those rules (<see cref="StatusClaimRefused"/>); or, for a claim within them whose <c>idx</c> is a
+    /// non-negative integer past the indices the library's status lists hold (<see cref="int.MaxValue"/>), the reference whose
+    /// status the library cannot check (<see cref="StatusClaimIndexBeyondCapacity"/>), which is no malformed claim. Never throws
     /// on this untrusted input.
     /// </returns>
     /// <remarks>
@@ -72,37 +73,68 @@ public static class StatusClaimReader
     /// refused outright: a duplicate lets a producer show one reader one mechanism and another reader a
     /// different one.
     /// </remarks>
-    public static bool TryRead(ReadOnlySpan<byte> statusObjectUtf8Json, out StatusClaim? claim)
+    public static StatusClaimReading Read(ReadOnlySpan<byte> statusObjectUtf8Json)
     {
-        claim = null;
-
         if(JwkJsonReader.ReadTopLevelMembers(statusObjectUtf8Json) is not JsonTopLevelMembers { Members.Count: > 0 } members)
         {
-            return false;
+            return new StatusClaimRefused();
         }
 
         //The reader answers members only for an object repeating no name, so the decoded names go straight into the ordinal set
         //the claim stores.
-        FrozenSet<string> mechanisms = members.Members.Select(static member => member.Name).ToFrozenSet(StringComparer.Ordinal);
+        var mechanisms = members.Members.Select(static member => member.Name).ToFrozenSet(StringComparer.Ordinal);
 
-        StatusListReference? statusList = null;
-        if(members.Members.FirstOrDefault(static member => string.Equals(member.Name, StatusMechanismNames.StatusList, StringComparison.Ordinal)) is { } statusListMember)
+        if(!mechanisms.Contains(StatusMechanismNames.StatusList))
         {
-            if(statusListMember.Kind is not JsonTopLevelValueKind.Object
-                || JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(statusListMember.Text)) is not JsonTopLevelMembers reference
-                || reference.Find(StatusListMemberNames.Uri) is not JsonMemberString { Text: var uri }
-                || !StatusListReference.IsConformingUri(uri)
-                || reference.Find(StatusListMemberNames.Index) is not JsonMemberNumber { Spelling: var indexSpelling }
-                || !int.TryParse(indexSpelling, NumberStyles.None, CultureInfo.InvariantCulture, out var index))
-            {
-                return false;
-            }
-
-            statusList = new StatusListReference(index, uri);
+            return new StatusClaimRead(new StatusClaim(null, mechanisms));
         }
 
-        claim = new StatusClaim(statusList, mechanisms);
+        var statusListMember = members.Members.Single(static member => WellKnownJwtClaimNames.IsStatusList(member.Name));
+        if(statusListMember.Kind is not JsonTopLevelValueKind.Object
+            || JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(statusListMember.Text)) is not JsonTopLevelMembers reference
+            || reference.Find(StatusListMemberNames.Uri) is not JsonMemberString { Text: var uri }
+            || !StatusListReference.IsConformingUri(uri)
+            || reference.Find(StatusListMemberNames.Index) is not JsonMemberNumber { Spelling: var indexSpelling }
+            || DecimalNumber.FromJsonNumber(Encoding.UTF8.GetBytes(indexSpelling)) is not { IsInteger: true } index
+            || index.IsNegative)
+        {
+            return new StatusClaimRefused();
+        }
 
-        return true;
+        //Section 6.2 bounds the index from below alone; the library's status lists hold at most int.MaxValue + 1 entries, so an
+        //index past that is a well-formed reference to an entry no list the library reads holds, whose status it cannot check.
+        if(index.CompareTo(int.MaxValue) > 0 || index.ToClaimValue() is not long smallIndex)
+        {
+            return new StatusClaimIndexBeyondCapacity(uri, index);
+        }
+
+        return new StatusClaimRead(new StatusClaim(new StatusListReference((int)smallIndex, uri), mechanisms));
     }
 }
+
+
+/// <summary>What <see cref="StatusClaimReader.Read"/> answers for a <c>status</c> claim's value.</summary>
+public abstract record StatusClaimReading;
+
+
+/// <summary>The claim, read within Token Status List sections 6.1 and 6.2.</summary>
+/// <param name="Claim">The claim.</param>
+public sealed record StatusClaimRead(StatusClaim Claim) : StatusClaimReading;
+
+
+/// <summary>
+/// The value is outside Token Status List sections 6.1 and 6.2: no JSON object, an object naming no mechanism, repeating a member
+/// name or naming no Unicode text, or a <c>status_list</c> that is no object of an RFC 3986 <c>uri</c> and a non-negative integer
+/// <c>idx</c>.
+/// </summary>
+public sealed record StatusClaimRefused : StatusClaimReading;
+
+
+/// <summary>
+/// The value is within Token Status List sections 6.1 and 6.2, and its <c>status_list</c> names an index, a non-negative integer,
+/// past the indices the library's status lists hold (<see cref="int.MaxValue"/>): a reference whose status the library cannot
+/// check, never a malformed claim.
+/// </summary>
+/// <param name="ListLocation">The Status List Token's URI the reference names.</param>
+/// <param name="Index">The index the reference names, as written.</param>
+public sealed record StatusClaimIndexBeyondCapacity(string ListLocation, DecimalNumber Index) : StatusClaimReading;

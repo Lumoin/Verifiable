@@ -280,10 +280,20 @@ public static class SelfIssuedIdTokenValidation
     }
 
 
-    //Reconstructs the subject's public key from the sub_jwk members and verifies the
-    //compact JWS against it — the same composition the OID4VP verifier uses for the
-    //cnf.jwk holder key. Conversion failures (unsupported kty/crv, malformed
-    //coordinates) mean the signature cannot be valid.
+    /// <summary>
+    /// Reconstructs the subject's public key from the <c>sub_jwk</c> members and verifies the compact JWS against it - the same
+    /// composition the OID4VP verifier uses for the <c>cnf.jwk</c> holder key. The reconstruction's own refusal of the key
+    /// (<see cref="JwkPublicKeyException"/>, or <see cref="RsaPublicKeyException"/> for an RSA key's parameters) and the
+    /// decoder's refusal of a member as no base64url text (its <see cref="FormatException"/>) state no key, so the signature
+    /// cannot be valid; the verification answers its own refusals as not verifying. Any other failure of the decoder, of the
+    /// allocator or of a signature backend, cancellation among them, is a fault and surfaces as one.
+    /// </summary>
+    /// <param name="idToken">The compact Self-Issued ID Token.</param>
+    /// <param name="subJwk">The <c>sub_jwk</c> members.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's members and the token's segments.</param>
+    /// <param name="memoryPool">The pool the key material is rented from.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see langword="true"/> when the signature verifies under the key the <c>sub_jwk</c> states.</returns>
     private static async ValueTask<bool> VerifyWithJwkAsync(
         string idToken,
         Dictionary<string, object> subJwk,
@@ -291,21 +301,33 @@ public static class SelfIssuedIdTokenValidation
         BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
+        using var subjectKey = SubjectKeyOrNone(subJwk, base64UrlDecoder, memoryPool);
+
+        return subjectKey is not null
+            && await Jws.VerifyAsync(idToken, base64UrlDecoder, memoryPool, subjectKey, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The key a <c>sub_jwk</c> states, or <see langword="null"/> when the library's reconstruction refuses it or the decoder
+    /// refuses one of its members as no base64url text; any other failure is a fault and surfaces as one.
+    /// </summary>
+    /// <param name="subJwk">The <c>sub_jwk</c> members.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's members.</param>
+    /// <param name="memoryPool">The pool the key material is rented from.</param>
+    /// <returns>The key, which the caller disposes, or <see langword="null"/>.</returns>
+    private static PublicKeyMemory? SubjectKeyOrNone(Dictionary<string, object> subJwk, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool)
+    {
         try
         {
             var (algorithm, purpose, scheme, keyBytesOwner) =
-                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                    subJwk, memoryPool, base64UrlDecoder);
-            Tag subjectTag = Tag.Create(algorithm).With(purpose).With(scheme);
-            using PublicKeyMemory subjectKey = new(keyBytesOwner, subjectTag);
+                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(subJwk, memoryPool, base64UrlDecoder);
 
-            return await Jws.VerifyAsync(
-                idToken, base64UrlDecoder, memoryPool,
-                subjectKey, cancellationToken).ConfigureAwait(false);
+            return new PublicKeyMemory(keyBytesOwner, Tag.Create(algorithm).With(purpose).With(scheme));
         }
-        catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
+        catch(Exception exception) when(exception is FormatException or JwkPublicKeyException or RsaPublicKeyException)
         {
-            return false;
+            return null;
         }
     }
 

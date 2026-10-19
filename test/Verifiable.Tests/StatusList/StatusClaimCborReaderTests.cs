@@ -401,9 +401,8 @@ internal sealed class StatusClaimCborReaderTests
             """);
 
         StatusClaim fromCose = StatusClaimCborReader.Read(new CborReader(statusBytes, CborOptions.Lax));
-        bool isJoseRead = StatusClaimReader.TryRead(statusObjectUtf8Json, out StatusClaim? fromJose);
+        var fromJose = Assert.IsInstanceOfType<StatusClaimRead>(StatusClaimReader.Read(statusObjectUtf8Json), "The JOSE encoding of the same statement is itself well-formed.").Claim;
 
-        Assert.IsTrue(isJoseRead, "The JOSE encoding of the same statement is itself well-formed.");
         Assert.AreEqual(fromJose, fromCose, "One status statement in two encodings must read as one claim.");
     }
 

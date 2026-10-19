@@ -47,16 +47,30 @@ public static class SdJwtIssuerHeader
         }
 
         using IMemoryOwner<byte> headerBytes = base64UrlDecoder(issuerSignedCompactJws.AsSpan(0, firstDot), pool);
-        List<string>? values = JwkJsonReader.ExtractStringArrayProperty(headerBytes.Memory.Span, WellKnownJwkMemberNames.X5cUtf8);
-        if(values is not { Count: > 0 })
-        {
-            return false;
-        }
+        x5c = ReadX5c(headerBytes.Memory.Span);
 
-        x5c = values;
-
-        return true;
+        return x5c.Count > 0;
     }
+
+
+    /// <summary>
+    /// Reads the <c>x5c</c> header member from an Issuer-signed JWT's protected header already decoded, the one reading of the
+    /// member every reader of the header shares, so a caller that decoded the header once reads it without decoding it again.
+    /// </summary>
+    /// <param name="protectedHeader">The protected header's UTF-8 JSON, the header segment base64url-decoded.</param>
+    /// <returns>The chain's base64-encoded DER certificate strings (leaf first), in header order; empty when the header carries none.</returns>
+    public static IReadOnlyList<string> ReadX5c(ReadOnlySpan<byte> protectedHeader) =>
+        JwkJsonReader.ExtractStringArrayProperty(protectedHeader, WellKnownJwkMemberNames.X5cUtf8) is { Count: > 0 } values ? values : [];
+
+
+    /// <summary>
+    /// Reads the <c>kid</c> header member from an Issuer-signed JWT's protected header already decoded, the one reading of the
+    /// member every reader of the header shares.
+    /// </summary>
+    /// <param name="protectedHeader">The protected header's UTF-8 JSON, the header segment base64url-decoded.</param>
+    /// <returns>The header's <c>kid</c>, or <see langword="null"/> when the header carries none.</returns>
+    public static string? ReadKid(ReadOnlySpan<byte> protectedHeader) =>
+        JwkJsonReader.ExtractStringValue(protectedHeader, WellKnownJwkMemberNames.KidUtf8);
 
 
     /// <summary>
@@ -89,7 +103,7 @@ public static class SdJwtIssuerHeader
         }
 
         using IMemoryOwner<byte> headerBytes = base64UrlDecoder(issuerSignedCompactJws.AsSpan(0, firstDot), pool);
-        kid = JwkJsonReader.ExtractStringValue(headerBytes.Memory.Span, WellKnownJwkMemberNames.KidUtf8);
+        kid = ReadKid(headerBytes.Memory.Span);
 
         return kid is not null;
     }

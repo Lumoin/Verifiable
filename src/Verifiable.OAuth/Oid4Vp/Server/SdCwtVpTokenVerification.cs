@@ -1,10 +1,11 @@
-using System.Buffers;
+using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -38,7 +39,8 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 public static class SdCwtVpTokenVerification
 {
     /// <summary>
-    /// Verifies an SD-CWT VP token and returns the extracted, verified contents.
+    /// Verifies an SD-CWT VP token and returns the extracted, verified contents, or the defect of a presentation whose part the
+    /// reading that owns its wire shape refused.
     /// </summary>
     /// <param name="vpToken">The base64url-encoded SD-CWT Key Binding Token from the vp_token slot.</param>
     /// <param name="credentialQueryId">
@@ -53,8 +55,14 @@ public static class SdCwtVpTokenVerification
     /// </param>
     /// <param name="pool">Memory pool for cryptographic allocations.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The parsed and crypto-verified VP token contents.</returns>
-    public static async ValueTask<VpTokenParsed> VerifyAsync(
+    /// <returns>
+    /// The parsed and crypto-verified VP token contents; or the defect (<see cref="SdCwtPresentationDefect"/>) of a value the
+    /// decoder refuses as no base64url text, a Key Binding Token, embedded SD-CWT, <c>x5chain</c>, holder key or claim its
+    /// reading seam refuses with its <see cref="FormatException"/>. Any other failure - of the decoder beyond its refusal, of the
+    /// issuer-key or trust-evidence resolver, of the credential's verification, of a signature or digest backend, of the
+    /// allocator - is a fault and surfaces as one, cancellation among them.
+    /// </returns>
+    public static async ValueTask<Result<VpTokenParsed, SdCwtPresentationDefect>> VerifyAsync(
         string vpToken,
         CredentialQueryId credentialQueryId,
         SdCwtVpVerificationSeams seams,
@@ -72,25 +80,37 @@ public static class SdCwtVpTokenVerification
         cancellationToken.ThrowIfCancellationRequested();
 
         //Base64url-decode the vp_token value to the KBT COSE_Sign1 wire bytes, then run
-        //the Core SD-CWT KB verification through the application-wired seams.
-        using IMemoryOwner<byte> kbtBytes = decoder(vpToken, pool);
+        //the Core SD-CWT KB verification through the application-wired seams. The decoder's refusal of the value as no base64url
+        //text is the presentation's defect; any other failure of the decoder is a fault.
+        using var kbtBytes = JwsSegmentDecoding.DecodedOrNone(vpToken, decoder, pool);
+
+        if(kbtBytes is null)
+        {
+            return Result.Failure<VpTokenParsed, SdCwtPresentationDefect>(SdCwtPresentationDefect.NotBase64UrlText);
+        }
 
         //When an x5chain evidence resolver is wired, extract the embedded presentation SD-CWT's own
         //COSE_Sign1 bytes independently (the same kcwt protected-header parameter
         //KbCwtVerification.VerifyAsync below re-parses) so its x5chain can be read for OID4VP 1.0
         //§6.1.1 trust evidence. The chain certificates are pool-owned copies, safe to keep past this
-        //probe parse's own disposal; they are resolved and disposed once the verified iss is known.
-        IReadOnlyList<PkiCertificateMemory> trustedAuthorityChain = [];
+        //probe parse's own disposal; they are resolved and disposed once the verified iss is known. Each reading's refusal is the
+        //defect of the part it reads.
+        var trustedAuthorityChain = (IReadOnlyList<PkiCertificateMemory>)[];
         if(seams.ResolveTrustedAuthorityEvidence is not null && seams.ExtractCoseSign1X5Chain is not null)
         {
-            using CoseSign1Message probeKbt = seams.ParseCoseSign1(kbtBytes.Memory, pool);
-            ReadOnlyMemory<byte> embeddedSdCwt = seams.ExtractKcwt(probeKbt.ProtectedHeader.AsReadOnlyMemory());
-            trustedAuthorityChain = seams.ExtractCoseSign1X5Chain(embeddedSdCwt, pool);
+            var probe = ProbedChainOf(kbtBytes.Memory, seams, seams.ExtractCoseSign1X5Chain, pool);
+
+            if(!probe.IsSuccess)
+            {
+                return Result.Failure<VpTokenParsed, SdCwtPresentationDefect>(probe.Error);
+            }
+
+            trustedAuthorityChain = probe.Value;
         }
 
         try
         {
-            SdCwtKbtVerificationResult result = await KbCwtVerification.VerifyAsync(
+            var verification = await KbCwtVerification.VerifyAsync(
                 kbtBytes.Memory,
                 seams.ParseCoseSign1,
                 seams.ExtractKcwt,
@@ -106,6 +126,13 @@ public static class SdCwtVpTokenVerification
                 saltReuseSeam,
                 pool,
                 cancellationToken).ConfigureAwait(false);
+
+            if(!verification.IsSuccess)
+            {
+                return Result.Failure<VpTokenParsed, SdCwtPresentationDefect>(verification.Error);
+            }
+
+            var result = verification.Value;
 
             //The relying-party-facing string projection of the same path-keyed map KbCwtVerification
             //already resolved (embeddedToken.DisclosurePaths) — no re-flattening onto claim names.
@@ -129,7 +156,7 @@ public static class SdCwtVpTokenVerification
             //held, and the key is the one the credential's issuer signature verified under, borrowed
             //from the seam that resolved it. Nothing here re-parses the presentation or re-resolves
             //the key, and nothing here disposes the key.
-            return new VpTokenParsed
+            return Result.Success<VpTokenParsed, SdCwtPresentationDefect>(new VpTokenParsed
             {
                 CredentialQueryId = credentialQueryId,
                 CredentialIssuerKey = result.IssuerVerificationKey,
@@ -152,7 +179,7 @@ public static class SdCwtVpTokenVerification
                 SessionTranscriptValid = true,
                 MinimumDisclosureSaltLengthBytes = result.MinimumDisclosureSaltLengthBytes,
                 SaltReused = result.SaltReused
-            };
+            });
         }
         finally
         {
@@ -160,6 +187,56 @@ public static class SdCwtVpTokenVerification
             {
                 certificate.Dispose();
             }
+        }
+    }
+
+
+    /// <summary>
+    /// The embedded presentation SD-CWT's <c>x5chain</c>, read by a probe parse of the Key Binding Token apart from the
+    /// verification, or the defect of the part a reading seam refused with its <see cref="FormatException"/>: the Key Binding
+    /// Token, the embedded SD-CWT's extraction, or the chain's extraction. Any other failure of a seam is a fault and surfaces as
+    /// one.
+    /// </summary>
+    /// <param name="kbtBytes">The Key Binding Token's wire bytes.</param>
+    /// <param name="seams">The reading seams.</param>
+    /// <param name="extractX5Chain">The chain's extraction.</param>
+    /// <param name="pool">The pool the parse and the certificates are rented from.</param>
+    /// <returns>The chain, which the caller disposes, or the defect.</returns>
+    private static Result<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect> ProbedChainOf(
+        ReadOnlyMemory<byte> kbtBytes,
+        SdCwtVpVerificationSeams seams,
+        ExtractCoseSign1X5ChainDelegate extractX5Chain,
+        BaseMemoryPool pool)
+    {
+        CoseSign1Message probeMessage;
+        try
+        {
+            probeMessage = seams.ParseCoseSign1(kbtBytes, pool);
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect>(SdCwtPresentationDefect.KeyBindingTokenMalformed);
+        }
+
+        using var probeKbt = probeMessage;
+
+        ReadOnlyMemory<byte> embeddedSdCwt;
+        try
+        {
+            embeddedSdCwt = seams.ExtractKcwt(probeKbt.ProtectedHeader.AsReadOnlyMemory());
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect>(SdCwtPresentationDefect.EmbeddedCredentialMalformed);
+        }
+
+        try
+        {
+            return Result.Success<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect>(extractX5Chain(embeddedSdCwt, pool));
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect>(SdCwtPresentationDefect.CertificateChainMalformed);
         }
     }
 }

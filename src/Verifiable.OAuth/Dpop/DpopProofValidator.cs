@@ -276,8 +276,11 @@ public static class DpopProofValidator
     /// <summary>
     /// The coarse category a part's refusal is answered under, decided from the reading's typed refusal: a header carrying no
     /// <c>typ</c> is the proof the typ check names (RFC 9449 section 4.3 check 4), as it names one whose typ is another type; an
-    /// embedded key carrying private or symmetric material is no public key (section 4.2); the JSON reader's refusal of a part's
-    /// document and every other member refusal a DPoP proof's reading answers is a proof that is not well formed (check 2). A
+    /// embedded key carrying private or symmetric material is no public key (section 4.2); a member whose relation the reading
+    /// does not establish - a <c>use</c> or an operation outside the registered vocabulary, a certificate key the judgement
+    /// compares none of - is a judgement not made (<see cref="DpopProofValidationFailureReason.UnsupportedOrUnestablished"/>);
+    /// the JSON reader's refusal of a part's document and every other member refusal a DPoP proof's reading answers is a proof
+    /// that is not well formed (check 2). A
     /// refusal of another kind, or a member refusal naming a defect the reading never names, is none a DPoP proof's reading
     /// answers, and is refused as the fault of the reading that answered it.
     /// </summary>
@@ -290,6 +293,11 @@ public static class DpopProofValidator
         DpopProofMemberRefusal { Defect: DpopProofMemberDefect.PrivateKeyMaterial } => DpopProofValidationFailureReason.JwkContainsPrivateKey,
         DpopProofMemberRefusal
         {
+            Defect: DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished
+                or DpopProofMemberDefect.CertificateKeyRelationUnestablished
+        } => DpopProofValidationFailureReason.UnsupportedOrUnestablished,
+        DpopProofMemberRefusal
+        {
             Defect: DpopProofMemberDefect.Absent
                 or DpopProofMemberDefect.NotAString
                 or DpopProofMemberDefect.NotAnObject
@@ -297,10 +305,8 @@ public static class DpopProofValidator
                 or DpopProofMemberDefect.NotAnArrayOfStrings
                 or DpopProofMemberDefect.RepeatedKeyOperation
                 or DpopProofMemberDefect.KeyOperationsInconsistentWithUse
-                or DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished
                 or DpopProofMemberDefect.NotACertificateChain
                 or DpopProofMemberDefect.CertificateNotOfTheKey
-                or DpopProofMemberDefect.CertificateKeyRelationUnestablished
                 or DpopProofMemberDefect.NotABoolean
         } => DpopProofValidationFailureReason.Malformed,
         JwsPartDocumentRefusal => DpopProofValidationFailureReason.Malformed,

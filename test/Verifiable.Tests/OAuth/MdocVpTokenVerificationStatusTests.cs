@@ -640,12 +640,12 @@ internal sealed class MdocVpTokenVerificationStatusTests
     /// The parsed presentation and the IACA trust resolution owning the key
     /// <see cref="VpTokenParsed.CredentialIssuerKey"/> borrows; the caller releases it.
     /// </returns>
-    private ValueTask<MdocVpVerificationResult> VerifyAsync(
+    private async ValueTask<MdocVpVerificationResult> VerifyAsync(
         string vpTokenValue,
         ResolveMdocIssuerKeyDelegate resolveIssuerKey,
         ReadOnlyMemory<byte> mdocGeneratedNonce)
     {
-        return MdocVpTokenVerification.VerifyAsync(
+        var verification = await MdocVpTokenVerification.VerifyAsync(
             vpTokenValue,
             new CredentialQueryId(PidCredentialQueryId),
             resolveIssuerKey,
@@ -664,7 +664,11 @@ internal sealed class MdocVpTokenVerificationStatusTests
             CoseSerialization.BuildSigStructure,
             TestSetup.Base64UrlDecoder,
             Pool,
-            TestContext.CancellationToken);
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verification.IsSuccess, $"The presentation reads; refused as {verification.Error}.");
+
+        return verification.Value;
     }
 
 

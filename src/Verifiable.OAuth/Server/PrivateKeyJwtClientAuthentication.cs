@@ -385,7 +385,8 @@ public static class PrivateKeyJwtClientAuthentication
             var oauth = server.OAuth();
             if(oauth.Codecs.Decoder is null
                 || oauth.Codecs.JwtHeaderDeserializer is null
-                || oauth.Codecs.JwtPayloadDeserializer is null)
+                || oauth.Codecs.JwtPayloadDeserializer is null
+                || oauth.MemoryPool is not { } memoryPool)
             {
                 return false;
             }
@@ -417,7 +418,7 @@ public static class PrivateKeyJwtClientAuthentication
                 clientAssertion,
                 oauth.Codecs.Decoder,
                 oauth.Codecs.JwtHeaderDeserializer,
-                oauth.MemoryPool!);
+                memoryPool);
 
             if(headerReading is not { Algorithm: { } alg, Header: { } presentedHeader })
             {
@@ -455,7 +456,7 @@ public static class PrivateKeyJwtClientAuthentication
                     clientAssertion,
                     oauth.Codecs.Decoder,
                     bytes => oauth.Codecs.JwtHeaderDeserializer(bytes),
-                    oauth.MemoryPool!);
+                    memoryPool);
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {
@@ -469,7 +470,7 @@ public static class PrivateKeyJwtClientAuthentication
                     ? kidValue
                     : null;
 
-                IReadOnlyDictionary<string, string>? jwkMembers = FindJwkMembers(clientJwksJson, kid, oauth.MemoryPool!);
+                IReadOnlyDictionary<string, string>? jwkMembers = FindJwkMembers(clientJwksJson, kid, memoryPool);
 
                 //A JWK carrying a private or symmetric member cannot be a verification key —
                 //draft-ietf-oauth-client-id-metadata-document-02 §4.1 (CIMD-023) already forbids this
@@ -485,10 +486,12 @@ public static class PrivateKeyJwtClientAuthentication
                 try
                 {
                     publicKey = DpopJwkUtilities.PublicKeyFromJwk(
-                        jwkMembers, alg, oauth.Codecs.Decoder, oauth.MemoryPool!);
+                        jwkMembers, alg, oauth.Codecs.Decoder, memoryPool);
                 }
-                catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException or RsaPublicKeyException)
+                catch(Exception ex) when(ex is FormatException or JwkPublicKeyException or RsaPublicKeyException)
                 {
+                    //The reconstruction's own refusal of the registered key and the decoder's refusal of a member as no base64url
+                    //text state no key; any other failure of the decoder or of the allocator is a fault and surfaces as one.
                     return false;
                 }
 
@@ -508,21 +511,16 @@ public static class PrivateKeyJwtClientAuthentication
                         return false;
                     }
 
-                    bool signatureValid;
-                    try
-                    {
-                        signatureValid = verification is not null
-                            ? await Jws.VerifyAsync(
-                                clientAssertion, oauth.Codecs.Decoder, oauth.MemoryPool!,
-                                publicKey, verification.Verification, cancellationToken).ConfigureAwait(false)
-                            : await Jws.VerifyAsync(
-                                clientAssertion, oauth.Codecs.Decoder, oauth.MemoryPool!,
-                                publicKey, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch(Exception ex) when(ex is FormatException or InvalidOperationException)
-                    {
-                        return false;
-                    }
+                    //The verification answers its own refusals - an empty segment, the decoder's refusal of a segment as no
+                    //base64url text - as not verifying; any other failure of the decoder, of the verification function or of
+                    //the allocator, cancellation among them, is a fault and surfaces as one.
+                    var signatureValid = verification is not null
+                        ? await Jws.VerifyAsync(
+                            clientAssertion, oauth.Codecs.Decoder, memoryPool,
+                            publicKey, verification.Verification, cancellationToken).ConfigureAwait(false)
+                        : await Jws.VerifyAsync(
+                            clientAssertion, oauth.Codecs.Decoder, memoryPool,
+                            publicKey, cancellationToken).ConfigureAwait(false);
 
                     if(!signatureValid)
                     {

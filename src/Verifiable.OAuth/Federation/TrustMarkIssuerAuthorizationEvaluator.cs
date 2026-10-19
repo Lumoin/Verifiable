@@ -8,7 +8,9 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="WellKnownFederationClaimNames.TrustMarkIssuers"/> claim
 /// from the chain's Trust Anchor (position N-1) and matches the trust
 /// mark's <see cref="TrustMark.Issuer"/> against the list registered for
-/// the mark's <see cref="TrustMark.MarkId"/>.
+/// the mark's <see cref="TrustMark.MarkId"/>; an empty list authorizes any issuer
+/// ("If the array following a Trust Mark type identifier is empty, anyone MAY issue Trust Marks with that identifier",
+/// §3.1.2).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,8 +19,9 @@ namespace Verifiable.OAuth.Federation;
 /// is the responsibility of <see cref="TrustMarkDelegationEvaluator"/>
 /// and surfaces on the separate
 /// <see cref="WellKnownFederationClaimIds.TrustMarkDelegationValid"/>
-/// claim. The orchestrator treats either successful check as
-/// sufficient to admit the mark.
+/// claim. The orchestrator admits a mark carrying no delegation on this
+/// check, and a mark carrying one on that delegation's validity alone; a mark
+/// of a type the Trust Anchor declares an owner of must carry one (§7.3).
 /// </para>
 /// <para>
 /// <c>trust_mark_issuers</c> on intermediate Subordinate Statements is
@@ -56,6 +59,12 @@ public static class TrustMarkIssuerAuthorizationEvaluator
             || allowedObj is not IEnumerable<object> allowedList)
         {
             return BuildFailure(mark, "MarkIdNotListed");
+        }
+
+        //§3.1.2: "If the array following a Trust Mark type identifier is empty, anyone MAY issue Trust Marks with that identifier."
+        if(!allowedList.Any())
+        {
+            return new Claim(WellKnownFederationClaimIds.TrustMarkIssuerAuthorized, ClaimOutcome.Success);
         }
 
         foreach(object item in allowedList)

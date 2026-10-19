@@ -1318,10 +1318,11 @@ public static class FederationValidationChecks
 
 
     /// <summary>
-    /// Asserts the trust mark's <c>iat</c> is within the
-    /// <see cref="TrustMarkValidationContext.ClockSkew"/> window either side of
-    /// <see cref="TrustMarkValidationContext.Now"/> — its issuance time is in
-    /// the past, per Federation §7.3.
+    /// Asserts the trust mark was issued no later than <see cref="TrustMarkValidationContext.Now"/> extended by
+    /// <see cref="TrustMarkValidationContext.ClockSkew"/>, per Federation §7.3: "The current time MUST be after the time represented
+    /// by the iat (issued at) Claim (possibly allowing for some small leeway to account for clock skew)". The section bounds the
+    /// issuance from the future side alone and states no maximum age, so a mark issued long ago is in range, its validity being
+    /// the <c>exp</c> check's, and an <c>iat</c> past the leeway is refused. The date is compared as written.
     /// </summary>
     public static ValueTask<List<Claim>> CheckTrustMarkIatInRange(
         TrustMarkValidationContext context,
@@ -1330,11 +1331,9 @@ public static class FederationValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var iat = context.Mark.IssuedAt;
-        var outcome =
-            iat.CompareToEarlierBy(context.Now, context.ClockSkew) >= 0 && iat.CompareToLaterBy(context.Now, context.ClockSkew) <= 0
-                ? ClaimOutcome.Success
-                : ClaimOutcome.Failure;
+        var outcome = context.Mark.IssuedAt.CompareToLaterBy(context.Now, context.ClockSkew) <= 0
+            ? ClaimOutcome.Success
+            : ClaimOutcome.Failure;
 
         return ValueTask.FromResult<List<Claim>>(
             [new Claim(WellKnownFederationClaimIds.TrustMarkIatInRange, outcome)]);

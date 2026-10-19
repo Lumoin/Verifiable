@@ -196,8 +196,8 @@ public static class JwkCertificateChain
     /// Whether a certificate carries the EC key a JWK states (RFC 7518 section 6.2.1): the JWK's curve one the judgement names,
     /// its <c>x</c> and <c>y</c> each the full width of the curve's coordinate and naming a point of the curve (RFC 7518 sections
     /// 6.2.1.2 and 6.2.1.3, NIST SP 800-186 appendix D.1.1.1), and the certificate an <c>id-ecPublicKey</c> on that curve whose
-    /// uncompressed point is <c>0x04 || x || y</c>. Coordinates naming no point of the curve state no key, which no certificate's
-    /// key is.
+    /// point, uncompressed or compressed as it encodes it (SEC 1 section 2.3.3), is <c>0x04 || x || y</c> once brought to the
+    /// uncompressed form. Coordinates naming no point of the curve state no key, which no certificate's key is.
     /// </summary>
     /// <param name="certificate">The certificate.</param>
     /// <param name="keyMembers">The JWK's string members.</param>
@@ -218,12 +218,13 @@ public static class JwkCertificateChain
             return JwkCertificateChainDefect.FirstCertificateNotOfTheKey;
         }
 
-        var point = certificate.PublicPoint.Span;
+        //The certificate's parse admitted the point as an uncompressed or compressed SEC1 point of the curve's width naming a point
+        //of it, so either form is brought to the uncompressed one and compared with the JWK's coordinates.
+        var point = EllipticCurveUtilities.NormalizeToUncompressed(certificate.PublicPoint.Span, curve);
 
         return MismatchUnless(point.Length == 1 + x.Length + y.Length
-            && point[0] == EllipticCurveUtilities.UncompressedCoordinateFormat
-            && point.Slice(1, x.Length).SequenceEqual(x)
-            && point[(1 + x.Length)..].SequenceEqual(y));
+            && point.AsSpan(1, x.Length).SequenceEqual(x)
+            && point.AsSpan(1 + x.Length).SequenceEqual(y));
     }
 
 

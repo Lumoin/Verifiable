@@ -717,7 +717,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
         ReadOnlyMemory<byte> keyBindingTokenBytes,
         PublicKeyMemory issuerPublicKey)
     {
-        return await KbCwtVerification.VerifyAsync(
+        var verification = await KbCwtVerification.VerifyAsync(
             keyBindingTokenBytes,
             parseCoseSign1: CoseSerialization.ParseCoseSign1,
             extractKcwt: SdCwtVpParsing.ExtractKcwt,
@@ -743,6 +743,10 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             saltReuseSeam: null,
             pool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verification.IsSuccess, $"The presentation reads; refused as {verification.Error}.");
+
+        return verification.Value;
     }
 
 

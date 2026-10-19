@@ -1,5 +1,6 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -73,6 +74,102 @@ internal sealed class JwkPublicKeyReconstructionTests
         Assert.AreEqual(JwkPublicKeyFailureKind.UnsupportedCurveOrAlgorithm, RefusalOf(unnamedCurve).FailureKind);
         Assert.AreEqual(JwkPublicKeyFailureKind.MemberAbsent, RefusalOf(noType).FailureKind);
         Assert.AreEqual(JwkPublicKeyFailureKind.UnsupportedKeyType, RefusalOf(unknownType).FailureKind);
+    }
+
+
+    /// <summary>
+    /// An EC JWK's curve is REQUIRED (RFC 7518 section 6.2.1.1) and an <c>alg</c> never stands in for it: valid P-256 coordinates
+    /// beside <c>ES256</c> are refused when the curve is absent, unknown, or of another JSON type, and when the curve is another
+    /// one than the algorithm's; the control, the same coordinates with <c>crv</c> P-256 beside <c>ES256</c>, is reconstructed as
+    /// a P-256 key.
+    /// </summary>
+    [TestMethod]
+    [DataRow("absent", JwkPublicKeyFailureKind.MemberAbsent)]
+    [DataRow("unknown", JwkPublicKeyFailureKind.UnsupportedCurveOrAlgorithm)]
+    [DataRow("number", JwkPublicKeyFailureKind.MemberNotAString)]
+    [DataRow("P-384", JwkPublicKeyFailureKind.CurveAndAlgorithmContradict)]
+    public void AnEcAlgorithmNeverStandsInForTheCurve(string curveCase, JwkPublicKeyFailureKind expected)
+    {
+        var (x, y) = PointOnP256();
+        var control = Jwk(x, y);
+        control[WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256;
+
+        var (algorithm, _, _, keyMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(control, BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
+        keyMaterial.Dispose();
+        Assert.AreEqual(CryptoAlgorithm.P256, algorithm);
+
+        var jwk = Jwk(x, y);
+        jwk[WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256;
+        switch(curveCase)
+        {
+            case "absent":
+                _ = jwk.Remove(WellKnownJwkMemberNames.Crv);
+                break;
+            case "unknown":
+                jwk[WellKnownJwkMemberNames.Crv] = "P-999";
+                break;
+            case "number":
+                jwk[WellKnownJwkMemberNames.Crv] = 256L;
+                break;
+            default:
+                jwk[WellKnownJwkMemberNames.Crv] = curveCase;
+                break;
+        }
+
+        Assert.AreEqual(expected, RefusalOf(jwk).FailureKind);
+    }
+
+
+    /// <summary>
+    /// An OKP JWK's curve is REQUIRED (RFC 8037 section 2) and an <c>alg</c> never selects another: an X25519 key beside
+    /// <c>EdDSA</c>, an Ed25519 key beside <c>ECDH-ES</c> or <c>ES256</c>, and either key with its curve absent or unknown are
+    /// refused; the controls, an Ed25519 key beside <c>EdDSA</c> and an X25519 key beside <c>ECDH-ES</c>, are reconstructed as
+    /// the keys their curves name.
+    /// </summary>
+    [TestMethod]
+    [DataRow("X25519", "EdDSA", JwkPublicKeyFailureKind.CurveAndAlgorithmContradict)]
+    [DataRow("Ed25519", "ECDH-ES", JwkPublicKeyFailureKind.CurveAndAlgorithmContradict)]
+    [DataRow("Ed25519", "ES256", JwkPublicKeyFailureKind.CurveAndAlgorithmContradict)]
+    [DataRow("", "EdDSA", JwkPublicKeyFailureKind.MemberAbsent)]
+    [DataRow("Ed448", "EdDSA", JwkPublicKeyFailureKind.UnsupportedCurveOrAlgorithm)]
+    public void AnOkpAlgorithmNeverSelectsTheCurve(string curve, string algorithm, JwkPublicKeyFailureKind expected)
+    {
+        var x = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
+
+        var (signing, _, _, signingMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
+            OkpJwk(WellKnownCurveValues.Ed25519, WellKnownJwaValues.EdDsa, x), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
+        signingMaterial.Dispose();
+
+        var (agreement, _, _, agreementMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
+            OkpJwk(WellKnownCurveValues.X25519, WellKnownJwaValues.Ecdha, x), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
+        agreementMaterial.Dispose();
+
+        Assert.AreEqual(CryptoAlgorithm.Ed25519, signing);
+        Assert.AreEqual(CryptoAlgorithm.X25519, agreement);
+        Assert.AreEqual(expected, RefusalOf(OkpJwk(curve, algorithm, x)).FailureKind);
+    }
+
+
+    /// <summary>The members of an OKP JWK, its curve absent when the curve given is empty.</summary>
+    /// <param name="curve">The curve, or empty.</param>
+    /// <param name="algorithm">The algorithm.</param>
+    /// <param name="x">The base64url public key.</param>
+    /// <returns>The members.</returns>
+    private static Dictionary<string, object> OkpJwk(string curve, string algorithm, string x)
+    {
+        var jwk = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Okp,
+            [WellKnownJwkMemberNames.Alg] = algorithm,
+            [WellKnownJwkMemberNames.X] = x
+        };
+
+        if(curve.Length > 0)
+        {
+            jwk[WellKnownJwkMemberNames.Crv] = curve;
+        }
+
+        return jwk;
     }
 
 

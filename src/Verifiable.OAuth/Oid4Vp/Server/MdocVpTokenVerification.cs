@@ -1,4 +1,4 @@
-using System.Buffers;
+using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Mdoc;
@@ -6,6 +6,7 @@ using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -120,12 +121,18 @@ public static class MdocVpTokenVerification
     /// <see cref="MdocVpVerificationResult.IssuerTrust"/> is <see langword="null"/> when the response
     /// carried no document to resolve a key for. The result owns the resolution, so the caller disposes
     /// it once the flow step that reads <see cref="VpTokenParsed.CredentialIssuerKey"/> is done; a
-    /// failure thrown out of this method releases it here instead.
+    /// defect answered or a failure thrown out of this method releases it here instead. Or the defect
+    /// (<see cref="MdocPresentationDefect"/>) of a part the reading that owns its wire shape refused: the value the decoder
+    /// refuses as no base64url text, the <c>DeviceResponse</c>, an <c>IssuerAuth</c>, a device signature, the device key or an
+    /// element value its reading seam refuses with its <see cref="FormatException"/>. Any other failure - of the decoder beyond
+    /// its refusal, of a reading seam with another exception than its refusal, as a CBOR reader's own content exception, of the trust or
+    /// trust-evidence resolver, of the session-transcript or device-authentication encoder, of the Sig_structure encoder, of a
+    /// signature or digest backend, of the allocator - is a fault and surfaces as one, cancellation among them.
     /// </returns>
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Design", "CA1054:URI-like parameters should not be strings",
         Justification = "Byte-exact string hashing per OID4VP 1.0 §B.2.6.1; Uri normalisation would break the wallet/verifier SessionTranscript hash agreement, mirroring Oid4VpMdocSessionTranscriptEncoder.Encode.")]
-    public static async ValueTask<MdocVpVerificationResult> VerifyAsync(
+    public static async ValueTask<Result<MdocVpVerificationResult, MdocPresentationDefect>> VerifyAsync(
         string vpToken,
         CredentialQueryId credentialQueryId,
         ResolveMdocIssuerKeyDelegate resolveIssuerKey,
@@ -164,9 +171,26 @@ public static class MdocVpTokenVerification
         cancellationToken.ThrowIfCancellationRequested();
 
         //Base64url-decode the vp_token value, then parse the DeviceResponse wire envelope into
-        //owned carriers. Both the decoded bytes and the parsed response are disposed on the way out.
-        using IMemoryOwner<byte> deviceResponseBytes = decoder(vpToken, pool);
-        using MdocParsedDeviceResponse parsed = parseDeviceResponse(deviceResponseBytes.Memory.Span, pool);
+        //owned carriers. Both the decoded bytes and the parsed response are disposed on the way out. Each reading's refusal of
+        //the bytes it is handed is the defect of the part it reads, caught around that reading alone.
+        using var deviceResponseBytes = JwsSegmentDecoding.DecodedOrNone(vpToken, decoder, pool);
+
+        if(deviceResponseBytes is null)
+        {
+            return Result.Failure<MdocVpVerificationResult, MdocPresentationDefect>(MdocPresentationDefect.NotBase64UrlText);
+        }
+
+        MdocParsedDeviceResponse parsedResponse;
+        try
+        {
+            parsedResponse = parseDeviceResponse(deviceResponseBytes.Memory.Span, pool);
+        }
+        catch(FormatException)
+        {
+            return Result.Failure<MdocVpVerificationResult, MdocPresentationDefect>(MdocPresentationDefect.DeviceResponseMalformed);
+        }
+
+        using var parsed = parsedResponse;
 
         MdocIacaTrustResolution? issuerTrust = null;
         bool credentialSignatureValid = false;
@@ -216,11 +240,28 @@ public static class MdocVpTokenVerification
                 //resolved — survives this method and can be read as the credential's issuer key downstream.
                 issuerTrust = await resolveIssuerKey(document.IssuerSigned.IssuerAuth, cancellationToken).ConfigureAwait(false);
 
+                //The issuer-auth COSE_Sign1 is parsed once, its parse's refusal the defect of the IssuerAuth, and the signature is
+                //verified over the parsed message (RFC 9052 section 4.4) under no catch.
                 bool issuerAuthValid = false;
                 if(issuerTrust.IsTrusted && issuerTrust.IssuerVerificationKey is PublicKeyMemory trustedIssuerKey)
                 {
-                    issuerAuthValid = await document.IssuerSigned.IssuerAuth.VerifyAsync(
-                        trustedIssuerKey, pool, parseCoseSign1, buildSigStructure, cancellationToken).ConfigureAwait(false);
+                    CoseSign1Message issuerAuthMessage;
+                    try
+                    {
+                        issuerAuthMessage = parseCoseSign1(document.IssuerSigned.IssuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
+                    }
+                    catch(FormatException)
+                    {
+                        issuerTrust.Dispose();
+
+                        return Result.Failure<MdocVpVerificationResult, MdocPresentationDefect>(MdocPresentationDefect.IssuerAuthMalformed);
+                    }
+
+                    using(issuerAuthMessage)
+                    {
+                        issuerAuthValid = await Cose.VerifyAsync(
+                            issuerAuthMessage, buildSigStructure, trustedIssuerKey, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 MdocDigestBindingResult binding = MdocMsoDigestBindingValidator.Validate(document.IssuerSigned, pool);
@@ -231,11 +272,39 @@ public static class MdocVpTokenVerification
                 //SessionTranscript, keyed by the device key the issuer committed to in the MSO.
                 if(document.DeviceSigned is MdocDeviceSigned deviceSigned)
                 {
+                    //The device signature's detached-payload COSE_Sign1 is judged by its parse before the verification composes
+                    //it, so its refusal is the defect of the device signature and the verification below, which parses the same
+                    //bytes again, runs under no catch.
+                    if(deviceSigned.DeviceAuth.DeviceSignature is MdocDeviceSignature deviceSignature)
+                    {
+                        try
+                        {
+                            parseCoseSign1AllowingNilPayload(deviceSignature.EncodedCoseSign1.AsReadOnlyMemory(), pool).Dispose();
+                        }
+                        catch(FormatException)
+                        {
+                            issuerTrust.Dispose();
+
+                            return Result.Failure<MdocVpVerificationResult, MdocPresentationDefect>(MdocPresentationDefect.DeviceSignatureMalformed);
+                        }
+                    }
+
+                    PublicKeyMemory deviceKey;
+                    try
+                    {
+                        deviceKey = document.IssuerSigned.IssuerAuth.Mso.DeviceKeyInfo.DeviceKey.ToPublicKeyMemory(pool);
+                    }
+                    catch(FormatException)
+                    {
+                        issuerTrust.Dispose();
+
+                        return Result.Failure<MdocVpVerificationResult, MdocPresentationDefect>(MdocPresentationDefect.DeviceKeyMalformed);
+                    }
+
+                    using var deviceVerificationKey = deviceKey;
+
                     ReadOnlyMemory<byte> sessionTranscript = encodeSessionTranscript(
                         clientId, responseUri, authorizationRequestNonce, mdocGeneratedNonce.Span, pool);
-
-                    using PublicKeyMemory deviceVerificationKey =
-                        document.IssuerSigned.IssuerAuth.Mso.DeviceKeyInfo.DeviceKey.ToPublicKeyMemory(pool);
 
                     sessionTranscriptValid = await deviceSigned.VerifyAsync(
                         document.DocType, sessionTranscript, deviceVerificationKey, pool,
@@ -251,7 +320,18 @@ public static class MdocVpTokenVerification
                 {
                     foreach(MdocIssuerSignedItem item in nsEntry.Value)
                     {
-                        string decoded = decodeElementValue(item.EncodedElementValue);
+                        string decoded;
+                        try
+                        {
+                            decoded = decodeElementValue(item.EncodedElementValue);
+                        }
+                        catch(FormatException)
+                        {
+                            issuerTrust.Dispose();
+
+                            return Result.Failure<MdocVpVerificationResult, MdocPresentationDefect>(MdocPresentationDefect.ElementValueMalformed);
+                        }
+
                         CredentialPath path = CredentialPath.Root.Append(nsEntry.Key).Append(item.ElementIdentifier);
                         extractedClaims[path] = decoded;
                         disclosedByPath[path] = decoded;
@@ -281,7 +361,20 @@ public static class MdocVpTokenVerification
                 SessionTranscriptValid = sessionTranscriptValid
             };
 
-            return new MdocVpVerificationResult { Parsed = verified, IssuerTrust = issuerTrust };
+            //The result takes the trust resolution's ownership and passes it to the caller with the success it is carried in.
+            MdocVpVerificationResult? verification = new() { Parsed = verified, IssuerTrust = issuerTrust };
+            try
+            {
+                var success = Result.Success<MdocVpVerificationResult, MdocPresentationDefect>(verification);
+                verification = null;
+                issuerTrust = null;
+
+                return success;
+            }
+            finally
+            {
+                verification?.Dispose();
+            }
         }
         catch
         {

@@ -155,8 +155,10 @@ internal sealed class MlDsaCmsVerificationTests
     /// <summary>
     /// The managed backend refuses an ML-DSA public key whose length contradicts its claimed parameter set —
     /// a genuine ML-DSA-44 structure whose every parameter-set identifier octet is patched to ML-DSA-65 passes
-    /// the signature-to-key set binding (both now claim the same set) and is stopped by the exact FIPS 204
-    /// Table 2 key-length check, before the raw bytes ever reach the registered backend whose own
+    /// the signature-to-key set binding (both now claim the same set), and its certificate, carrying a 1312-octet
+    /// key under ML-DSA-65's identifier, is refused by the library's certificate parse itself (FIPS 204 Table 2:
+    /// an ML-DSA-65 key is 1952 octets), so the SignedData embeds no certificate the parse reads as the signer's
+    /// and the verification is refused before the raw bytes ever reach the registered backend whose own
     /// malformed-encoding failure would surface as an undocumented exception type.
     /// </summary>
     [TestMethod]
@@ -192,7 +194,7 @@ internal sealed class MlDsaCmsVerificationTests
             },
             "A key whose length contradicts its claimed parameter set must be refused before the primitive runs.").ConfigureAwait(false);
 
-        Assert.Contains("exactly 1952 octets", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("does not embed the signer certificate", refusal.Message, StringComparison.Ordinal);
     }
 
 

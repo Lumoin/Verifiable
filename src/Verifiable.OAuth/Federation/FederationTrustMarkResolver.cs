@@ -16,9 +16,12 @@ namespace Verifiable.OAuth.Federation;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Combine rule: a mark is admitted when its shape checks all pass AND it is authorized either directly (§6.2)
-/// OR by a valid delegation (§7.2.2) — either successful authorization path suffices, as documented on
-/// <see cref="TrustMarkIssuerAuthorizationEvaluator"/>.
+/// Combine rule: a mark is admitted when its shape checks all pass AND, when it carries a delegation, that delegation is
+/// valid (§7.3: "If there is a delegation Claim in the instance, the value of that Claim MUST be validated according to
+/// Section 7.2.2"), its signature verified by the keys the Trust Anchor declares for the owner of the mark's type, never by a
+/// key the chain carries; or, when it carries none, its type is one the Trust Anchor declares no owner of (§7.3: such a mark
+/// "MUST contain a delegation Claim") and its issuer is authorized directly (§3.1.2 <c>trust_mark_issuers</c>). A directly
+/// authorized issuer never stands in for a delegation that is invalid or required and absent.
 /// </para>
 /// <para>
 /// Parsing is the caller's concern (the subject's <c>trust_marks</c> entries become
@@ -37,7 +40,7 @@ public static class FederationTrustMarkResolver
     /// </summary>
     /// <param name="chain">
     /// The resolved trust chain. Its Trust Anchor carries the <c>trust_mark_issuers</c> / <c>trust_mark_owners</c>
-    /// claims; its statements carry the issuer and owner verification keys.
+    /// claims, the latter with each owner's keys; its statements carry the issuer verification keys.
     /// </param>
     /// <param name="candidates">The parsed candidate marks to verify.</param>
     /// <param name="verifySignature">The app's compact-JWS signature primitive (wraps <c>Jws.VerifyAsync</c>).</param>
@@ -119,9 +122,14 @@ public static class FederationTrustMarkResolver
             chain, candidate, verifySignature, base64UrlDecoder, memoryPool, now, clockSkew, cancellationToken)
             .ConfigureAwait(false);
 
-        //Combine: shape must pass AND the mark must be authorized directly OR by a valid delegation.
-        bool authorized = issuerAuthorization.Outcome == ClaimOutcome.Success
-            || delegation.Outcome == ClaimOutcome.Success;
+        //Combine: shape must pass AND a carried delegation must be valid, or, with none carried and none required, the issuer
+        //must be authorized directly.
+        var authorized = delegation.Outcome switch
+        {
+            ClaimOutcome.Success => true,
+            ClaimOutcome.NotApplicable => issuerAuthorization.Outcome == ClaimOutcome.Success,
+            _ => false
+        };
 
         return new TrustMarkVerdict
         {
@@ -136,9 +144,21 @@ public static class FederationTrustMarkResolver
 
 
     /// <summary>
-    /// Evaluates the §7.2.2 delegation pathway for a candidate, or returns the not-applicable claim when the
-    /// mark carries no delegation.
+    /// Evaluates the §7.2.2 delegation pathway for a candidate: a carried delegation verified by a key of the owner the Trust
+    /// Anchor's <c>trust_mark_owners</c> claim declares for the mark's type, selected by the delegation header's <c>kid</c>
+    /// from the declared <c>jwks</c> (§7.2.2: "The Trust Mark Owner's keys can be found in the trust_mark_owners Claim in the
+    /// Trust Anchor's Entity Configuration"); for a mark carrying none, the not-applicable claim, or the failure of a delegation
+    /// its type requires.
     /// </summary>
+    /// <param name="chain">The trust chain whose Trust Anchor declares the owners.</param>
+    /// <param name="candidate">The candidate mark.</param>
+    /// <param name="verifySignature">The signature primitive.</param>
+    /// <param name="base64UrlDecoder">The decoder of the owner key's coordinates.</param>
+    /// <param name="memoryPool">The pool the owner key is rented from.</param>
+    /// <param name="now">The instant the delegation is judged at.</param>
+    /// <param name="clockSkew">The leeway of the date checks.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
+    /// <returns>The delegation claim.</returns>
     private static async ValueTask<Claim> EvaluateDelegationAsync(
         TrustChain chain,
         TrustMarkCandidate candidate,
@@ -151,13 +171,17 @@ public static class FederationTrustMarkResolver
     {
         if(candidate.Delegation is not { } delegationCandidate)
         {
-            return TrustMarkDelegationEvaluator.NotApplicable();
+            return TrustMarkDelegationEvaluator.EvaluateAbsent(candidate.Mark, chain);
         }
 
-        bool delegationSignatureVerified = await VerifyJwsAsync(
-            chain, delegationCandidate.Delegation.Owner.Value, ReadKid(delegationCandidate.Header),
-            delegationCandidate.CompactJws, verifySignature, base64UrlDecoder, memoryPool, cancellationToken)
-            .ConfigureAwait(false);
+        var delegationSignatureVerified = false;
+        if(TrustMarkDelegationEvaluator.OwnerListingOf(chain, candidate.Mark.MarkId) is TrustMarkOwnerListed listed)
+        {
+            using var ownerKey = FederationKeyResolver.KeyOfDeclaredSet(listed.Jwks, ReadKid(delegationCandidate.Header), base64UrlDecoder, memoryPool);
+
+            delegationSignatureVerified = ownerKey is not null
+                && await verifySignature(delegationCandidate.CompactJws, ownerKey, cancellationToken).ConfigureAwait(false);
+        }
 
         return TrustMarkDelegationEvaluator.Evaluate(
             candidate.Mark, delegationCandidate.Delegation, chain, delegationSignatureVerified, now, clockSkew);

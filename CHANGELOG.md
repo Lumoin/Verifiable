@@ -157,6 +157,45 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `UnrecognisedRefusal` and `UnsupportedConfirmationMethod` as extensions of existing vocabularies; the presentation's typed
   refusal through an existing result mechanism rather than new wrapper records; `ArrayElements`, `IsInteger` and the `Ext`
   members as extensions of existing JCose types; the reading helpers and federation selections kept internal or private.
+- `JwkPublicKeyFailureKind.MemberNotAString` and `CurveAndAlgorithmContradict` (`Verifiable.JCose`): a member the key's type
+  requires, or the optional `alg`, carried as a JSON value of another type than a string, told from `MemberAbsent`, which now
+  names absence alone; and an `alg` the library recognizes for no key of the curve the `crv` names.
+- `SdJwtWireFormatException` (`Verifiable.Core.Model.SelectiveDisclosure`, public, a `FormatException`): the refusal of an
+  SD-JWT's compact serialization by the reading that owns its wire shape, which `SdJwtSerializer.ParseToken` and
+  `ParseDisclosure` raise for their own refusals alone, so a caller tells the wire's refusal from a fault of a delegate it
+  supplied.
+- `SdJwtIssuerHeader.ReadKid` and `ReadX5c` (`Verifiable.Core.Model.SelectiveDisclosure`): the Issuer-signed JWT header's `kid`
+  and `x5c` read from a header already decoded, the readings `TryReadKid` and `TryReadX5c` compose.
+- `StatusClaimReader.Read` and `StatusClaimReading` (`StatusClaimRead`, `StatusClaimRefused`, `StatusClaimIndexBeyondCapacity`,
+  `Verifiable.Core.StatusLists`): a `status` claim read as a typed reading, an `idx` a non-negative integer whatever its
+  spelling, one past the indices the library's status lists hold (`int.MaxValue`) told from a claim outside the rules.
+- `SdJwtPresentationDefect.StatusIndexBeyondCapacity`: a presentation whose status claim is within the rules but names an index
+  past the library's capacity, which the HAIP and SIOP executors refuse as an undeterminable status, never as malformed.
+- `DpopProofValidationFailureReason.UnsupportedOrUnestablished`: a proof whose embedded key carries a member whose relation the
+  validation does not establish (`KeyOperationsRelationToUseUnestablished`, `CertificateKeyRelationUnestablished`), answered
+  apart from `Malformed`, whose documentation now states the well-formedness it asserts.
+- `MdocPresentationDefect` (`Verifiable.OAuth.Oid4Vp.Server`) and `SdCwtPresentationDefect`
+  (`Verifiable.Core.Model.SelectiveDisclosure`): why an mdoc or SD-CWT presentation is malformed, each a refusal of the reading
+  seam that owns the part's wire shape.
+- `TrustMarkDelegationEvaluator.EvaluateAbsent`: a mark carrying no delegation evaluated against the Trust Anchor's
+  `trust_mark_owners`, failing as `DelegationRequired` where the mark's type has a declared owner (Federation §7.3).
+- Pending the owner's word before publication, each new or changed public shape of this round, with the review's
+  recommendation where one is recorded: `JwkPublicKeyFailureKind.MemberNotAString` beside the narrowed `MemberAbsent` (the review
+  recommends renaming `MemberAbsent` or telling absence from a wrong type; the split was made) and `CurveAndAlgorithmContradict`
+  (no recommendation recorded; the curve decision the review requires typed); `DpopProofValidationFailureReason.UnsupportedOrUnestablished`
+  (the review recommends carrying the category or an owner-approved revision of `Malformed`; the category was built);
+  `StatusClaimReader.Read` replacing `TryRead`, the `StatusClaimReading` hierarchy and
+  `SdJwtPresentationDefect.StatusIndexBeyondCapacity` (the review requires the owner's word on any public index or
+  result-shape change; the capacity was told from malformed syntax, the index type kept); `SdJwtWireFormatException`,
+  `SdJwtIssuerHeader.ReadKid` and `ReadX5c`, `MdocPresentationDefect` with `MdocVpTokenVerification.VerifyAsync` answering
+  `Result<MdocVpVerificationResult, MdocPresentationDefect>`, `SdCwtPresentationDefect` with `KbCwtVerification.VerifyAsync` and
+  `SdCwtVpTokenVerification.VerifyAsync` answering `Result<..., SdCwtPresentationDefect>`, and
+  `TrustMarkDelegationEvaluator.EvaluateAbsent` with its `DelegationRequired`, `OwnerDeclarationMalformed` and `OwnerMismatch`
+  reasons (no recommendation recorded; each the typed carriage a fix requires, through the library's existing `Result` where a
+  result carries it).
+- Owed, not built: the wallet's presentation-refusal seam - a public producer shape answering a refused presentation's typed
+  reason to the Wallet's caller once, parsed in the library and carried as a value (R228, R234) - waits on the owner's (3b)
+  word; nothing of it is in this release.
 
 ### Changed
 
@@ -252,11 +291,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `cnf.jwk` the key reconstruction refuses (`ConfirmationKeyNotAPublicKey`) - so neither executor catches `FormatException`
   around the SD-JWT verification any more: a failure of the issuer-key resolver, the trust-evidence resolver, the digest, the
   decoder beyond its refusal or the allocator surfaces as a fault, where a `FormatException` of any of them was answered as a
-  malformed presentation. The mdoc and SD-CWT verifications keep their `FormatException` refusal, caught around each alone.
+  malformed presentation. The mdoc and SD-CWT verifications answer their readings' refusals as typed defects of their own too
+  (below), so neither executor catches around any verification.
   The issuer-signed payload is read by the strict members reading, so one holding a string naming no Unicode text is
   `IssuerPayloadNotOneObject` too, and its `status` claim, and within it the `status_list` mechanism and its `uri` and `idx`, are
   found by their decoded names (RFC 8259 section 8.3): an escaped `status` is the status claim, refused or resolved by its
-  content, where it read as no status claim. `StatusClaimReader.TryRead` reads the claim's object value, braces included,
+  content, where it read as no status claim. `StatusClaimReader.Read` reads the claim's object value, braces included,
   through the same reading. The SIOP rows proving the KB-JWT `iat` judgement are dispatcher-level signed-token tests
   (`Server.DispatchAsync` through the test host), not HTTP transport tests, and their windows are the fixture's - the five-minute
   defaults of `ValidationContext.ClockSkew` and `KbJwtMaxAge` and the FAPI profile's 60-second future skew - not boundary proofs
@@ -308,9 +348,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `tbsCertificate.signature`, each `Name` an `RDNSequence` of non-empty `SET OF AttributeTypeAndValue`, and the
   `SubjectPublicKeyInfo` exactly its two fields with its algorithm's parameters - a named curve for EC, `NULL` for RSA, absent
   for Ed25519 and ML-DSA - and whole-octet keys. The SIOP verifier fails on a replay outcome the guard never gives, and the key
-  attestation verifier on a resolution status no failure maps from, where each was answered as a known outcome. `KeyAttestationParser.TryParse` and
-  `KeyAttestationVerifier.VerifyAsync` answer only the decoder's refusal of a segment as no base64url text as a malformed
-  attestation, where any exception of the header's reading was; a proof use of no defined value is refused as an
+  attestation verifier on a resolution status no failure maps from, where each was answered as a known outcome.
+  `KeyAttestationParser.TryParse` and `KeyAttestationVerifier.VerifyAsync` answer the decoder's refusal of a segment as no
+  base64url text as a malformed attestation, where any exception of the header's reading was; the verification's key
+  reference is resolved under the boundary a later entry states (the reconstruction's and the decoder's refusals of a
+  `jwk`, the `x5c` parser's `FormatException` and the chain validator's `SecurityException` answered, every other failure of a
+  delegate surfacing), where the reconstruction of a `jwk` and both `x5c` delegates sat under catches answering any exception,
+  cancellation of the chain validation among them, as an invalid or unresolved reference; a proof use of no defined value is refused as an
   `ArgumentOutOfRangeException`, never read as a use requiring no expiry. `JtiReplayGuard` refuses a retention of neither
   kind as an `ArgumentException` before the store is consulted, where it stored one as kept to the clock's end; a DPoP member
   refusal is constructed only for a member the reading knows.
@@ -325,6 +369,67 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   where every such statement passed the walk on to the next; a set carrying no `keys` member, or one that is no array, was
   read as one carrying no key of the kid and passed it on. `JwtVcIssuerMetadataDocuments.ResolveAsync` refuses an inline
   `jwks` that is no JWK Set as `InvalidDocument` before reporting the document resolved.
+- `CryptoFormatConversions.DefaultJwkToAlgorithmConverter` resolves an EC or OKP key's curve once, from its REQUIRED `crv`
+  (RFC 7518 section 6.2.1.1, RFC 8037 section 2), before any coordinate is decoded: an absent `crv` is `MemberAbsent`, an
+  unknown one `UnsupportedCurveOrAlgorithm`, one carried as no string `MemberNotAString`, and an `alg` the library recognizes
+  for no key of the curve - an ECDSA algorithm of another curve, `EdDSA` beside X25519, `ECDH-ES` or an ECDSA algorithm beside
+  Ed25519, an RSA, HMAC, ML-DSA or `none` algorithm beside either - `CurveAndAlgorithmContradict`, where an `alg` stood in for an
+  absent or unknown curve (an unknown `crv` beside `ES256` reached the P-256 conversion, `X25519` beside `EdDSA` selected
+  Ed25519). An `alg` carried as no string is refused; an `alg` the library does not recognize names no curve and is not judged.
+- `SdJwtSerializer.ParseDisclosure` refuses a disclosure whose salt or claim name is no JSON string, and `ParseToken` and
+  `ParseDisclosure` refuse every wire shape with `SdJwtWireFormatException`, the decoder's `FormatException` for a disclosure, a
+  salt or the issuer-signed payload carried as its inner exception; they no longer wrap any other exception of the decoder,
+  cancellation among them, as a `FormatException`, and a `FormatException` of the encoder computing a disclosure's digest
+  surfaces as it is. `TryParseToken` answers `false` for the wire's refusal alone. `IsCompactJws` refuses a segment of a length
+  no base64url text has (a whole number of quanta and one character). `SdJwtPathExtraction`'s walk and its
+  `ExtractAllPaths`, `ExtractMandatoryPaths` and `CreateLattice` refuse a payload that is no base64url text or no valid JSON with
+  `SdJwtWireFormatException`, where a `JsonException` or the decoder's own exception escaped.
+- `SdJwtVpTokenVerification.VerifyAsync` decodes the Issuer-signed JWT's protected header once through the segment decoding
+  every reading of wire input shares, a one-character or otherwise undecodable header segment answered as
+  `CompactSerializationMalformed` where it reached the decoder unguarded and threw, and answers only the parse's
+  `SdJwtWireFormatException` as `CompactSerializationMalformed`, where any `FormatException` of the parse was.
+- `StatusClaimReader.Read` reads a `status_list` `idx` as an integer whatever its spelling (`3.0`, `3e0` and `-0` among the
+  integers it reads) and answers an integer past `int.MaxValue` as `StatusClaimIndexBeyondCapacity`, where any spelling
+  `int.TryParse` refused, `2147483648` among them, refused the claim as malformed.
+- The library's certificate parse (`ManagedCertificate`) refuses an elliptic-curve subject public key on a curve it recognises
+  that is no uncompressed or compressed SEC1 point of the curve's coordinate width naming a point of the curve, an ML-DSA key of
+  another length than its parameter set's (1,312, 1,952 and 2,592 octets), an empty issuer `Name` (an empty subject stays
+  admitted), and an `issuerUniqueID` or `subjectUniqueID` that is no primitive, implicitly tagged BIT STRING, where it accepted a
+  constructed wrapper and skipped its content and refused the primitive form the standard defines. `JwkCertificateChain.DefectOf`
+  compares a compressed certificate point with the JWK's coordinates through the uncompressed form, where a matching compressed
+  point was `FirstCertificateNotOfTheKey`.
+- `KeyAttestationVerifier.VerifyAsync` and `CredentialProofValidator` read the protected header once by its decoded members
+  (`JwtHeader.Read`): `alg`, `typ`, `jwk`, `kid` and `x5c` are found whatever escapes spell their names, an escaped reference
+  beside a plain one counts as two (Appendix F.1's exactly-one), and a reference of another kind than its member is defined as is
+  an invalid key reference. `CredentialProofValidator` answers only the decoder's refusal of a segment as no base64url text as a
+  malformed proof, where any exception of the header and claims reading was. The resolution of a `jwk` reference answers only the
+  reconstruction's and the decoder's refusals as an invalid reference, and of an `x5c` reference only the parser's
+  `FormatException` and the chain validator's `SecurityException` as an unresolved one; every other failure, cancellation of the
+  validation among them, surfaces.
+- `FederationKeyResolver`, `SelfIssuedIdTokenValidation` and `PrivateKeyJwtClientAuthentication` answer only the key
+  reconstruction's refusals (`JwkPublicKeyException`, `RsaPublicKeyException`) and the decoder's `FormatException` as no key,
+  where an `InvalidOperationException`, `ArgumentException` or `NotSupportedException` of the decoder or the allocator was;
+  `SelfIssuedIdTokenValidation` and `PrivateKeyJwtClientAuthentication` no longer catch around the signature verification, which
+  answers its own refusals as not verifying.
+- `FederationBoundJarKeyResolver.ResolveJarSigningKey` selects through the library's one JWK Set selection, the set judged whole:
+  an element that is no object refuses the set wherever it stands, a `kid` on two keys refuses it, and a header naming no `kid`
+  selects the set's sole signing key, a set of more than one refused, where non-object elements were skipped, the first key
+  matching the `kid` was taken and a header naming none took the first key.
+- `MdocVpTokenVerification.VerifyAsync`, `KbCwtVerification.VerifyAsync` and `SdCwtVpTokenVerification.VerifyAsync` answer a
+  `Result` whose failure is the typed defect of the reading seam that refused the part - the decoder, the `DeviceResponse`
+  reader, the COSE parses, the device key's reading, the element-value decoder, the `kcwt` extraction, the embedded SD-CWT's
+  parse, the holder key's and the claims' readings - each caught around that seam alone, where the executors caught a
+  `FormatException` around the whole verification, its trust resolvers, encoders and signature backends included.
+- Trust Marks (OpenID Federation 1.0 §3.1.2, §7.2.2, §7.3): `TrustMarkDelegationEvaluator.Evaluate` reads the Trust Anchor's
+  `trust_mark_owners` keyed by the mark's type, its value the owner's `sub` and `jwks`, and requires the delegation's `iss` to be
+  that owner (`OwnerMismatch`), where the map was looked up by the delegation's owner identifier; `FederationTrustMarkResolver`
+  verifies a delegation by the key of its `kid` among the declared owner's `jwks`, where it resolved the owner's key from the
+  chain's statements, and admits a mark carrying a delegation on that delegation's validity and a mark carrying none only where
+  its type has no declared owner and its issuer is authorized directly, where either authorization path admitted it, so a direct
+  authorization stood in for an invalid or a required and absent delegation. `TrustMarkIssuerAuthorizationEvaluator` authorizes
+  any issuer of a type whose `trust_mark_issuers` array is empty. `FederationValidationChecks.CheckTrustMarkIatInRange` bounds
+  the mark's `iat` from the future alone, its leeway the clock skew, where it also refused a mark issued longer ago than the
+  skew, compared as written.
 
 ### Removed
 
@@ -342,6 +447,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   name and is not removed.
 - `SdJwtVpTokenVerificationOutcome`, `SdJwtVpTokenVerified` and `SdJwtVpTokenRefused`, added earlier in this release: the
   presentation's outcome is the library's existing `Result<VpTokenParsed, SdJwtPresentationDefect>`.
+- `StatusClaimReader.TryRead`: the reading answers `StatusClaimReader.Read`'s typed reading, no compatibility overload kept.
 
 ### Host migration obligations
 
@@ -373,8 +479,36 @@ A host taking this release changes, beyond renamed or widened calls the compiler
 - A host's catch of `ArgumentException` from `CryptoFormatConversions.DefaultJwkToAlgorithmConverter` keeps catching its
   refusals, now `JwkPublicKeyException`; a host telling them from its own decoder's or allocator's faults catches the new type.
   EC JWKs whose coordinates name no point of their curve are refused wherever the converter runs.
-- A host relying on the HAIP or SIOP verifier answering a `FormatException` of its issuer-key resolver, trust-evidence
-  resolver or digest as a malformed presentation now sees it surface as a fault, and maps the two new presentation defects.
+- A host relying on the HAIP or SIOP verifier answering a `FormatException` of a delegate it supplied as a malformed
+  presentation now sees it surface as a fault: for the SD-JWT format a `FormatException` of the issuer-key resolver, the
+  trust-evidence resolver, the digest, the parse's decoder beyond its refusal or its encoder; for mdoc a `FormatException` of
+  the IACA trust resolver, the trust-evidence extractor, the session-transcript or device-authentication encoder or a
+  signature backend; for SD-CWT one of the issuer-key resolver, the credential verification, the trust-evidence resolver or the
+  Sig_structure encoder. Only the readings' own refusals are answered as malformed: the SD-JWT parse's
+  `SdJwtWireFormatException`, and for mdoc and SD-CWT each reading seam's `FormatException` - the decoder's, the
+  `DeviceResponse` reader's, the element-value decoder's, the COSE parses' and the SD-CWT readings'. A host's own
+  `ParseSdJwtTokenDelegate` refusing a wire shape with a plain `FormatException` refuses it with `SdJwtWireFormatException` to
+  keep it answered as a malformed presentation. The default COSE_Sign1 parse (`CoseSerialization.ParseCoseSign1`) refuses
+  bytes that are no COSE_Sign1 with the CBOR reader's own exception or an `InvalidOperationException`, neither a
+  `FormatException`, so a Key Binding Token, an `IssuerAuth` or a device signature that is no COSE_Sign1 surfaces as a fault, as
+  it did when the executors caught `FormatException`; `ParseCoseSign1Delegate` states no refusal contract, which is owed library
+  work. A host maps the new defects: `SdJwtPresentationDefect.CompactSerializationMalformed`, `ConfirmationKeyNotAPublicKey` and
+  `StatusIndexBeyondCapacity` (an undeterminable status, not a malformed presentation), `MdocPresentationDefect` and
+  `SdCwtPresentationDefect`.
+- A host switching over `JwkPublicKeyFailureKind`, `DpopProofValidationFailureReason` or `SdJwtPresentationDefect` names the new
+  cases; one calling `StatusClaimReader.TryRead`, `MdocVpTokenVerification.VerifyAsync`, `SdCwtVpTokenVerification.VerifyAsync`
+  or `KbCwtVerification.VerifyAsync` reads the typed reading or `Result`; one wiring Trust Mark owners declares
+  `trust_mark_owners` keyed by the type with the owner's `sub` and `jwks`; one composing a JWK whose `alg` contradicts its `crv`,
+  or an EC or OKP JWK without `crv`, now has it refused.
+- The host consumption the review recorded at the hosts' tips, the gate of each host's repin: the server at 4c06ce305 -
+  `VerifableResourceAuthorizationServerTokens.cs:44`, `:48`, `:217`, `:220` and `:575` take the parser, nullable-value,
+  successful-payload-capture and confirmation-method migration, and `:240` and `:253`, which keep only `FailureReason`, preserve
+  the `PartRefusal` evidence (no positional deconstruction there); `VerifableDpop.cs:148`, `:451` and `:493` take the library's
+  part readers and `:323` `DpopProofHeader.Read`, the catches at `:252`, `:302` and `:347` stop undoing the library's fault
+  boundary, and the nonce path at `:406` is in the host audit; the gateway at 811025afb - `VerifableMcpGatewayProviders.cs:748`,
+  `:768`, `:904`, `:1024` and `:1687` take the parser and nullability migration with the complete classification and retained
+  evidence of the new refusals; `McpOAuthClient.cs:1395` and `IdJagTokenSource.cs:1443` carry their earlier obligations,
+  recorded and not re-certified.
 - The concrete consumption at the hosts' pins is recorded with the review: on the authorization server, the token-validation
   parser delegates and their payload capture, the custom header reader and header-copy loop, the `PartRefusal` carriage and
   `UnsupportedConfirmationMethod`, and the DPoP part parsers, catches and key-choice reading; on the gateway, the ID-token

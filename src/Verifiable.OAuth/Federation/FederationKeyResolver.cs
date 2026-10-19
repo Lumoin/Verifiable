@@ -150,9 +150,12 @@ public static class FederationKeyResolver
 
 
     /// <summary>
-    /// The key a selected JWK builds, which the caller owns, or <see langword="null"/> when it builds none: a set of one
-    /// eligible-but-malformed element (a missing kty, or missing coordinates for its kty) is selected and still is not one the
-    /// converter can build, refused as no key instead of letting the converter's exception escape into the verification pipeline.
+    /// The key a selected JWK builds, which the caller owns, or <see langword="null"/> when it states none: the library's
+    /// reconstruction's own refusal of the key - a member its type requires absent or of another type, a type, curve, algorithm
+    /// or size it reconstructs no key of, coordinates naming no point of the curve (<see cref="JwkPublicKeyException"/>, or
+    /// <see cref="RsaPublicKeyException"/> for an RSA key's parameters) - or the decoder's refusal of a member as no base64url
+    /// text, its <see cref="FormatException"/>. Any other failure of the decoder or of the allocator, cancellation among them, is
+    /// a fault and surfaces as one.
     /// </summary>
     /// <param name="jwk">The selected JWK's members.</param>
     /// <param name="base64UrlDecoder">The decoder of the key's coordinates.</param>
@@ -167,7 +170,7 @@ public static class FederationKeyResolver
 
             return new PublicKeyMemory(keyMaterial, Tag.Create(algorithm).With(purpose).With(scheme));
         }
-        catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
+        catch(Exception ex) when(ex is FormatException or JwkPublicKeyException or RsaPublicKeyException)
         {
             return null;
         }
@@ -231,6 +234,58 @@ public static class FederationKeyResolver
             return new InChainKeyMissed();
         }
 
+        return SelectFromKeySet(jwksObj, targetKid, AbsentKeyId.RefusesTheSet, memoryPool);
+    }
+
+
+    /// <summary>
+    /// The key a declared JWK Set (RFC 7517 section 5) the library already decoded holds under a <c>kid</c>, or
+    /// <see langword="null"/> when the set holds no eligible key of it, is refused, or its selected key builds no key: the one
+    /// selection a key set a federation document declares is read by - a <c>jwks</c> claim of an Entity Statement, the
+    /// <c>jwks</c> of a Trust Mark Owner the Trust Anchor declares (Federation §7.2.2) - judged whole, the <c>kid</c> on more than
+    /// one key, private or symmetric material, an element that is no object or a <c>keys</c> that is no array refusing the set,
+    /// and an absent <c>kid</c> refusing it, never selecting a first key.
+    /// </summary>
+    /// <param name="jwksClaim">The decoded key set, as the document's claims hold it.</param>
+    /// <param name="kid">The key identifier the signature's header names.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's coordinates.</param>
+    /// <param name="memoryPool">The pool the rendered set and the key material are rented from.</param>
+    /// <returns>The key, which the caller owns and disposes, or <see langword="null"/>.</returns>
+    internal static PublicKeyMemory? KeyOfDeclaredSet(object? jwksClaim, string? kid, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool) =>
+        SelectFromKeySet(jwksClaim, kid, AbsentKeyId.RefusesTheSet, memoryPool) is InChainKeySelected { Jwk: var jwk }
+            ? KeyOf(jwk, base64UrlDecoder, memoryPool)
+            : null;
+
+
+    /// <summary>
+    /// The signing key a decoded JWK Set holds for a JWS header naming a <c>kid</c> or none (RFC 7515 section 4.1.4: the
+    /// <c>kid</c> is OPTIONAL): the key of the <c>kid</c> when the header names one, else the set's one eligible key, a set of
+    /// more than one refused as ambiguous; judged whole as <see cref="KeyOfDeclaredSet"/> judges it otherwise.
+    /// </summary>
+    /// <param name="jwksClaim">The decoded key set.</param>
+    /// <param name="kid">The header's key identifier, or <see langword="null"/>.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's coordinates.</param>
+    /// <param name="memoryPool">The pool the rendered set and the key material are rented from.</param>
+    /// <returns>The key, which the caller owns and disposes, or <see langword="null"/>.</returns>
+    internal static PublicKeyMemory? SigningKeyOfSet(object? jwksClaim, string? kid, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool) =>
+        SelectFromKeySet(jwksClaim, kid, AbsentKeyId.SelectsTheSoleKey, memoryPool) is InChainKeySelected { Jwk: var jwk }
+            ? KeyOf(jwk, base64UrlDecoder, memoryPool)
+            : null;
+
+
+    /// <summary>
+    /// Selects from a decoded key set through the library's one JWK Set selection (<see cref="JwkJsonReader"/>), the set rendered
+    /// back to UTF-8 JSON by <see cref="JsonAppender"/> so the whole-set judgement reads every element: the key of the
+    /// <paramref name="targetKid"/>, or, when none is named, the set refused or its sole eligible key, as
+    /// <paramref name="absentKeyId"/> says.
+    /// </summary>
+    /// <param name="jwksObj">The decoded key set.</param>
+    /// <param name="targetKid">The key identifier, or <see langword="null"/>.</param>
+    /// <param name="absentKeyId">What an absent key identifier selects.</param>
+    /// <param name="memoryPool">The pool the rendered set is rented from, returned before this method exits.</param>
+    /// <returns>The selection.</returns>
+    private static InChainKeySelection SelectFromKeySet(object? jwksObj, string? targetKid, AbsentKeyId absentKeyId, BaseMemoryPool memoryPool)
+    {
         if(jwksObj is not IReadOnlyDictionary<string, object> jwksDict)
         {
             return new InChainKeySetRefused(JwkSelectionOutcome.MalformedDocument);
@@ -256,7 +311,9 @@ public static class FederationKeyResolver
                 written += utf8.GetBytes(chunk.Span, destination[written..]);
             }
 
-            var result = JwkJsonReader.SelectKeyByKeyId(destination[..written], targetKid, WellKnownJwkValues.UseSigUtf8);
+            var result = targetKid is null && absentKeyId is AbsentKeyId.SelectsTheSoleKey
+                ? JwkJsonReader.SelectSoleKey(destination[..written], WellKnownJwkValues.UseSigUtf8)
+                : JwkJsonReader.SelectKeyByKeyId(destination[..written], targetKid, WellKnownJwkValues.UseSigUtf8);
 
             return result switch
             {
@@ -278,6 +335,17 @@ public static class FederationKeyResolver
         {
             JsonAppender.Return(builder);
         }
+    }
+
+
+    /// <summary>What a key set's selection does when the signature's header names no key identifier.</summary>
+    private enum AbsentKeyId
+    {
+        /// <summary>The set is refused: the header was to name the key (Federation §3.1 and §7).</summary>
+        RefusesTheSet,
+
+        /// <summary>The set's one eligible key is selected, a set of more than one refused as ambiguous (RFC 7515 section 4.1.4).</summary>
+        SelectsTheSoleKey
     }
 
 

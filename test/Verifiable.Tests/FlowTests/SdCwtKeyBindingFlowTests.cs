@@ -251,7 +251,7 @@ internal sealed class SdCwtKeyBindingFlowTests
     private async ValueTask<SdCwtKbtVerificationResult> VerifyAsync(
         ReadOnlyMemory<byte> kbtBytes, PublicKeyMemory issuerKey, CommitmentReuseDetectionSeam? saltReuseSeam = null)
     {
-        return await KbCwtVerification.VerifyAsync(
+        var verification = await KbCwtVerification.VerifyAsync(
             kbtBytes,
             parseCoseSign1: CoseSerialization.ParseCoseSign1,
             extractKcwt: SdCwtVpParsing.ExtractKcwt,
@@ -275,6 +275,10 @@ internal sealed class SdCwtKeyBindingFlowTests
             saltReuseSeam: saltReuseSeam,
             pool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verification.IsSuccess, $"The presentation reads; refused as {verification.Error}.");
+
+        return verification.Value;
     }
 
 

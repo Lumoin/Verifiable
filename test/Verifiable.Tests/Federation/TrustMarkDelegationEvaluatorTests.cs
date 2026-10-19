@@ -29,14 +29,9 @@ internal sealed class TrustMarkDelegationEvaluatorTests
         using FederationTestRingNode tmIssuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
 
-        //TA lists tmOwner in trust_mark_owners.
-        Dictionary<string, object> trustMarkOwners = new(StringComparer.Ordinal)
-        {
-            [tmOwner.Identifier.Value] = new Dictionary<string, object>
-            {
-                ["jwks"] = tmOwner.JwksObject,
-            },
-        };
+        //TA declares tmOwner the owner of the mark type in trust_mark_owners (Federation §3.1.2: keyed by the type, its sub and jwks).
+        var trustMarkOwners = OwnersDeclaring(tmOwner);
+
 
         MintedStatement subjectEc = await FederationTestRing.MintEntityConfigurationAsync(
             subject, now, now.AddHours(1),
@@ -91,10 +86,8 @@ internal sealed class TrustMarkDelegationEvaluatorTests
         using FederationTestRingNode wrongIssuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/wrong-issuer"));
 
-        Dictionary<string, object> trustMarkOwners = new(StringComparer.Ordinal)
-        {
-            [tmOwner.Identifier.Value] = new Dictionary<string, object> { ["jwks"] = tmOwner.JwksObject },
-        };
+        var trustMarkOwners = OwnersDeclaring(tmOwner);
+
 
         MintedStatement subjectEc = await FederationTestRing.MintEntityConfigurationAsync(
             subject, now, now.AddHours(1),
@@ -198,10 +191,8 @@ internal sealed class TrustMarkDelegationEvaluatorTests
         using FederationTestRingNode tmIssuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
 
-        Dictionary<string, object> trustMarkOwners = new(StringComparer.Ordinal)
-        {
-            [tmOwner.Identifier.Value] = new Dictionary<string, object> { ["jwks"] = tmOwner.JwksObject },
-        };
+        var trustMarkOwners = OwnersDeclaring(tmOwner);
+
 
         MintedStatement subjectEc = await FederationTestRing.MintEntityConfigurationAsync(
             subject, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -260,4 +251,62 @@ internal sealed class TrustMarkDelegationEvaluatorTests
         TrustMarkDelegationParseResult result = TrustMarkDelegationParser.Parse(header, payload);
         Assert.IsNull(result.Delegation, "An alg=none delegation must not parse to a delegation.");
     }
+
+    /// <summary>
+    /// Federation §3.1.2: the Trust Anchor's <c>trust_mark_owners</c> claim is keyed by the Trust Mark type. A claim keyed by the
+    /// owner's Entity Identifier declares no owner of the mark's type, and a claim declaring another owner of the type than the
+    /// delegation's issuer refuses the delegation as signed by no declared owner.
+    /// </summary>
+    /// <param name="ownersCase">How the Trust Anchor declares the owners.</param>
+    /// <param name="reason">The refusal's reason.</param>
+    /// <returns>A task completing once the delegation is evaluated.</returns>
+    [TestMethod]
+    [DataRow("keyed-by-owner", "OwnerNotRegistered", DisplayName = "Owners keyed by the owner's identifier")]
+    [DataRow("another-owner", "OwnerMismatch", DisplayName = "Another owner declared for the type")]
+    public async Task TheOwnerIsTheOneDeclaredForTheMarksType(string ownersCase, string reason)
+    {
+        var now = TestClock.CanonicalEpoch;
+        using var subject = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/subject"));
+        using var anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
+        using var tmOwner = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/tm-owner"));
+        using var declaredOwner = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/declared-owner"));
+        using var tmIssuer = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/tm-issuer"));
+
+        var trustMarkOwners = ownersCase is "keyed-by-owner"
+            ? new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [tmOwner.Identifier.Value] = new Dictionary<string, object>(StringComparer.Ordinal) { ["sub"] = tmOwner.Identifier.Value, ["jwks"] = tmOwner.JwksObject }
+            }
+            : OwnersDeclaring(declaredOwner);
+
+        var subjectEc = await FederationTestRing.MintEntityConfigurationAsync(subject, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var anchorAboutSubject = await FederationTestRing.MintSubordinateStatementAsync(anchor, subject, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var anchorEc = await FederationTestRing.MintEntityConfigurationAsync(
+            anchor, now, now.AddHours(1),
+            extraClaims: new Dictionary<string, object> { [WellKnownFederationClaimNames.TrustMarkOwners] = trustMarkOwners },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        var chain = new TrustChain { Statements = [subjectEc.Statement, anchorAboutSubject.Statement, anchorEc.Statement] };
+
+        var delegation = await FederationTestRing.MintTrustMarkDelegationAsync(tmOwner, tmIssuer, MarkId, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var mark = await FederationTestRing.MintTrustMarkAsync(tmIssuer, subject, MarkId, now, now.AddHours(1), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        var claim = TrustMarkDelegationEvaluator.Evaluate(mark.Mark, delegation.Delegation, chain, delegationSignatureVerified: true, now: now, clockSkew: TimeSpan.FromMinutes(5));
+
+        Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome, ownersCase);
+        Assert.AreEqual(reason, ((TrustMarkDelegationFailureContext)claim.Context).Reason, ownersCase);
+    }
+
+
+    /// <summary>The Trust Anchor's <c>trust_mark_owners</c> value declaring the owner given of <see cref="MarkId"/> with its keys.</summary>
+    /// <param name="owner">The owner.</param>
+    /// <returns>The claim's value.</returns>
+    private static Dictionary<string, object> OwnersDeclaring(FederationTestRingNode owner) => new(StringComparer.Ordinal)
+    {
+        [MarkId] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["sub"] = owner.Identifier.Value,
+            ["jwks"] = owner.JwksObject
+        }
+    };
 }

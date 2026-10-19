@@ -934,11 +934,10 @@ public static class HaipOid4VpVerifierExecutor
 
                 //Wallet-attributable malformed-presentation detection: a vp_token whose credential-query
                 //array is missing or empty, or a presentation its format's reading refuses, is a shape no
-                //conformant Wallet would produce - Malformed, not a 500 fault. The SD-JWT reading answers its
-                //refusals as typed defects at the reading that refuses them, so its verification runs under no
-                //catch and a failure of a resolver, of the decoder beyond its refusal or of the allocator stays a
-                //fault. The mdoc and SD-CWT verifications signal their parse refusals with FormatException, which
-                //is caught around each of them alone.
+                //conformant Wallet would produce - Malformed, not a 500 fault. The SD-JWT, mdoc and SD-CWT readings
+                //answer their refusals as typed defects at the reading that refuses them, so each verification runs
+                //under no catch and a failure of a resolver, of an encoder, of a signature or digest backend, of the
+                //decoder beyond its refusal or of the allocator stays a fault.
                 if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdJwt, StringComparison.Ordinal))
                 {
                     if(JwkJsonReader.ExtractFirstStringFromArrayProperty(vpTokenObject.Span, credentialQueryIdUtf8) is not { } compactPresentation)
@@ -962,35 +961,39 @@ public static class HaipOid4VpVerifierExecutor
                     //persisted state; response_uri must be the byte-exact OriginalString the
                     //JAR emitted (the codebase serialises URIs via Uri.OriginalString) so the
                     //reconstructed transcript hashes identically to the wallet's.
-                    string responseUri = registration.ResponseUri?.OriginalString
+                    var responseUri = registration.ResponseUri?.OriginalString
                         ?? throw new InvalidOperationException(
                             $"ClientRecord for the flow has no ResponseUri; it is required to reconstruct " +
                             $"the mdoc SessionTranscript for credential query '{credentialQueryId}'.");
+
+                    //ExtractMdocGeneratedNonce ran above because this response carries an mso_mdoc query, and it asserted the mdoc
+                    //seams were supplied, so both are present here; their absence is an invariant failure of this handler.
+                    if(mdocSeams is not { } seamsOfMdoc || mdocGeneratedNonce is not { } generatedNonce)
+                    {
+                        throw new InvalidOperationException(
+                            $"The mso_mdoc credential query '{credentialQueryId}' reached its verification without the mdoc seams or the wallet's mdoc_generated_nonce.");
+                    }
 
                     if(JwkJsonReader.ExtractFirstStringFromArrayProperty(vpTokenObject.Span, credentialQueryIdUtf8) is not { } compactPresentation)
                     {
                         return NoPresentationUnder(credentialQueryId, context);
                     }
 
-                    try
+                    var mdocRead = await MdocVpTokenVerification.VerifyAsync(
+                        compactPresentation, credentialQueryId, seamsOfMdoc.ResolveIssuerKey,
+                        seamsOfMdoc.ExtractTrustedAuthorityEvidence,
+                        registration.ClientId, responseUri, action.Nonce.Value, generatedNonce.Memory,
+                        seamsOfMdoc.ParseDeviceResponse, seamsOfMdoc.EncodeSessionTranscript, seamsOfMdoc.DecodeElementValue,
+                        seamsOfMdoc.ParseCoseSign1, seamsOfMdoc.ParseCoseSign1AllowingNilPayload,
+                        seamsOfMdoc.EncodeDeviceAuthenticationBytes, seamsOfMdoc.BuildSigStructure,
+                        decoder, pool, ct).ConfigureAwait(false);
+
+                    if(!mdocRead.IsSuccess)
                     {
-                        //mdocGeneratedNonce is non-null here: ExtractMdocGeneratedNonce ran above
-                        //because this response carries an mso_mdoc query, and it also asserted the
-                        //mdoc seams were supplied.
-                        mdocResult = await MdocVpTokenVerification.VerifyAsync(
-                            compactPresentation, credentialQueryId, mdocSeams!.ResolveIssuerKey,
-                            mdocSeams.ExtractTrustedAuthorityEvidence,
-                            registration.ClientId, responseUri, action.Nonce.Value, mdocGeneratedNonce!.Memory,
-                            mdocSeams.ParseDeviceResponse, mdocSeams.EncodeSessionTranscript, mdocSeams.DecodeElementValue,
-                            mdocSeams.ParseCoseSign1, mdocSeams.ParseCoseSign1AllowingNilPayload,
-                            mdocSeams.EncodeDeviceAuthenticationBytes, mdocSeams.BuildSigStructure,
-                            decoder, pool, ct).ConfigureAwait(false);
-                    }
-                    catch(FormatException exception)
-                    {
-                        return MalformedPresentation(credentialQueryId, exception, context);
+                        return MalformedPresentation(credentialQueryId, $"mdoc {mdocRead.Error}", context);
                     }
 
+                    mdocResult = mdocRead.Value;
                     parsed = mdocResult.Parsed;
                 }
                 else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdCwt, StringComparison.Ordinal))
@@ -1006,16 +1009,16 @@ public static class HaipOid4VpVerifierExecutor
                         return NoPresentationUnder(credentialQueryId, context);
                     }
 
-                    try
+                    var sdCwtRead = await SdCwtVpTokenVerification.VerifyAsync(
+                        compactPresentation, credentialQueryId, seams, decoder, saltReuseSeam, pool, ct)
+                        .ConfigureAwait(false);
+
+                    if(!sdCwtRead.IsSuccess)
                     {
-                        parsed = await SdCwtVpTokenVerification.VerifyAsync(
-                            compactPresentation, credentialQueryId, seams, decoder, saltReuseSeam, pool, ct)
-                            .ConfigureAwait(false);
+                        return MalformedPresentation(credentialQueryId, $"SD-CWT {sdCwtRead.Error}", context);
                     }
-                    catch(FormatException exception)
-                    {
-                        return MalformedPresentation(credentialQueryId, exception, context);
-                    }
+
+                    parsed = sdCwtRead.Value;
                 }
                 else
                 {
@@ -1025,7 +1028,7 @@ public static class HaipOid4VpVerifierExecutor
                 }
 
                 //Scopes the mdoc trust resolution's disposal to the remainder of this credential's step —
-                //the assignment above runs inside a try block, so it cannot itself be a using initializer.
+                //the assignment above runs in one branch of the format dispatch, so it cannot itself be a using initializer.
                 //Every exit from here on, refusal returns included, releases the resolved key.
                 using MdocVpVerificationResult? mdocResultScope = mdocResult;
 
@@ -1219,8 +1222,7 @@ public static class HaipOid4VpVerifierExecutor
                 //Wallet-attributable malformed-presentation detection (see the encrypted-path handler
                 //above): a missing/empty credential-query array, or a presentation its format's reading
                 //refuses, is a shape no conformant Wallet would produce - Malformed, not a 500 fault. The
-                //SD-JWT reading answers its refusals as typed defects under no catch; the SD-CWT verification's
-                //FormatException is caught around it alone.
+                //SD-JWT and SD-CWT readings answer their refusals as typed defects, each verification under no catch.
                 if(JwkJsonReader.ExtractFirstStringFromArrayProperty(vpTokenBytes, credentialQueryIdUtf8) is not { } compactPresentation)
                 {
                     return NoPresentationUnder(credentialQueryId, context);
@@ -1246,16 +1248,16 @@ public static class HaipOid4VpVerifierExecutor
                             "constructed without SD-CWT verification seams. Pass SdCwtVpVerificationSeams to " +
                             "HaipOid4VpVerifierExecutor.Create / CreateWithRegistry to enable dc+sd-cwt verification.");
 
-                    try
+                    var sdCwtRead = await SdCwtVpTokenVerification.VerifyAsync(
+                        compactPresentation, credentialQueryId, seams, decoder, saltReuseSeam, pool, ct)
+                        .ConfigureAwait(false);
+
+                    if(!sdCwtRead.IsSuccess)
                     {
-                        parsed = await SdCwtVpTokenVerification.VerifyAsync(
-                            compactPresentation, credentialQueryId, seams, decoder, saltReuseSeam, pool, ct)
-                            .ConfigureAwait(false);
+                        return MalformedPresentation(credentialQueryId, $"SD-CWT {sdCwtRead.Error}", context);
                     }
-                    catch(FormatException exception)
-                    {
-                        return MalformedPresentation(credentialQueryId, exception, context);
-                    }
+
+                    parsed = sdCwtRead.Value;
                 }
                 else
                 {
@@ -1358,11 +1360,12 @@ public static class HaipOid4VpVerifierExecutor
 
 
     /// <summary>
-    /// The refusal of an SD-JWT presentation the verification refused as malformed, on the executor's malformed route: a
-    /// presentation no conformant Wallet produces, never a fault. The typed defect rides the refusal to the failed state; the
-    /// Wallet is answered the generic malformed description.
+    /// The refusal of an SD-JWT presentation the verification refused, never a fault: on the executor's malformed route for a
+    /// presentation no conformant Wallet produces, on its undeterminable-status route for a status index past the library's
+    /// capacity (<see cref="SdJwtPresentationRefusals.KindOf"/>). The typed defect rides the refusal to the failed state; the
+    /// Wallet is answered the generic description of the refusal's kind.
     /// </summary>
-    /// <param name="defect">Why the presentation is malformed.</param>
+    /// <param name="defect">Why the presentation is refused.</param>
     /// <param name="credentialQueryId">The credential query the presentation answered.</param>
     /// <param name="context">The request's context, carrying the instant it is verified at.</param>
     /// <returns>The refusal.</returns>
@@ -1373,8 +1376,8 @@ public static class HaipOid4VpVerifierExecutor
             ?? throw new InvalidOperationException("Request timestamp not found in context.");
 
         return new VerifierPresentationRefused(
-            VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
-            $"Malformed vp_token presentation for credential query '{credentialQueryId}': {defect}.",
+            VerifierFlowRefusal.For(SdJwtPresentationRefusals.KindOf(defect)),
+            $"vp_token presentation for credential query '{credentialQueryId}' refused at its reading: {defect}.",
             refusedAt)
         {
             PresentationDefect = defect
@@ -1403,22 +1406,23 @@ public static class HaipOid4VpVerifierExecutor
 
 
     /// <summary>
-    /// The refusal of an mdoc or SD-CWT presentation whose verification refused it as malformed, its
-    /// <see cref="FormatException"/>, on the executor's malformed route.
+    /// The refusal of an mdoc or SD-CWT presentation whose reading refused a part of it as malformed - its typed defect,
+    /// <see cref="MdocPresentationDefect"/> or <see cref="Verifiable.Core.Model.SelectiveDisclosure.SdCwtPresentationDefect"/>, named in the log reason - on the executor's
+    /// malformed route: a presentation no conformant Wallet produces, never a fault.
     /// </summary>
     /// <param name="credentialQueryId">The credential query the presentation answered.</param>
-    /// <param name="exception">The verification's refusal.</param>
+    /// <param name="defect">The format and the name of the defect.</param>
     /// <param name="context">The request's context, carrying the instant it is verified at.</param>
     /// <returns>The refusal.</returns>
     private static VerifierPresentationRefused MalformedPresentation(
-        CredentialQueryId credentialQueryId, FormatException exception, ExchangeContext context)
+        CredentialQueryId credentialQueryId, string defect, ExchangeContext context)
     {
         var refusedAt = context.VerifiedAt
             ?? throw new InvalidOperationException("Request timestamp not found in context.");
 
         return new VerifierPresentationRefused(
             VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
-            $"Malformed vp_token presentation for credential query '{credentialQueryId}': {exception.Message}",
+            $"Malformed vp_token presentation for credential query '{credentialQueryId}': {defect}.",
             refusedAt);
     }
 

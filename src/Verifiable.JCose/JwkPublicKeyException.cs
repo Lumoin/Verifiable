@@ -3,14 +3,30 @@ namespace Verifiable.JCose;
 /// <summary>Why a JWK states no public key the library reconstructs (RFC 7517 section 4, RFC 7518 section 6).</summary>
 public enum JwkPublicKeyFailureKind
 {
-    /// <summary>A member the key's type requires is absent or carried as no string: <c>kty</c>, or <c>x</c>, <c>y</c>, <c>n</c> or <c>pub</c>.</summary>
+    /// <summary>
+    /// A member the key's type requires is absent: <c>kty</c>; <c>crv</c>, <c>x</c> and <c>y</c> of an EC key; <c>crv</c> and
+    /// <c>x</c> of an OKP key; <c>n</c> of an RSA key; <c>pub</c> of an AKP key.
+    /// </summary>
     MemberAbsent,
+
+    /// <summary>
+    /// A member defined as a string is present as a JSON value of another type: one of the required members above, or the
+    /// optional <c>alg</c>.
+    /// </summary>
+    MemberNotAString,
 
     /// <summary>The <c>kty</c> names a key type the library reconstructs no key of.</summary>
     UnsupportedKeyType,
 
     /// <summary>The key's curve, algorithm or size is none the library reconstructs a key of its type for.</summary>
     UnsupportedCurveOrAlgorithm,
+
+    /// <summary>
+    /// The key's <c>alg</c> is one the library recognizes for no key of the curve its <c>crv</c> names: an ECDSA algorithm of
+    /// another curve (RFC 7518 section 3.4), an EdDSA or key-agreement algorithm beside a curve of the other use (RFC 8037
+    /// sections 3.1 and 3.2), or an algorithm of a key with no elliptic curve.
+    /// </summary>
+    CurveAndAlgorithmContradict,
 
     /// <summary>
     /// The coordinates of an EC key name no point of its curve: <c>x</c> and <c>y</c> are not each the full width of the curve's

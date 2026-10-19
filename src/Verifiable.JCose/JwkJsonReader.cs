@@ -3347,9 +3347,9 @@ public static class JwkJsonReader
             return JwkSelectionResult.MalformedDocument();
         }
 
-        int selectedStart = -1;
-        int selectedEnd = -1;
-        int matchCount = 0;
+        var selectedStart = -1;
+        var selectedEnd = -1;
+        var matchCount = 0;
 
         while(cursor < json.Length)
         {
@@ -3369,8 +3369,8 @@ public static class JwkJsonReader
                 return JwkSelectionResult.MalformedDocument();
             }
 
-            int objectStart = cursor;
-            int objectEnd = FindJwkObjectEnd(json, objectStart);
+            var objectStart = cursor;
+            var objectEnd = FindJwkObjectEnd(json, objectStart);
             if(objectEnd < 0)
             {
                 return JwkSelectionResult.MalformedDocument();
@@ -3427,17 +3427,17 @@ public static class JwkJsonReader
     {
         //RFC 7517 section 5: the keys member is REQUIRED and its value an array of JWK values, so a set without it, or with
         //another value under it, is refused as malformed, never read as a set carrying no key; an empty array is an ordinary miss.
-        int cursor = FindKeysArrayContentStartDecoded(json);
+        var cursor = FindKeysArrayContentStartDecoded(json);
         if(cursor < 0)
         {
             return JwkSelectionResult.MalformedDocument();
         }
 
-        bool carriesPrivateOrSymmetricMember = false;
-        int selectedStart = -1;
-        int selectedEnd = -1;
-        int eligibleMatchCount = 0;
-        int keyIdMatchCount = 0;
+        var carriesPrivateOrSymmetricMember = false;
+        var selectedStart = -1;
+        var selectedEnd = -1;
+        var eligibleMatchCount = 0;
+        var keyIdMatchCount = 0;
 
         //A use whose bytes are no well-formed UTF-8 (RFC 8259 section 8.1) spells no use, so no key is eligible for it, a key
         //carrying no use of its own included; the walk still judges every element, so its refusals keep their precedence.
@@ -3460,14 +3460,14 @@ public static class JwkJsonReader
                 return JwkSelectionResult.MalformedDocument();
             }
 
-            int objectStart = cursor;
-            int objectEnd = FindJwkObjectEnd(json, objectStart);
+            var objectStart = cursor;
+            var objectEnd = FindJwkObjectEnd(json, objectStart);
             if(objectEnd < 0)
             {
                 return JwkSelectionResult.MalformedDocument();
             }
 
-            ReadOnlySpan<byte> candidate = json[objectStart..objectEnd];
+            var candidate = json[objectStart..objectEnd];
 
             if(!carriesPrivateOrSymmetricMember && ElementCarriesPrivateOrSymmetricMember(candidate))
             {
@@ -3506,7 +3506,7 @@ public static class JwkJsonReader
             return JwkSelectionResult.PrivateOrSymmetricMemberPresent();
         }
 
-        int matchCount = keyId is not null ? keyIdMatchCount : eligibleMatchCount;
+        var matchCount = keyId is not null ? keyIdMatchCount : eligibleMatchCount;
 
         return matchCount switch
         {

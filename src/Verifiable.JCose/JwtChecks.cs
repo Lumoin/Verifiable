@@ -249,8 +249,6 @@ public static class JwtChecks
     }
 
 
-    //Private core implementations — shared by all four extension blocks.
-
     /// <summary>Whether the header's <c>alg</c> is <c>none</c>; the core every extension block of the checks shares.</summary>
     /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
     /// <returns><see langword="true"/> when it holds.</returns>

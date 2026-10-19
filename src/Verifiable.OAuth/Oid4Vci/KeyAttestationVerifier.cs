@@ -33,10 +33,6 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// </remarks>
 public static class KeyAttestationVerifier
 {
-    private static ReadOnlySpan<byte> KidHeaderUtf8 => "kid"u8;
-    private static ReadOnlySpan<byte> X5cHeaderUtf8 => "x5c"u8;
-
-
     /// <summary>
     /// Resolves the Wallet-Provider public key an attestation's <c>kid</c> JOSE header names — the
     /// reference mode that identifies the Wallet Provider's signing key the deployment dereferences
@@ -224,45 +220,24 @@ public static class KeyAttestationVerifier
             return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Malformed);
         }
 
-        string? alg;
-        bool hasJwk;
-        bool hasKid;
-        bool hasX5c;
-        string? kid;
-        List<string>? x5cValues;
-        Dictionary<string, object>? jwkMembers;
-
         //The attestation header is client-supplied wire input, structurally unverified at this point: a segment the decoder
-        //refuses as no base64url text is a malformed attestation, and the scans below never throw on a header the gate admitted.
-        //Any other failure - of the decoder beyond its refusal, of the allocator, of the implementation - is a fault and surfaces
-        //as one, cancellation among them.
+        //refuses as no base64url text is a malformed attestation, and so is a header that is no one JSON object, repeats a member
+        //name at any depth or names no Unicode text (RFC 7515 §4), refused before any member is read so the key reference is never
+        //read from a first occurrence while a second goes unnoticed. The header is read once by its decoded members, so alg, jwk,
+        //kid and x5c are found whatever escapes spell their names (RFC 8259 §8.3). Any other failure - of the decoder beyond its
+        //refusal, of the allocator - is a fault and surfaces as one, cancellation among them.
+        JwtHeader header;
         using(var headerOwner = JwsSegmentDecoding.DecodedOrNone(compactAttestation.Split('.')[0], base64UrlDecoder, memoryPool))
         {
-            if(headerOwner is null)
+            if(headerOwner is null || JwtHeader.Read(headerOwner.Memory.Span) is not JwtPartRead<JwtHeader> { Part: var readHeader })
             {
                 return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Malformed);
             }
 
-            ReadOnlySpan<byte> header = headerOwner.Memory.Span;
-
-            //RFC 7515 §4: gate the header for well-formedness — a repeated "alg"/"kid"/"jwk"/"x5c" at any
-            //nesting depth — before extracting any of them, so the key-material selection below never
-            //runs against a first occurrence while a duplicate second occurrence goes unnoticed.
-            if(!JwkJsonReader.IsWellFormedJsonDocument(header))
-            {
-                return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Malformed);
-            }
-
-            alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
-            hasJwk = JwkJsonReader.ContainsKey(header, WellKnownJoseHeaderNames.JwkUtf8);
-            hasKid = JwkJsonReader.ContainsKey(header, KidHeaderUtf8);
-            hasX5c = JwkJsonReader.ContainsKey(header, X5cHeaderUtf8);
-            kid = hasKid ? JwkJsonReader.ExtractStringValue(header, KidHeaderUtf8) : null;
-            x5cValues = hasX5c ? JwkJsonReader.ExtractStringArrayProperty(header, X5cHeaderUtf8) : null;
-            jwkMembers = hasJwk
-                ? JwkJsonReader.ExtractObjectProperties(header, WellKnownJoseHeaderNames.JwkUtf8)
-                : null;
+            header = readHeader;
         }
+
+        var alg = header.TryGetValue(WellKnownJwkMemberNames.Alg, out var algValue) ? algValue as string : null;
 
         //The attestation MUST be signed with a registered asymmetric signature algorithm the
         //application accepts; none/MAC are rejected.
@@ -276,12 +251,7 @@ public static class KeyAttestationVerifier
 
         //Resolve the Wallet-Provider key the header references through the shared §F.1 machinery.
         Oid4VciHeaderKeyResolution.Outcome resolution = await Oid4VciHeaderKeyResolution.ResolveAsync(
-            hasJwk,
-            hasKid,
-            hasX5c,
-            jwkMembers,
-            kid,
-            x5cValues,
+            header,
             alg,
             resolveWalletProviderKey,
             x509Verification,

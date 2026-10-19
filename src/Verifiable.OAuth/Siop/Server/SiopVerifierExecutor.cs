@@ -464,14 +464,15 @@ public static class SiopVerifierExecutor
                 context,
                 cancellationToken).ConfigureAwait(false);
 
-            //The typed defect rides the failure to the failed state; the Wallet is answered the generic malformed description.
+            //The typed defect rides the failure to the failed state; the Wallet is answered the generic description of the refusal's
+            //kind: malformed, or an undeterminable status for a status index past the library's capacity.
             if(!verification.IsSuccess)
             {
                 return new SiopFlowFailed
                 {
-                    Reason = $"Malformed vp_token presentation for credential query '{resolvedVpTokenCredentialQueryId}': {verification.Error}.",
+                    Reason = $"vp_token presentation for credential query '{resolvedVpTokenCredentialQueryId}' refused at its reading: {verification.Error}.",
                     FailedAt = now,
-                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
+                    Refusal = VerifierFlowRefusal.For(SdJwtPresentationRefusals.KindOf(verification.Error)),
                     PresentationDefect = verification.Error
                 };
             }

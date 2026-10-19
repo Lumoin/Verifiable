@@ -44,7 +44,7 @@ internal sealed class ManagedCertificate
     /// <param name="notAfter">The <c>notAfter</c> instant.</param>
     /// <param name="subjectPublicKeyAlgorithmOid">The subject public key's algorithm identifier.</param>
     /// <param name="ellipticCurve">The elliptic curve of the subject public key, or none.</param>
-    /// <param name="publicPoint">The uncompressed point of an elliptic-curve key, or empty.</param>
+    /// <param name="publicPoint">The SEC1 point of an elliptic-curve key as encoded, or empty.</param>
     /// <param name="rsaModulus">The modulus of an RSA key, or empty.</param>
     /// <param name="rsaExponent">The public exponent of an RSA key, or empty.</param>
     /// <param name="mlDsaAlgorithmOid">The ML-DSA parameter-set identifier, or the empty string.</param>
@@ -127,7 +127,12 @@ internal sealed class ManagedCertificate
     /// <summary>Gets the elliptic curve of the subject public key, or <see cref="EllipticCurveTypes.None"/> when the key is not a recognised elliptic-curve key.</summary>
     public EllipticCurveTypes EllipticCurve { get; }
 
-    /// <summary>Gets the subject public key as an uncompressed SEC1 point (<c>0x04 || X || Y</c>); empty when the key is not elliptic-curve.</summary>
+    /// <summary>
+    /// Gets the subject public key as the SEC1 point the certificate encodes it as (SEC 1 section 2.3.3): uncompressed
+    /// (<c>0x04 || X || Y</c>) or compressed (<c>0x02</c> or <c>0x03 || X</c>), each coordinate the full width of the curve's
+    /// coordinate and the point one of the curve, for a key on a curve this parse recognises; as encoded for a key on another
+    /// curve; empty when the key is not elliptic-curve.
+    /// </summary>
     public ReadOnlyMemory<byte> PublicPoint { get; }
 
     /// <summary>Gets the RSA public modulus as unsigned big-endian bytes; empty when the key is not RSA.</summary>
@@ -203,11 +208,16 @@ internal sealed class ManagedCertificate
     /// followed by at most one parameters value (§4.1.1.2), and the outer <c>signatureAlgorithm</c> is the very
     /// <c>tbsCertificate.signature</c> (§4.1.1.2: "MUST contain the same algorithm identifier"); the issuer and
     /// subject <c>Name</c> fields are each an <c>RDNSequence</c> of non-empty <c>SET OF AttributeTypeAndValue</c>, each
-    /// an OBJECT IDENTIFIER and one value (§4.1.2.4); and the <c>SubjectPublicKeyInfo</c> is exactly an
+    /// an OBJECT IDENTIFIER and one value (§4.1.2.4), the issuer's non-empty ("The issuer field MUST contain a non-empty
+    /// distinguished name (DN)") and the subject's possibly empty (§4.1.2.6); the optional <c>issuerUniqueID</c> and
+    /// <c>subjectUniqueID</c> are each the primitive, implicitly tagged BIT STRING a <c>UniqueIdentifier</c> is (§4.1,
+    /// §4.1.2.8); and the <c>SubjectPublicKeyInfo</c> is exactly an
     /// <c>AlgorithmIdentifier</c> and a BIT STRING (§4.1.2.7), with no field after them, its parameters those of its
     /// algorithm: a named curve for an elliptic-curve key (RFC 5480 section 2.1.1), <c>NULL</c> for an RSA key (RFC 3279
     /// section 2.3.1), absent for an Ed25519 key (RFC 8410 section 3: "the parameters MUST be absent") and for an ML-DSA
-    /// key, and the key's BIT STRING whole octets for each of those.
+    /// key, and the key's BIT STRING whole octets for each of those: an elliptic-curve key on a curve this parse recognises an
+    /// uncompressed or compressed SEC1 point of the curve's coordinate width naming a point of the curve (SEC 1 section 2.3.4,
+    /// RFC 5480 section 2.2), an ML-DSA key the length its parameter set has (FIPS 204 table 2: 1,312, 1,952 and 2,592 octets).
     /// </summary>
     /// <param name="encoded">The DER-encoded certificate.</param>
     /// <returns>The parsed certificate.</returns>
@@ -242,6 +252,14 @@ internal sealed class ManagedCertificate
         var tbsSignatureAlgorithm = tbs.ReadEncodedValue();
         _ = ReadAlgorithmIdentifier(new AsnReader(tbsSignatureAlgorithm, AsnEncodingRules.DER));
         ReadOnlyMemory<byte> issuer = ReadNameOrThrow(tbs);            //issuer Name (raw DER, RFC 5280 §4.1.2.4)
+
+        //RFC 5280 §4.1.2.4: "The issuer field MUST contain a non-empty distinguished name (DN)." An empty subject is permitted
+        //(§4.1.2.6), so the emptiness is judged for the issuer alone.
+        if(!new AsnReader(issuer, AsnEncodingRules.DER).ReadSequence().HasData)
+        {
+            throw new AsnContentException("The issuer field contains a non-empty distinguished name (RFC 5280 §4.1.2.4).");
+        }
+
         AsnReader validity = tbs.ReadSequence();
         DateTimeOffset notBefore = ReadTime(validity);
         DateTimeOffset notAfter = ReadTime(validity);
@@ -250,7 +268,7 @@ internal sealed class ManagedCertificate
 
         ParsedPublicKey publicKey = ParseSubjectPublicKeyInfo(tbs.ReadSequence());
 
-        (ReadOnlyMemory<byte> subjectKeyIdentifier, IReadOnlyList<string> extendedKeyUsageOids) = ParseExtensions(tbs);
+        var extensions = ParseExtensions(tbs);
         tbs.ThrowIfNotEmpty();
 
         //RFC 5280 §4.1.1.2: "This field MUST contain the same algorithm identifier as the signature field in the sequence
@@ -273,7 +291,7 @@ internal sealed class ManagedCertificate
             encoded, tbsCertificateDer, issuer, serialNumber, subject, notBefore, notAfter,
             publicKey.AlgorithmOid, publicKey.Curve, publicKey.Point, publicKey.RsaModulus, publicKey.RsaExponent,
             publicKey.MlDsaAlgorithmOid, publicKey.MlDsaPublicKey, publicKey.RawBitStringContent,
-            subjectKeyIdentifier, extendedKeyUsageOids, signatureAlgorithmOid, signatureValue);
+            extensions.SubjectKeyIdentifier, extensions.ExtendedKeyUsageOids, signatureAlgorithmOid, signatureValue);
     }
 
 
@@ -435,8 +453,15 @@ internal sealed class ManagedCertificate
             string curveOid = algorithm.ReadObjectIdentifier();
             algorithm.ThrowIfNotEmpty();
             var point = ReadWholeOctetKey(subjectPublicKeyInfo);
+            var curve = CurveFromOid(curveOid);
 
-            parsed = new ParsedPublicKey(algorithmOid, CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, point);
+            if(curve != EllipticCurveTypes.None && !IsPointOfTheCurve(point, curve))
+            {
+                throw new AsnContentException(
+                    "An elliptic-curve subject public key is an uncompressed or compressed SEC1 point of the curve's coordinate width naming a point of the curve (SEC 1 section 2.3.4, RFC 5480 section 2.2).");
+            }
+
+            parsed = new ParsedPublicKey(algorithmOid, curve, point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, point);
         }
         else if(string.Equals(algorithmOid, RsaEncryptionOid, StringComparison.Ordinal))
         {
@@ -469,6 +494,11 @@ internal sealed class ManagedCertificate
             //with absent AlgorithmIdentifier parameters; the identifier itself pins the parameter set.
             algorithm.ThrowIfNotEmpty();
             var mlDsaPublicKey = ReadWholeOctetKey(subjectPublicKeyInfo);
+
+            if(mlDsaPublicKey.Length != MlDsaPublicKeyOctetCount(algorithmOid))
+            {
+                throw new AsnContentException("An ML-DSA subject public key is the length its parameter set has: 1,312, 1,952 or 2,592 octets (FIPS 204 table 2).");
+            }
 
             parsed = new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, algorithmOid, mlDsaPublicKey, mlDsaPublicKey);
         }
@@ -505,18 +535,14 @@ internal sealed class ManagedCertificate
     /// Walks the optional unique identifiers and the extensions to the subject-key-identifier (RFC 5280
     /// §4.2.1.2) and ExtendedKeyUsage (RFC 5280 §4.2.1.12) extensions, reading the first occurrence of each.
     /// </summary>
-    private static (ReadOnlyMemory<byte> SubjectKeyIdentifier, IReadOnlyList<string> ExtendedKeyUsageOids) ParseExtensions(AsnReader tbs)
+    /// <param name="tbs">The reader of the <c>tbsCertificate</c>, positioned after the <c>SubjectPublicKeyInfo</c>.</param>
+    /// <returns>The subject key identifier and the extended key usage purposes.</returns>
+    private static ParsedExtensions ParseExtensions(AsnReader tbs)
     {
-        //issuerUniqueID [1] IMPLICIT and subjectUniqueID [2] IMPLICIT are obsolete but allowed before extensions.
-        if(tbs.HasData && tbs.PeekTag() == new Asn1Tag(TagClass.ContextSpecific, 1, isConstructed: true))
-        {
-            _ = tbs.ReadEncodedValue();
-        }
-
-        if(tbs.HasData && tbs.PeekTag() == new Asn1Tag(TagClass.ContextSpecific, 2, isConstructed: true))
-        {
-            _ = tbs.ReadEncodedValue();
-        }
+        //issuerUniqueID [1] IMPLICIT UniqueIdentifier OPTIONAL and subjectUniqueID [2] IMPLICIT UniqueIdentifier OPTIONAL, with
+        //UniqueIdentifier ::= BIT STRING (RFC 5280 §4.1): each present one is read whole as the BIT STRING it is.
+        ReadUniqueIdentifier(tbs, 1);
+        ReadUniqueIdentifier(tbs, 2);
 
         ReadOnlyMemory<byte> subjectKeyIdentifier = ReadOnlyMemory<byte>.Empty;
         bool subjectKeyIdentifierSeen = false;
@@ -561,8 +587,91 @@ internal sealed class ManagedCertificate
             extensionsWrapper.ThrowIfNotEmpty();
         }
 
-        return (subjectKeyIdentifier, extendedKeyUsageOids ?? []);
+        return new ParsedExtensions(subjectKeyIdentifier, extendedKeyUsageOids ?? []);
     }
+
+
+    /// <summary>
+    /// Reads an optional unique identifier of the context-specific tag number given (RFC 5280 §4.1: <c>[1] IMPLICIT
+    /// UniqueIdentifier</c> for the issuer, <c>[2]</c> for the subject), a <c>UniqueIdentifier</c> being a BIT STRING, so the
+    /// field is a primitive BIT STRING under the implicit tag, its unused-bits octet and content judged as DER has them; a
+    /// constructed field of the tag is refused. Nothing is read when the next field carries another tag.
+    /// </summary>
+    /// <param name="tbs">The reader of the <c>tbsCertificate</c>.</param>
+    /// <param name="tagNumber">The context-specific tag number of the identifier.</param>
+    private static void ReadUniqueIdentifier(AsnReader tbs, int tagNumber)
+    {
+        if(!tbs.HasData || tbs.PeekTag() is not { TagClass: TagClass.ContextSpecific } tag || tag.TagValue != tagNumber)
+        {
+            return;
+        }
+
+        if(tag.IsConstructed)
+        {
+            throw new AsnContentException("A unique identifier is a primitive, implicitly tagged BIT STRING (RFC 5280 §4.1).");
+        }
+
+        _ = tbs.ReadBitString(out _, new Asn1Tag(TagClass.ContextSpecific, tagNumber));
+    }
+
+
+    /// <summary>
+    /// Whether a SEC1 point (SEC 1 section 2.3.4) is a point of the curve: uncompressed, <c>0x04</c> and two coordinates of the
+    /// curve's width naming a point of it, or compressed, <c>0x02</c> or <c>0x03</c> and an x of the curve's width from which the
+    /// curve's equation recovers a y naming a point of it (NIST SP 800-186 appendix D.1.1.1).
+    /// </summary>
+    /// <param name="point">The point as encoded.</param>
+    /// <param name="curve">The curve, one this parse recognises.</param>
+    /// <returns><see langword="true"/> for a point of the curve.</returns>
+    private static bool IsPointOfTheCurve(ReadOnlySpan<byte> point, EllipticCurveTypes curve)
+    {
+        var width = CoordinateOctetCount(curve);
+
+        if(point.Length == 1 + (2 * width) && point[0] == EllipticCurveUtilities.UncompressedCoordinateFormat)
+        {
+            return EllipticCurveUtilities.CheckPointOnCurve(point.Slice(1, width), point[(1 + width)..], curve);
+        }
+
+        return point.Length == 1 + width
+            && (point[0] == EllipticCurveUtilities.EvenYCoordinate || point[0] == EllipticCurveUtilities.OddYCoordinate)
+            && EllipticCurveUtilities.CheckPointOnCurve(point[1..], EllipticCurveUtilities.Decompress(point, curve), curve);
+    }
+
+
+    /// <summary>The octet width of a coordinate of a curve this parse recognises (SEC 1 section 2.3.5).</summary>
+    /// <param name="curve">The curve.</param>
+    /// <returns>The width.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The curve is none this parse recognises.</exception>
+    private static int CoordinateOctetCount(EllipticCurveTypes curve) => curve switch
+    {
+        EllipticCurveTypes.P256 => EllipticCurveConstants.P256.PointArrayLength,
+        EllipticCurveTypes.P384 => EllipticCurveConstants.P384.PointArrayLength,
+        EllipticCurveTypes.P521 => EllipticCurveConstants.P521.PointArrayLength,
+        EllipticCurveTypes.Secp256k1 => EllipticCurveConstants.Secp256k1.PointArrayLength,
+        EllipticCurveTypes.BrainpoolP224r1 => EllipticCurveConstants.BrainpoolP224r1.PointArrayLength,
+        EllipticCurveTypes.BrainpoolP256r1 => EllipticCurveConstants.BrainpoolP256r1.PointArrayLength,
+        EllipticCurveTypes.BrainpoolP320r1 => EllipticCurveConstants.BrainpoolP320r1.PointArrayLength,
+        EllipticCurveTypes.BrainpoolP384r1 => EllipticCurveConstants.BrainpoolP384r1.PointArrayLength,
+        EllipticCurveTypes.BrainpoolP512r1 => EllipticCurveConstants.BrainpoolP512r1.PointArrayLength,
+        EllipticCurveTypes.None => throw new ArgumentOutOfRangeException(nameof(curve), curve, "No coordinate width is known for no curve."),
+        EllipticCurveTypes.NistCurves => throw new ArgumentOutOfRangeException(nameof(curve), curve, "A family of curves has no one coordinate width."),
+        EllipticCurveTypes.Curve25519 => throw new ArgumentOutOfRangeException(nameof(curve), curve, "Curve25519 keys carry no SEC1 point."),
+        EllipticCurveTypes.BrainpoolCurves => throw new ArgumentOutOfRangeException(nameof(curve), curve, "A family of curves has no one coordinate width."),
+        _ => throw new ArgumentOutOfRangeException(nameof(curve), curve, "No coordinate width is known for the curve.")
+    };
+
+
+    /// <summary>The octet length of the public key of an ML-DSA parameter set (FIPS 204 table 2).</summary>
+    /// <param name="parameterSetOid">The parameter set's object identifier, one of the three ML-DSA identifiers.</param>
+    /// <returns>1,312 for ML-DSA-44, 1,952 for ML-DSA-65, 2,592 for ML-DSA-87.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The identifier names no ML-DSA parameter set.</exception>
+    private static int MlDsaPublicKeyOctetCount(string parameterSetOid) => parameterSetOid switch
+    {
+        WellKnownOids.MlDsa44 => 1312,
+        WellKnownOids.MlDsa65 => 1952,
+        WellKnownOids.MlDsa87 => 2592,
+        _ => throw new ArgumentOutOfRangeException(nameof(parameterSetOid), parameterSetOid, "The identifier names no ML-DSA parameter set.")
+    };
 
 
     /// <summary>
@@ -586,7 +695,7 @@ internal sealed class ManagedCertificate
     /// <summary>A parsed subject public key: its algorithm identifier, an elliptic-curve point, RSA modulus and exponent, or an ML-DSA parameter-set identifier and raw key, plus the raw BIT STRING content.</summary>
     /// <param name="AlgorithmOid">The key's algorithm identifier.</param>
     /// <param name="Curve">The elliptic curve, or none.</param>
-    /// <param name="Point">The uncompressed point, or empty.</param>
+    /// <param name="Point">The SEC1 point as encoded, or empty.</param>
     /// <param name="RsaModulus">The RSA modulus, or empty.</param>
     /// <param name="RsaExponent">The RSA public exponent, or empty.</param>
     /// <param name="MlDsaAlgorithmOid">The ML-DSA parameter-set identifier, or the empty string.</param>
@@ -601,4 +710,10 @@ internal sealed class ManagedCertificate
         string MlDsaAlgorithmOid,
         ReadOnlyMemory<byte> MlDsaPublicKey,
         ReadOnlyMemory<byte> RawBitStringContent);
+
+
+    /// <summary>The extensions a certificate's parse reads.</summary>
+    /// <param name="SubjectKeyIdentifier">The subject key identifier, or empty.</param>
+    /// <param name="ExtendedKeyUsageOids">The ExtendedKeyUsage key purpose identifiers, in certificate order.</param>
+    private sealed record ParsedExtensions(ReadOnlyMemory<byte> SubjectKeyIdentifier, IReadOnlyList<string> ExtendedKeyUsageOids);
 }

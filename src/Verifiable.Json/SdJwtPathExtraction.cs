@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -126,7 +125,7 @@ public static class SdJwtPathExtraction
     /// <param name="decoder">Delegate for Base64Url decoding the JWS payload segment.</param>
     /// <param name="pool">Memory pool for allocations.</param>
     /// <returns>Each disclosure's resolved path, every unconditionally disclosed node and every disclosure-interior node.</returns>
-    /// <exception cref="FormatException">
+    /// <exception cref="SdJwtWireFormatException">
     /// Thrown when the payload fails a step 3.c or 4 rule, or when its nesting exceeds
     /// <see cref="MaximumWalkDepth"/>.
     /// </exception>
@@ -174,7 +173,7 @@ public static class SdJwtPathExtraction
     /// decoy array markers removed — what <see cref="SdToken{TEnvelope}.IssuerSignedClaims"/>
     /// stores for a container node.
     /// </returns>
-    /// <exception cref="FormatException">
+    /// <exception cref="SdJwtWireFormatException">
     /// Thrown when a step 3.c or 4 rule is violated, or when the nesting exceeds
     /// <see cref="MaximumWalkDepth"/>.
     /// </exception>
@@ -190,7 +189,7 @@ public static class SdJwtPathExtraction
     {
         if(depth > MaximumWalkDepth)
         {
-            throw new FormatException(
+            throw new SdJwtWireFormatException(
                 $"RFC 9901 §4.2.6: the payload's nesting of containers and recursive Disclosures exceeds the {MaximumWalkDepth} levels this parse admits.");
         }
 
@@ -225,21 +224,21 @@ public static class SdJwtPathExtraction
                     //three-element (object-property) Disclosure.
                     if(disclosure.ClaimName is not { } claimName)
                     {
-                        throw new FormatException(
+                        throw new SdJwtWireFormatException(
                             "RFC 9901 §7.1 step 3.c.ii.1: a digest in an object's _sd array resolved to an array-element Disclosure.");
                     }
 
                     //Step 3.c.ii.2: the claim name must not be a mechanism key.
                     if(SdConstants.IsReservedClaimName(claimName))
                     {
-                        throw new FormatException(
+                        throw new SdJwtWireFormatException(
                             $"RFC 9901 §7.1 step 3.c.ii.2: the claim name '{claimName}' is a reserved mechanism key.");
                     }
 
                     //Step 3.c.ii.3: the claim name must not already exist at this level.
                     if(!localNames.Add(claimName))
                     {
-                        throw new FormatException(
+                        throw new SdJwtWireFormatException(
                             $"RFC 9901 §7.1 step 3.c.ii.3: the claim name '{claimName}' already exists at this level.");
                     }
 
@@ -291,7 +290,7 @@ public static class SdJwtPathExtraction
                         //two-element (array-element) Disclosure.
                         if(disclosure.ClaimName is not null)
                         {
-                            throw new FormatException(
+                            throw new SdJwtWireFormatException(
                                 "RFC 9901 §7.1 step 3.c.iii.1: a digest in an array resolved to an object-property Disclosure.");
                         }
 
@@ -350,12 +349,12 @@ public static class SdJwtPathExtraction
     /// </summary>
     /// <param name="digest">The digest value encountered.</param>
     /// <param name="seenDigests">Every digest value encountered so far.</param>
-    /// <exception cref="FormatException">Thrown when the digest was already seen.</exception>
+    /// <exception cref="SdJwtWireFormatException">Thrown when the digest was already seen.</exception>
     private static void RecordDigest(string digest, HashSet<string> seenDigests)
     {
         if(!seenDigests.Add(digest))
         {
-            throw new FormatException($"RFC 9901 §7.1 step 4: the digest '{digest}' is encountered more than once.");
+            throw new SdJwtWireFormatException($"RFC 9901 §7.1 step 4: the digest '{digest}' is encountered more than once.");
         }
     }
 
@@ -491,19 +490,37 @@ public static class SdJwtPathExtraction
         return digest.AsReadOnlySpan().ToArray();
     }
 
+    /// <summary>
+    /// The Issuer-signed JWT's payload as a JSON element, its wire shape refused as the SD-JWT reading refuses it: a JWT that is
+    /// not three segments, a payload the decoder refuses as no base64url text, or a payload that is not valid JSON. Any other
+    /// failure of the decoder or of the allocator is theirs and surfaces as it is.
+    /// </summary>
+    /// <param name="jwt">The compact Issuer-signed JWT.</param>
+    /// <param name="decoder">The base64url decoder.</param>
+    /// <param name="pool">The pool the decoded bytes are rented from.</param>
+    /// <returns>The payload.</returns>
+    /// <exception cref="SdJwtWireFormatException">The wire shape is refused.</exception>
     private static JsonElement ParseJwtPayload(string jwt, DecodeDelegate decoder, BaseMemoryPool pool)
     {
         string[] parts = jwt.Split('.');
 
         if(parts.Length != 3)
         {
-            throw new FormatException("Invalid JWT structure.");
+            throw new SdJwtWireFormatException("The Issuer-signed JWT is no compact JWS of three segments (RFC 7515 section 7.1).");
         }
 
-        using IMemoryOwner<byte> payloadBytes = decoder(parts[1], pool);
-        using JsonDocument doc = JsonDocument.Parse(payloadBytes.Memory);
+        using var payloadBytes = SdJwtSerializer.DecodedWireText(parts[1], decoder, pool, "The Issuer-signed JWT's payload is no base64url text (RFC 7515 section 7.1).");
 
-        return doc.RootElement.Clone();
+        try
+        {
+            using var doc = JsonDocument.Parse(payloadBytes.Memory);
+
+            return doc.RootElement.Clone();
+        }
+        catch(JsonException exception)
+        {
+            throw new SdJwtWireFormatException("The Issuer-signed JWT's payload is not valid JSON (RFC 7519 section 7.2).", exception);
+        }
     }
 
 

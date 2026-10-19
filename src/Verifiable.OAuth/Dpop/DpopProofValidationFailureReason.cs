@@ -6,7 +6,13 @@ namespace Verifiable.OAuth.Dpop;
 /// </summary>
 public enum DpopProofValidationFailureReason
 {
-    /// <summary>The proof string is not parseable as a compact JWS.</summary>
+    /// <summary>
+    /// The proof is not a well-formed DPoP proof (RFC 9449 section 4.3 check 2): no compact JWS of three parts, a part that is
+    /// no one JSON object or that repeats a member name, or a member of the header, the claims set or the embedded key the
+    /// reading refuses by its own rule - absent where it is required, of another kind than it is defined as, or established to
+    /// contradict another member. A member whose relation to another the reading does not establish is
+    /// <see cref="UnsupportedOrUnestablished"/>, never this.
+    /// </summary>
     Malformed,
 
     /// <summary>
@@ -55,4 +61,13 @@ public enum DpopProofValidationFailureReason
 
     /// <summary>The <c>ath</c> claim does not match the presented access token.</summary>
     AthMismatch,
+
+    /// <summary>
+    /// The embedded key carries a member whose relation to the key or to another member the validation does not establish: a
+    /// <c>use</c> or a <c>key_ops</c> operation outside the registered vocabulary beside the other (RFC 7517 section 4.3), or an
+    /// <c>x5c</c> whose first certificate's key is of a type, curve or algorithm the certificate judgement compares none of
+    /// (section 4.7). The proof is not established to be malformed or inconsistent; it is refused because a judgement its
+    /// acceptance rests on is not made. The part refusal the result carries names the member and its detailed defect.
+    /// </summary>
+    UnsupportedOrUnestablished,
 }
