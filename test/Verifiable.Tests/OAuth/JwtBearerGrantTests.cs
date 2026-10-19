@@ -1755,8 +1755,8 @@ internal sealed class JwtBearerGrantTests
                 }
             }
 
-            keysByKid[kid] = DpopJwkUtilities.PublicKeyFromJwk(
-                jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, Pool);
+            keysByKid[kid] = TestReadings.PublicKeyOf(DpopJwkUtilities.PublicKeyFromJwk(
+                jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, Pool));
         }
 
         return (kid, usage, tenant, ctx, ct) =>

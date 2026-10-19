@@ -2297,10 +2297,7 @@ internal sealed class Oid4VciWalletClientTests
                     jwkDict[member.Key] = member.Value;
                 }
 
-                var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                    jwkDict, Pool, TestSetup.Base64UrlDecoder);
-                Tag recipientTag = Tag.Create(algorithm).With(purpose).With(scheme);
-                using PublicKeyMemory recipientKey = new(keyBytes, recipientTag);
+                using var recipientKey = TestReadings.JwkKey(jwkDict, Pool, TestSetup.Base64UrlDecoder).ToPublicKeyMemory();
 
                 return await HaipProfile.EncryptResponseAsync(
                     recipientKey,
@@ -2350,10 +2347,7 @@ internal sealed class Oid4VciWalletClientTests
             Encoding.UTF8.GetBytes(headerJson), "jwk"u8);
         Assert.IsNotNull(jwk);
 
-        var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-            jwk, Pool, TestSetup.Base64UrlDecoder);
-        Tag proofTag = Tag.Create(algorithm).With(purpose).With(scheme);
-        PublicKeyMemory proofKey = new(keyBytes, proofTag);
+        var proofKey = TestReadings.JwkKey(jwk, Pool, TestSetup.Base64UrlDecoder).ToPublicKeyMemory();
 
         string payloadJson = DecodeSegment(proofJwt, segmentIndex: 1);
         ReadOnlySpan<byte> payloadBytes = Encoding.UTF8.GetBytes(payloadJson);

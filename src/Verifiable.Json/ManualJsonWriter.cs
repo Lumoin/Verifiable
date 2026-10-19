@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Verifiable.JCose;
 
 namespace Verifiable.Json;
 
@@ -13,7 +14,7 @@ namespace Verifiable.Json;
 /// <list type="bullet">
 /// <item><description><see cref="string"/> writes as a JSON string.</description></item>
 /// <item><description><see cref="bool"/> writes as JSON true or false.</description></item>
-/// <item><description><see cref="int"/>, <see cref="long"/>, <see cref="float"/>, <see cref="double"/>, and <see cref="decimal"/> write as JSON numbers.</description></item>
+/// <item><description><see cref="int"/>, <see cref="long"/>, <see cref="float"/>, <see cref="double"/>, <see cref="decimal"/> and <see cref="DecimalNumber"/> write as JSON numbers.</description></item>
 /// <item><description><see langword="null"/> writes as JSON null.</description></item>
 /// <item><description><see cref="IDictionary{TKey,TValue}"/> writes as a JSON object.</description></item>
 /// <item><description><see cref="IList{T}"/> writes as a JSON array.</description></item>
@@ -61,6 +62,14 @@ internal static class ManualJsonWriter
     /// </summary>
     private static bool WritePrimitive(Utf8JsonWriter writer, object? value)
     {
+        //A number no CLR numeric type holds exactly is written as the one JSON number token naming it.
+        if(value is DecimalNumber exact)
+        {
+            writer.WriteRawValue(exact.ToString(), false);
+
+            return true;
+        }
+
         switch(value)
         {
             case null:

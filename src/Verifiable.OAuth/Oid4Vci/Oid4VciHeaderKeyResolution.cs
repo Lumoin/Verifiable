@@ -207,9 +207,9 @@ internal static class Oid4VciHeaderKeyResolution
     /// <summary>
     /// The key the header's <c>jwk</c> states, composing the library's single JWK-to-algorithm converter (the same path the
     /// proof and attestation minters project from), or <see langword="null"/> when the reconstruction refuses the key
-    /// (<see cref="JwkPublicKeyException"/>, or <see cref="RsaPublicKeyException"/> for an RSA key's parameters) or the decoder
-    /// refuses one of its members as no base64url text (its <see cref="FormatException"/>). A member of the JSON value
-    /// <c>null</c> is passed on as absent. Any other failure of the decoder or of the allocator is a fault and surfaces as one.
+    /// (<see cref="JwkKeyRefused"/>), a member the decoder refuses as no base64url text among its refusals. A member of the JSON
+    /// value <c>null</c> is passed on as absent. Any failure of the decoder beyond its refusal or of the allocator is a fault and
+    /// surfaces as one.
     /// </summary>
     /// <param name="jwkMembers">The <c>jwk</c> member's members, read by their decoded names.</param>
     /// <param name="base64UrlDecoder">The decoder of the key's members.</param>
@@ -229,16 +229,9 @@ internal static class Oid4VciHeaderKeyResolution
             }
         }
 
-        try
-        {
-            var (algorithm, purpose, scheme, keyMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(members, memoryPool, base64UrlDecoder);
-
-            return new PublicKeyMemory(keyMaterial, Tag.Create(algorithm).With(purpose).With(scheme));
-        }
-        catch(Exception exception) when(exception is FormatException or JwkPublicKeyException or RsaPublicKeyException)
-        {
-            return null;
-        }
+        return CryptoFormatConversions.DefaultJwkToAlgorithmConverter(members, memoryPool, base64UrlDecoder) is JwkKeyReconstructed reconstructed
+            ? reconstructed.ToPublicKeyMemory()
+            : null;
     }
 
 

@@ -131,7 +131,7 @@ internal sealed class CoseCredentialSecuringTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = TestReadings.CoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
 
         Assert.IsTrue(message.ProtectedHeader.AsReadOnlySpan().SequenceEqual(parsed.ProtectedHeader.AsReadOnlySpan()), "Protected header must survive CBOR round-trip.");
         Assert.IsTrue(message.Payload.Span.SequenceEqual(parsed.Payload.Span), "Payload must survive CBOR round-trip.");

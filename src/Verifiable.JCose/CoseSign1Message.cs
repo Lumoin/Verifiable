@@ -82,6 +82,40 @@ public sealed class CoseSign1Message : IEquatable<CoseSign1Message>, IDisposable
 
 
     /// <summary>
+    /// A message of the element bytes given: the protected header and the signature copied into pool-routed carriers the message
+    /// owns, a zero-length protected header (RFC 9052 section 3's <c>bstr .size 0</c> arm) on the shared empty buffer since the
+    /// pool rents none of length zero, the unprotected header and the payload borrowed.
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected header's bytes.</param>
+    /// <param name="unprotectedHeader">The unprotected header map.</param>
+    /// <param name="payload">The payload bytes (borrowed from caller).</param>
+    /// <param name="signature">The signature's bytes.</param>
+    /// <param name="signatureTag">The tag the signature carrier carries.</param>
+    /// <param name="pool">The pool the carriers rent from.</param>
+    /// <returns>The message, which the caller owns and disposes.</returns>
+    public static CoseSign1Message FromElements(
+        ReadOnlySpan<byte> protectedHeader,
+        IReadOnlyDictionary<int, object>? unprotectedHeader,
+        ReadOnlyMemory<byte> payload,
+        ReadOnlySpan<byte> signature,
+        Tag signatureTag,
+        BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(signatureTag);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        var signatureOwner = pool.Rent(signature.Length);
+        signature.CopyTo(signatureOwner.Memory.Span);
+
+        return new CoseSign1Message(
+            EncodedCoseProtectedHeader.FromBytes(protectedHeader, pool),
+            unprotectedHeader,
+            payload,
+            new Signature(signatureOwner, signatureTag));
+    }
+
+
+    /// <summary>
     /// Gets the serialized protected header carrier. Owned by this message;
     /// disposed via <see cref="Dispose"/>.
     /// </summary>

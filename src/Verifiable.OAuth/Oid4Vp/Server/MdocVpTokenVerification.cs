@@ -240,17 +240,12 @@ public static class MdocVpTokenVerification
                 //resolved — survives this method and can be read as the credential's issuer key downstream.
                 issuerTrust = await resolveIssuerKey(document.IssuerSigned.IssuerAuth, cancellationToken).ConfigureAwait(false);
 
-                //The issuer-auth COSE_Sign1 is parsed once, its parse's refusal the defect of the IssuerAuth, and the signature is
-                //verified over the parsed message (RFC 9052 section 4.4) under no catch.
-                bool issuerAuthValid = false;
+                //The issuer-auth COSE_Sign1 is read once by its typed reading, whose refusal is the defect of the IssuerAuth, and the
+                //signature is verified over the read message (RFC 9052 section 4.4) under no catch.
+                var issuerAuthValid = false;
                 if(issuerTrust.IsTrusted && issuerTrust.IssuerVerificationKey is PublicKeyMemory trustedIssuerKey)
                 {
-                    CoseSign1Message issuerAuthMessage;
-                    try
-                    {
-                        issuerAuthMessage = parseCoseSign1(document.IssuerSigned.IssuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
-                    }
-                    catch(FormatException)
+                    if(parseCoseSign1(document.IssuerSigned.IssuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool) is not CoseSign1Read { Message: var issuerAuthMessage })
                     {
                         issuerTrust.Dispose();
 
@@ -270,24 +265,21 @@ public static class MdocVpTokenVerification
 
                 //SessionTranscriptValid = device COSE_Sign1 over the verifier-reconstructed
                 //SessionTranscript, keyed by the device key the issuer committed to in the MSO.
-                if(document.DeviceSigned is MdocDeviceSigned deviceSigned)
+                //The device half carries a signature or a MAC; only a signature is verified here, a MAC leaving the transcript
+                //unverified.
+                if(document.DeviceSigned is { DeviceAuth.DeviceSignature: MdocDeviceSignature deviceSignature } deviceSigned)
                 {
-                    //The device signature's detached-payload COSE_Sign1 is judged by its parse before the verification composes
-                    //it, so its refusal is the defect of the device signature and the verification below, which parses the same
-                    //bytes again, runs under no catch.
-                    if(deviceSigned.DeviceAuth.DeviceSignature is MdocDeviceSignature deviceSignature)
+                    //The device signature's detached-payload COSE_Sign1 is read once by its typed reading, whose refusal is the defect
+                    //of the device signature; the read message is handed to the verification below, which borrows it and reads it
+                    //no second time. This method owns it and disposes it once the verification is done.
+                    if(parseCoseSign1AllowingNilPayload(deviceSignature.EncodedCoseSign1.AsReadOnlyMemory(), pool) is not CoseSign1Read { Message: var detachedSignature })
                     {
-                        try
-                        {
-                            parseCoseSign1AllowingNilPayload(deviceSignature.EncodedCoseSign1.AsReadOnlyMemory(), pool).Dispose();
-                        }
-                        catch(FormatException)
-                        {
-                            issuerTrust.Dispose();
+                        issuerTrust.Dispose();
 
-                            return Result.Failure<MdocVpVerificationResult, MdocPresentationDefect>(MdocPresentationDefect.DeviceSignatureMalformed);
-                        }
+                        return Result.Failure<MdocVpVerificationResult, MdocPresentationDefect>(MdocPresentationDefect.DeviceSignatureMalformed);
                     }
+
+                    using var deviceSignatureMessage = detachedSignature;
 
                     PublicKeyMemory deviceKey;
                     try
@@ -308,7 +300,7 @@ public static class MdocVpTokenVerification
 
                     sessionTranscriptValid = await deviceSigned.VerifyAsync(
                         document.DocType, sessionTranscript, deviceVerificationKey, pool,
-                        parseCoseSign1AllowingNilPayload, encodeDeviceAuthenticationBytes, buildSigStructure,
+                        deviceSignatureMessage, encodeDeviceAuthenticationBytes, buildSigStructure,
                         cancellationToken).ConfigureAwait(false);
                 }
 

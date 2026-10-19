@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Cryptography;
 /// Tests the library's reconstruction of the public key a JWK states (<see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/>)
 /// at its EC coordinates: <c>x</c> and <c>y</c> are each the full width of the curve's coordinate (RFC 7518 sections 6.2.1.2
 /// and 6.2.1.3) and name a point of the curve (NIST SP 800-186 appendix D.1.1.1), judged on the coordinates as supplied before
-/// the point is compressed, and the reconstruction's refusal is typed (<see cref="JwkPublicKeyException"/>).
+/// the point is compressed, and the reconstruction's refusal is typed (<see cref="JwkKeyRefused"/>).
 /// </summary>
 [TestClass]
 internal sealed class JwkPublicKeyReconstructionTests
@@ -27,13 +27,9 @@ internal sealed class JwkPublicKeyReconstructionTests
         var offCurveY = (byte[])y.Clone();
         offCurveY[^1] ^= 0x01;
 
-        var (_, _, _, keyMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(Jwk(x, y), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
-        keyMaterial.Dispose();
+        ReconstructedOf(Jwk(x, y)).KeyMaterial.Dispose();
 
-        var refusal = Assert.Throws<ArgumentException>(
-            () => CryptoFormatConversions.DefaultJwkToAlgorithmConverter(Jwk(x, offCurveY), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder));
-
-        Assert.AreEqual(JwkPublicKeyFailureKind.NotAPointOfTheCurve, Assert.IsInstanceOfType<JwkPublicKeyException>(refusal).FailureKind);
+        Assert.AreEqual(JwkPublicKeyFailureKind.NotAPointOfTheCurve, RefusalOf(Jwk(x, offCurveY)).FailureKind);
     }
 
 
@@ -47,16 +43,13 @@ internal sealed class JwkPublicKeyReconstructionTests
         var (x, y) = PointOnP256();
         byte[] point = [.. x, .. y];
 
-        var refusal = Assert.Throws<ArgumentException>(
-            () => CryptoFormatConversions.DefaultJwkToAlgorithmConverter(Jwk(point[..33], point[33..]), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder));
-
-        Assert.AreEqual(JwkPublicKeyFailureKind.NotAPointOfTheCurve, Assert.IsInstanceOfType<JwkPublicKeyException>(refusal).FailureKind);
+        Assert.AreEqual(JwkPublicKeyFailureKind.NotAPointOfTheCurve, RefusalOf(Jwk(point[..33], point[33..])).FailureKind);
     }
 
 
     /// <summary>
-    /// The reconstruction's refusals of a key type or a curve it reconstructs no key of, and of a JWK naming no key type, are of
-    /// the typed exception with their reasons, so a caller tells them from a fault of the decoder or the allocator it supplied.
+    /// The reconstruction's refusals of a key type or a curve it reconstructs no key of, and of a JWK naming no key type, are
+    /// typed refusals with their reasons, so a caller tells them from a fault of the decoder or the allocator it supplied.
     /// </summary>
     [TestMethod]
     public void TheReconstructionsRefusalsAreTyped()
@@ -94,26 +87,22 @@ internal sealed class JwkPublicKeyReconstructionTests
         var control = Jwk(x, y);
         control[WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256;
 
-        var (algorithm, _, _, keyMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(control, BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
-        keyMaterial.Dispose();
-        Assert.AreEqual(CryptoAlgorithm.P256, algorithm);
+        var reconstructed = ReconstructedOf(control);
+        reconstructed.KeyMaterial.Dispose();
+        Assert.AreEqual(CryptoAlgorithm.P256, reconstructed.Algorithm);
 
         var jwk = Jwk(x, y);
         jwk[WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256;
-        switch(curveCase)
+        _ = jwk.Remove(WellKnownJwkMemberNames.Crv);
+
+        if(!string.Equals(curveCase, "absent", StringComparison.Ordinal))
         {
-            case "absent":
-                _ = jwk.Remove(WellKnownJwkMemberNames.Crv);
-                break;
-            case "unknown":
-                jwk[WellKnownJwkMemberNames.Crv] = "P-999";
-                break;
-            case "number":
-                jwk[WellKnownJwkMemberNames.Crv] = 256L;
-                break;
-            default:
-                jwk[WellKnownJwkMemberNames.Crv] = curveCase;
-                break;
+            jwk[WellKnownJwkMemberNames.Crv] = curveCase switch
+            {
+                "unknown" => "P-999",
+                "number" => 256L,
+                _ => curveCase
+            };
         }
 
         Assert.AreEqual(expected, RefusalOf(jwk).FailureKind);
@@ -136,16 +125,14 @@ internal sealed class JwkPublicKeyReconstructionTests
     {
         var x = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
 
-        var (signing, _, _, signingMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-            OkpJwk(WellKnownCurveValues.Ed25519, WellKnownJwaValues.EdDsa, x), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
-        signingMaterial.Dispose();
+        var signing = ReconstructedOf(OkpJwk(WellKnownCurveValues.Ed25519, WellKnownJwaValues.EdDsa, x));
+        signing.KeyMaterial.Dispose();
 
-        var (agreement, _, _, agreementMaterial) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-            OkpJwk(WellKnownCurveValues.X25519, WellKnownJwaValues.Ecdha, x), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
-        agreementMaterial.Dispose();
+        var agreement = ReconstructedOf(OkpJwk(WellKnownCurveValues.X25519, WellKnownJwaValues.Ecdha, x));
+        agreement.KeyMaterial.Dispose();
 
-        Assert.AreEqual(CryptoAlgorithm.Ed25519, signing);
-        Assert.AreEqual(CryptoAlgorithm.X25519, agreement);
+        Assert.AreEqual(CryptoAlgorithm.Ed25519, signing.Algorithm);
+        Assert.AreEqual(CryptoAlgorithm.X25519, agreement.Algorithm);
         Assert.AreEqual(expected, RefusalOf(OkpJwk(curve, algorithm, x)).FailureKind);
     }
 
@@ -176,9 +163,15 @@ internal sealed class JwkPublicKeyReconstructionTests
     /// <summary>The reconstruction's refusal of a JWK.</summary>
     /// <param name="jwk">The JWK.</param>
     /// <returns>The refusal.</returns>
-    private static JwkPublicKeyException RefusalOf(Dictionary<string, object> jwk) =>
-        Assert.ThrowsExactly<JwkPublicKeyException>(
-            () => CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder));
+    private static JwkKeyRefused RefusalOf(Dictionary<string, object> jwk) =>
+        Assert.IsInstanceOfType<JwkKeyRefused>(CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder));
+
+
+    /// <summary>The key the reconstruction rebuilds from a JWK; the caller disposes its material.</summary>
+    /// <param name="jwk">The JWK.</param>
+    /// <returns>The reconstructed key.</returns>
+    private static JwkKeyReconstructed ReconstructedOf(Dictionary<string, object> jwk) =>
+        Assert.IsInstanceOfType<JwkKeyReconstructed>(CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder));
 
 
     /// <summary>The members of a P-256 JWK of the coordinates given.</summary>

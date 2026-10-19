@@ -145,10 +145,20 @@ public static class SdCwtVpParsing
     /// </summary>
     /// <param name="sdCwt">The embedded presentation SD-CWT.</param>
     /// <returns>The <c>iss</c> claim value, or <see langword="null"/> when absent.</returns>
+    /// <exception cref="FormatException">The payload is no CWT claims map, or its <c>iss</c> is no text string (the CBOR reader's exception rides as the inner exception).</exception>
     public static string? ExtractIssuer(SdToken<ReadOnlyMemory<byte>> sdCwt)
     {
         ArgumentNullException.ThrowIfNull(sdCwt);
 
+        return Normalized(() => IssuerOf(sdCwt), "The embedded SD-CWT's iss claim is not of its defined type.");
+    }
+
+
+    /// <summary>The <c>iss</c> claim of the embedded SD-CWT, read by the CBOR reader under its own refusals.</summary>
+    /// <param name="sdCwt">The embedded presentation SD-CWT.</param>
+    /// <returns>The <c>iss</c> claim value, or <see langword="null"/> when absent.</returns>
+    private static string? IssuerOf(SdToken<ReadOnlyMemory<byte>> sdCwt)
+    {
         ReadOnlyMemory<byte> payload = ReadCoseSign1Payload(sdCwt.IssuerSigned);
         var reader = new CborReader(payload, CborOptions.Lax);
 
@@ -195,10 +205,20 @@ public static class SdCwtVpParsing
     /// </summary>
     /// <param name="sdCwt">The embedded presentation SD-CWT.</param>
     /// <returns>The <c>vct</c> claim value, or <see langword="null"/> when absent.</returns>
+    /// <exception cref="FormatException">The payload is no CWT claims map, or its <c>vct</c> is no text string (the CBOR reader's exception rides as the inner exception).</exception>
     public static string? ExtractCredentialType(SdToken<ReadOnlyMemory<byte>> sdCwt)
     {
         ArgumentNullException.ThrowIfNull(sdCwt);
 
+        return Normalized(() => CredentialTypeOf(sdCwt), "The embedded SD-CWT's vct claim is not of its defined type.");
+    }
+
+
+    /// <summary>The <c>vct</c> claim of the embedded SD-CWT, read by the CBOR reader under its own refusals.</summary>
+    /// <param name="sdCwt">The embedded presentation SD-CWT.</param>
+    /// <returns>The <c>vct</c> claim value, or <see langword="null"/> when absent.</returns>
+    private static string? CredentialTypeOf(SdToken<ReadOnlyMemory<byte>> sdCwt)
+    {
         ReadOnlyMemory<byte> payload = ReadCoseSign1Payload(sdCwt.IssuerSigned);
         var reader = new CborReader(payload, CborOptions.Lax);
 
@@ -340,6 +360,7 @@ public static class SdCwtVpParsing
     /// The holder public key the caller owns and disposes, or <see langword="null"/>
     /// when no <c>cnf</c> COSE_Key is present.
     /// </returns>
+    /// <exception cref="FormatException">The <c>cnf</c> claim carries no COSE_Key the reading reconstructs (the CBOR reader's exception rides as the inner exception).</exception>
     public static PublicKeyMemory? ExtractHolderKey(
         SdToken<ReadOnlyMemory<byte>> sdCwt,
         BaseMemoryPool pool)
@@ -347,7 +368,7 @@ public static class SdCwtVpParsing
         ArgumentNullException.ThrowIfNull(sdCwt);
         ArgumentNullException.ThrowIfNull(pool);
 
-        CoseKey? coseKey = ReadCnfCoseKey(sdCwt.IssuerSigned);
+        var coseKey = Normalized(() => ReadCnfCoseKey(sdCwt.IssuerSigned), "The embedded SD-CWT's cnf claim carries no COSE_Key the reading reconstructs.");
         if(coseKey is null)
         {
             return null;
@@ -363,7 +384,7 @@ public static class SdCwtVpParsing
         {
             { X: ReadOnlyMemory<byte> x, Y: ReadOnlyMemory<byte> y } => EllipticCurveUtilities.Compress(x.Span, y.Span),
             { X: ReadOnlyMemory<byte> okpX } => okpX.ToArray(),
-            _ => throw new CborContentException(
+            _ => throw new FormatException(
                 "The cnf COSE_Key carries no x coordinate, so a public key cannot be reconstructed.")
         };
 
@@ -388,7 +409,15 @@ public static class SdCwtVpParsing
     /// </remarks>
     /// <param name="kbtPayload">The CBOR-encoded KBT payload claims map.</param>
     /// <returns>The parsed claims as a <see cref="KbtCwtClaims"/>.</returns>
-    public static KbtCwtClaims ReadKbtClaims(ReadOnlyMemory<byte> kbtPayload)
+    /// <exception cref="FormatException">The payload is no claims map, or a claim is not of its defined type (the CBOR reader's exception rides as the inner exception).</exception>
+    public static KbtCwtClaims ReadKbtClaims(ReadOnlyMemory<byte> kbtPayload) =>
+        Normalized(() => KbtClaimsOf(kbtPayload), "The Key Binding Token's payload claims are not of their defined types.");
+
+
+    /// <summary>The session-binding claims of a KBT payload, read by the CBOR reader under its own refusals.</summary>
+    /// <param name="kbtPayload">The CBOR-encoded KBT payload claims map.</param>
+    /// <returns>The parsed claims.</returns>
+    private static KbtCwtClaims KbtClaimsOf(ReadOnlyMemory<byte> kbtPayload)
     {
         var reader = new CborReader(kbtPayload, CborOptions.Lax);
 
@@ -448,6 +477,29 @@ public static class SdCwtVpParsing
             reader.SkipValue();
 
             return true;
+        }
+    }
+
+
+    /// <summary>
+    /// A reading of an SD-CWT seam whose CBOR reader refuses its bytes - with its content exception, the state exception of an
+    /// item of another kind than the reading expects, or the range exception of an integer past what it reads - answered as the
+    /// seam's declared refusal, its <see cref="FormatException"/>, the reader's exception riding as the inner exception.
+    /// </summary>
+    /// <typeparam name="T">The reading's value.</typeparam>
+    /// <param name="read">The reading.</param>
+    /// <param name="refusal">The refusal's description.</param>
+    /// <returns>The reading's value.</returns>
+    /// <exception cref="FormatException">The CBOR reader refuses the bytes.</exception>
+    private static T Normalized<T>(Func<T> read, string refusal)
+    {
+        try
+        {
+            return read();
+        }
+        catch(Exception exception) when(exception is CborException or InvalidOperationException or OverflowException)
+        {
+            throw new FormatException(refusal, exception);
         }
     }
 

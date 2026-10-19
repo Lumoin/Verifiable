@@ -703,7 +703,7 @@ internal sealed class SdTokenDcqlAdapterPathTests
     /// disclosure positions and always-disclosed claims the adapter reads.
     /// </summary>
     private static SdToken<string> ParseNestedIdentityCredential() =>
-        SdJwtSerializer.ParseToken(
+        TestReadings.SdJwtToken(
             NestedSdJwtVcFixtures.MintDeterministicIdentityCredential(),
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
@@ -729,7 +729,7 @@ internal sealed class SdTokenDcqlAdapterPathTests
 
         string wireFormat = $"{NestedSdJwtVcFixtures.CreateMinimalJwt(payloadJson)}~{Encoded}~";
 
-        return SdJwtSerializer.ParseToken(
+        return TestReadings.SdJwtToken(
             wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
     }
 

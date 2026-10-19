@@ -62,8 +62,8 @@ internal sealed class DpopJwkUtilitiesTests
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
             originalPublicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder);
 
-        using PublicKeyMemory reconstructed = DpopJwkUtilities.PublicKeyFromJwk(
-            jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+        using PublicKeyMemory reconstructed = TestReadings.PublicKeyOf(DpopJwkUtilities.PublicKeyFromJwk(
+            jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
 
         string originalThumbprint = DpopJwkUtilities.ComputeThumbprint(
             originalPublicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -129,8 +129,8 @@ internal sealed class DpopJwkUtilitiesTests
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
             originalPublicKey, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder);
 
-        using PublicKeyMemory reconstructed = DpopJwkUtilities.PublicKeyFromJwk(
-            jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+        using PublicKeyMemory reconstructed = TestReadings.PublicKeyOf(DpopJwkUtilities.PublicKeyFromJwk(
+            jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
 
         string originalThumbprint = DpopJwkUtilities.ComputeThumbprint(
             originalPublicKey, WellKnownJwaValues.Rs256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -195,8 +195,8 @@ internal sealed class DpopJwkUtilitiesTests
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
             originalPublicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder);
 
-        using PublicKeyMemory reconstructed = DpopJwkUtilities.PublicKeyFromJwk(
-            jwk, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+        using PublicKeyMemory reconstructed = TestReadings.PublicKeyOf(DpopJwkUtilities.PublicKeyFromJwk(
+            jwk, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
 
         string originalThumbprint = DpopJwkUtilities.ComputeThumbprint(
             originalPublicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);

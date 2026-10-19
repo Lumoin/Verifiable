@@ -192,7 +192,7 @@ internal sealed class SdJwtPresentationReadingBoundaryTests
         await SdJwtVpTokenVerification.VerifyAsync(
             presentation,
             QueryId,
-            static serialized => SdJwtSerializer.ParseToken(serialized, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+            static serialized => SdJwtSerializer.ParseToken(serialized, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             static token => SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder),
             (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(issuerKey),
             MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,

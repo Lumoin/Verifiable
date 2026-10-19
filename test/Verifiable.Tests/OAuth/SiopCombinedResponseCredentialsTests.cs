@@ -199,7 +199,7 @@ internal sealed class SiopCombinedResponseCredentialsTests
                     string.Equals(issuerId, SiopCombinedResponseFixture.IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null),
                 parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
                     s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder,
-                    BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                    BaseMemoryPool.Shared, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
                 computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                     t, TestSetup.Base64UrlEncoder),
                 computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,

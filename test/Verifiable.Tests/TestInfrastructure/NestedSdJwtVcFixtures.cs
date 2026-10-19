@@ -430,7 +430,7 @@ internal static class NestedSdJwtVcFixtures
                 }
             }
 
-            SdToken<string> token = SdJwtSerializer.ParseToken(
+            SdToken<string> token = TestReadings.SdJwtToken(
                 compactSdJwt,
                 TestSetup.Base64UrlDecoder,
                 TestSetup.Base64UrlEncoder,

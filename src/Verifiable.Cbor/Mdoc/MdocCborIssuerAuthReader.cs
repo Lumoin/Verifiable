@@ -64,7 +64,13 @@ public static class MdocCborIssuerAuthReader
             //Parse for payload inspection — this materializes pool-routed
             //EncodedCoseProtectedHeader + Signature carriers we don't keep,
             //so dispose after extracting the MSO from the payload.
-            using CoseSign1Message parsedCose = CoseSerialization.ParseCoseSign1(wireCarrier.AsReadOnlyMemory(), pool);
+            //The typed reading's refusal of the COSE_Sign1 is answered as this reader's own refusal, its CborContentException.
+            if(CoseSerialization.ParseCoseSign1(wireCarrier.AsReadOnlyMemory(), pool) is not CoseSign1Read { Message: var readCose })
+            {
+                throw new CborContentException("The issuerAuth is no COSE_Sign1 (RFC 9052 section 4.2).");
+            }
+
+            using var parsedCose = readCose;
 
             if(parsedCose.Payload.IsEmpty)
             {

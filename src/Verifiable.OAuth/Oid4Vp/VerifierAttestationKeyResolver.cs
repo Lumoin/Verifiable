@@ -128,21 +128,29 @@ public static class VerifierAttestationKeyResolver
                 "The JAR signing public key cannot be resolved.");
         }
 
-        var (algorithm, purpose, _, keyMaterialOwner) =
-            CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, pool, base64UrlDecoder);
-
-        Tag tag = (algorithm, purpose) switch
+        if(CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, pool, base64UrlDecoder) is not JwkKeyReconstructed reconstructed)
         {
-            var (a, p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification)
-                => CryptoTags.P256PublicKey,
-            var (a, p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification)
-                => CryptoTags.P384PublicKey,
-            var (a, p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification)
-                => CryptoTags.P521PublicKey,
-            _ => throw new NotSupportedException(
-                $"Unsupported algorithm '{algorithm}' or purpose '{purpose}' in cnf.jwk claim.")
+            throw new InvalidOperationException(
+                "Verifier Attestation JWT's cnf.jwk claim states no public key the library reconstructs. " +
+                "The JAR signing public key cannot be resolved.");
+        }
+
+        var tag = reconstructed switch
+        {
+            { Purpose: var p, Algorithm: var a } when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) => CryptoTags.P256PublicKey,
+            { Purpose: var p, Algorithm: var a } when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => CryptoTags.P384PublicKey,
+            { Purpose: var p, Algorithm: var a } when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => CryptoTags.P521PublicKey,
+            _ => null
         };
 
-        return new PublicKeyMemory(keyMaterialOwner, tag);
+        if(tag is null)
+        {
+            reconstructed.KeyMaterial.Dispose();
+
+            throw new NotSupportedException(
+                $"Unsupported algorithm '{reconstructed.Algorithm}' or purpose '{reconstructed.Purpose}' in cnf.jwk claim.");
+        }
+
+        return new PublicKeyMemory(reconstructed.KeyMaterial, tag);
     }
 }

@@ -1845,7 +1845,7 @@ internal sealed class TestHostShell : IAsyncDisposable
                 string queryId = query.Id
                     ?? throw new InvalidOperationException("DCQL credential query is missing the 'id' field.");
 
-                using SdToken<string> token = SdJwtSerializer.ParseToken(
+                using SdToken<string> token = TestReadings.SdJwtToken(
                     resolveStoredSdJwt(queryId), TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, MemoryPool, TestSalts.TestSaltTag);
 
                 IReadOnlySet<CredentialPath>? selectedPaths = null;

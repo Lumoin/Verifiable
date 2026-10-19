@@ -74,7 +74,7 @@ internal sealed class KbCwtIssuanceTests
             memoryPool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using CoseSign1Message parsedKbt = CoseSerialization.ParseCoseSign1(kbt.AsReadOnlyMemory(), Pool);
+        using CoseSign1Message parsedKbt = TestReadings.CoseSign1(kbt.AsReadOnlyMemory(), Pool);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
             parsedKbt,
@@ -117,7 +117,7 @@ internal sealed class KbCwtIssuanceTests
             memoryPool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using CoseSign1Message parsedKbt = CoseSerialization.ParseCoseSign1(kbt.AsReadOnlyMemory(), Pool);
+        using CoseSign1Message parsedKbt = TestReadings.CoseSign1(kbt.AsReadOnlyMemory(), Pool);
 
         IReadOnlyDictionary<int, object> header =
             CoseSerialization.ParseProtectedHeader(parsedKbt.ProtectedHeader.AsReadOnlySpan());
@@ -169,7 +169,7 @@ internal sealed class KbCwtIssuanceTests
         //embedded SD-CWT and runs the COMPLETE verification (issuer signature AND per-disclosure
         //digest binding). This is what proves the selected disclosures' salts survived the
         //re-serialization into kcwt; a signature-only check would not.
-        using CoseSign1Message parsedKbt = CoseSerialization.ParseCoseSign1(kbt.AsReadOnlyMemory(), Pool);
+        using CoseSign1Message parsedKbt = TestReadings.CoseSign1(kbt.AsReadOnlyMemory(), Pool);
         ReadOnlyMemory<byte> embeddedSdCwt = ExtractKcwtEncodedValue(parsedKbt.ProtectedHeader.AsReadOnlyMemory());
 
         SdCwtMessage parsedPresentation = SdCwtSerializer.Parse(embeddedSdCwt, TestSalts.TestSaltTag, Pool);
@@ -240,7 +240,7 @@ internal sealed class KbCwtIssuanceTests
             memoryPool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using CoseSign1Message parsedKbt = CoseSerialization.ParseCoseSign1(kbt.AsReadOnlyMemory(), Pool);
+        using CoseSign1Message parsedKbt = TestReadings.CoseSign1(kbt.AsReadOnlyMemory(), Pool);
 
         (string aud, long parsedIat, string? cnonce, bool hasIss, bool hasSub) = ReadKbtPayload(parsedKbt.Payload);
 
@@ -283,7 +283,7 @@ internal sealed class KbCwtIssuanceTests
             memoryPool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using CoseSign1Message parsedKbt = CoseSerialization.ParseCoseSign1(kbt.AsReadOnlyMemory(), Pool);
+        using CoseSign1Message parsedKbt = TestReadings.CoseSign1(kbt.AsReadOnlyMemory(), Pool);
 
         (_, _, string? cnonce, _, _) = ReadKbtPayload(parsedKbt.Payload);
         Assert.IsNull(cnonce, "cnonce (39) must be omitted when no nonce is supplied.");

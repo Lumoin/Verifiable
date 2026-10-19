@@ -85,7 +85,13 @@ public static class SdCwtVerificationExtensions
             ArgumentNullException.ThrowIfNull(parseCoseSign1);
             ArgumentNullException.ThrowIfNull(buildSigStructure);
 
-            using CoseSign1Message message = parseCoseSign1(token.IssuerSigned, pool);
+            //An envelope whose COSE_Sign1 the reading refuses carries no signature this verification can find valid.
+            if(parseCoseSign1(token.IssuerSigned, pool) is not CoseSign1Read { Message: var parsed })
+            {
+                return false;
+            }
+
+            using var message = parsed;
 
             return await Cose.VerifyAsync(
                 message,
@@ -218,8 +224,11 @@ public static class SdCwtVerificationExtensions
             //Parse ONLY the payload. token.IssuerSigned still carries the issuer's original
             //full disclosure set in its unprotected header; the verifier must trust the
             //holder-selected token.Disclosures, so disclosures are never re-read from the wire.
-            //The returned context takes ownership of the message; the caller disposes the context.
-            CoseSign1Message message = parseCoseSign1(token.IssuerSigned, pool);
+            //The returned context takes ownership of the message; the caller disposes the context. The envelope the signature
+            //verified over was read once already, so a refusal of it now is an invariant failure, never an answer.
+            var message = parseCoseSign1(token.IssuerSigned, pool) is CoseSign1Read { Message: var reread }
+                ? reread
+                : throw new InvalidOperationException("The SD-CWT envelope's COSE_Sign1, read once already, was refused on its second reading.");
 
             var boundPaths = new SdDisclosurePaths(
                 extractPaths(message.Payload, token.Disclosures, encoder, pool, hashAlgorithm));

@@ -403,10 +403,7 @@ internal sealed class MultiHostHttpLifecycleTests
             Encoding.UTF8.GetBytes(headerJson), "jwk"u8);
         Assert.IsNotNull(jwk);
 
-        var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-            jwk, Pool, TestSetup.Base64UrlDecoder);
-        Tag proofTag = Tag.Create(algorithm).With(purpose).With(scheme);
-        PublicKeyMemory proofKey = new(keyBytes, proofTag);
+        var proofKey = TestReadings.JwkKey(jwk, Pool, TestSetup.Base64UrlDecoder).ToPublicKeyMemory();
 
         string payloadJson = DecodeSegment(proofJwt, segmentIndex: 1);
         string? nonce = JwkJsonReader.ExtractStringValue(Encoding.UTF8.GetBytes(payloadJson), "nonce"u8);

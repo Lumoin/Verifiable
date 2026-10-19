@@ -44,11 +44,16 @@ namespace Verifiable.Core.Model.Did
                         memoryPool,
                         DefaultCoderSelector.SelectDecoder(multibaseKey.GetType())),
 
+                //This converter's own contract answers a key format it reads no key of with its ArgumentException, so the JWK
+                //reconstruction's refusal is answered as that format's; its key is answered in the converter's own shape.
                 PublicKeyJwk jwkKey when jwkKey.Header is Dictionary<string, object> jwkHeader =>
-                    CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                        jwkHeader,
-                        memoryPool,
-                        DefaultCoderSelector.SelectDecoder(jwkKey.GetType())),
+                    CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwkHeader, memoryPool, DefaultCoderSelector.SelectDecoder(jwkKey.GetType())) switch
+                    {
+                        JwkKeyReconstructed key => (key.Algorithm, key.Purpose, key.Scheme, key.KeyMaterial),
+                        JwkKeyRefused refused => throw new ArgumentException(
+                            $"The JWK of VerificationMethod of Type '{method.Type}' states no public key: {refused.Description}", nameof(method)),
+                        _ => throw new InvalidOperationException("The JWK reconstruction answered a reconstruction it never answers.")
+                    },
 
                 _ => throw new ArgumentException($"Unsupported KeyFormat for VerificationMethod of Type '{method.Type}'.", nameof(method))
             };

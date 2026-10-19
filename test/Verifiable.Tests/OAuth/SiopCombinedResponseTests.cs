@@ -250,7 +250,7 @@ internal sealed class SiopCombinedResponseTests
             vpToken,
             new CredentialQueryId("pid"),
             static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
             MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,

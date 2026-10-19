@@ -61,11 +61,11 @@ internal sealed class RsaPublicKeyConversionTests
                 [WellKnownJwkMemberNames.N] = TestSetup.Base64UrlEncoder(modulus),
                 [WellKnownJwkMemberNames.E] = TestSetup.Base64UrlEncoder([0x03])
             };
-            using PublicKeyMemory keyThree = DpopJwkUtilities.PublicKeyFromJwk(
-                jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+            using PublicKeyMemory keyThree = TestReadings.PublicKeyOf(DpopJwkUtilities.PublicKeyFromJwk(
+                jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
             jwk[WellKnownJwkMemberNames.E] = RsaUtilities.DefaultExponent;
-            using PublicKeyMemory key65537 = DpopJwkUtilities.PublicKeyFromJwk(
-                jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+            using PublicKeyMemory key65537 = TestReadings.PublicKeyOf(DpopJwkUtilities.PublicKeyFromJwk(
+                jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
 
             (Signature signatureThree, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(
                 privateThree, message, BaseMemoryPool.Shared, clock, null, TestContext.CancellationToken).ConfigureAwait(false);
@@ -103,13 +103,12 @@ internal sealed class RsaPublicKeyConversionTests
         byte[] modulus = CreateModulus(modulusLength);
         byte[] exponentBytes = BigInteger.ValueOf(exponent).ToByteArrayUnsigned();
         Dictionary<string, object> jwk = CreateJwk(modulus, exponentBytes);
-        (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> material) =
-            CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
-        using IMemoryOwner<byte> owner = material;
+        var reconstructed = TestReadings.JwkKey(jwk, BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
+        using var owner = reconstructed.KeyMaterial;
 
-        Assert.AreEqual(modulusLength == 256 ? CryptoAlgorithm.Rsa2048 : CryptoAlgorithm.Rsa4096, algorithm);
-        Assert.AreEqual(Purpose.Verification, purpose);
-        Assert.AreEqual(EncodingScheme.Der, scheme);
+        Assert.AreEqual(modulusLength == 256 ? CryptoAlgorithm.Rsa2048 : CryptoAlgorithm.Rsa4096, reconstructed.Algorithm);
+        Assert.AreEqual(Purpose.Verification, reconstructed.Purpose);
+        Assert.AreEqual(EncodingScheme.Der, reconstructed.Scheme);
         AssertDerParameters(owner.Memory, modulus, exponentBytes);
 
         JsonWebKey roundTripped = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
@@ -158,10 +157,7 @@ internal sealed class RsaPublicKeyConversionTests
         byte[] exponent = [0x03];
         CoseKey cose = new(CoseKeyTypes.Rsa, n: modulus, e: exponent);
         using PublicKeyMemory coseKey = cose.ToPublicKeyMemory(BaseMemoryPool.Shared);
-        (CryptoAlgorithm _, Purpose _, EncodingScheme _, IMemoryOwner<byte> material) =
-            CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                CreateJwk(modulus, exponent), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
-        using IMemoryOwner<byte> owner = material;
+        using var owner = TestReadings.JwkKey(CreateJwk(modulus, exponent), BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder).KeyMaterial;
 
         AssertDerParameters(coseKey.AsReadOnlyMemory(), modulus, exponent);
         Assert.IsTrue(coseKey.AsReadOnlySpan().SequenceEqual(owner.Memory.Span));

@@ -571,18 +571,13 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintSameLevelDuplicateName();
 
-        FormatException failure = Assert.Throws<FormatException>(
-            () => SdJwtSerializer.ParseToken(
-                compactSdJwt,
-                TestSetup.Base64UrlDecoder,
-                TestSetup.Base64UrlEncoder,
-                Pool,
-                TestSalts.TestSaltTag),
-            "Section 7.1 step 3.c.ii.3: the SD-JWT MUST be rejected, never parsed with one namesake silently overwriting the other.");
+        var failure = TestReadings.SdJwtRefusal(compactSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+
+        Assert.AreEqual(SdJwtWireDefect.ClaimNameRepeated, failure.Defect, "Section 7.1 step 3.c.ii.3: the SD-JWT MUST be rejected, never parsed with one namesake silently overwriting the other.");
 
         Assert.Contains(
             NestedSdJwtVcFixtures.FamilyNameClaim,
-            failure.Message,
+            failure.Description,
             "The refusal names the colliding claim so the holder can see which level is malformed.");
     }
 
@@ -598,14 +593,9 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintUnreferencedDisclosure();
 
-        _ = Assert.Throws<FormatException>(
-            () => SdJwtSerializer.ParseToken(
-                compactSdJwt,
-                TestSetup.Base64UrlDecoder,
-                TestSetup.Base64UrlEncoder,
-                Pool,
-                TestSalts.TestSaltTag),
-            "Section 7.1 step 5: an unreferenced Disclosure makes the SD-JWT invalid, never a silently dropped extra.");
+        var failure = TestReadings.SdJwtRefusal(compactSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+
+        Assert.AreEqual(SdJwtWireDefect.DisclosureUnreferenced, failure.Defect, "Section 7.1 step 5: an unreferenced Disclosure makes the SD-JWT invalid, never a silently dropped extra.");
     }
 
 
@@ -623,18 +613,13 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintDisclosureNamed(mechanismKey, "anything");
 
-        FormatException failure = Assert.Throws<FormatException>(
-            () => SdJwtSerializer.ParseToken(
-                compactSdJwt,
-                TestSetup.Base64UrlDecoder,
-                TestSetup.Base64UrlEncoder,
-                Pool,
-                TestSalts.TestSaltTag),
-            "Section 4.2.1: a claim name MUST NOT be _sd or ..., so a Disclosure claiming one is malformed.");
+        var failure = TestReadings.SdJwtRefusal(compactSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+
+        Assert.AreEqual(SdJwtWireDefect.MechanismClaimName, failure.Defect, "Section 4.2.1: a claim name MUST NOT be _sd or ..., so a Disclosure claiming one is malformed.");
 
         Assert.Contains(
             mechanismKey,
-            failure.Message,
+            failure.Description,
             StringComparison.Ordinal,
             "The refusal names the mechanism key the Disclosure tried to claim.");
     }
@@ -653,18 +638,13 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintDisclosureCollidingWithPlainSibling();
 
-        FormatException failure = Assert.Throws<FormatException>(
-            () => SdJwtSerializer.ParseToken(
-                compactSdJwt,
-                TestSetup.Base64UrlDecoder,
-                TestSetup.Base64UrlEncoder,
-                Pool,
-                TestSalts.TestSaltTag),
-            "Section 4.2.1: a Disclosure must not claim a name the object already carries in the clear.");
+        var failure = TestReadings.SdJwtRefusal(compactSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+
+        Assert.AreEqual(SdJwtWireDefect.ClaimNameRepeated, failure.Defect, "Section 4.2.1: a Disclosure must not claim a name the object already carries in the clear.");
 
         Assert.Contains(
             NestedSdJwtVcFixtures.FamilyNameClaim,
-            failure.Message,
+            failure.Description,
             StringComparison.Ordinal,
             "The refusal names the claim the Disclosure collided with.");
     }
@@ -682,14 +662,9 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintSdArrayWithNonStringMember();
 
-        _ = Assert.Throws<FormatException>(
-            () => SdJwtSerializer.ParseToken(
-                compactSdJwt,
-                TestSetup.Base64UrlDecoder,
-                TestSetup.Base64UrlEncoder,
-                Pool,
-                TestSalts.TestSaltTag),
-            "Section 7.1 step 3.b.i: the array identifies no digest, so the Disclosure the wire form carries is unreferenced and step 5 refuses the token.");
+        var failure = TestReadings.SdJwtRefusal(compactSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+
+        Assert.AreEqual(SdJwtWireDefect.DisclosureUnreferenced, failure.Defect, "Section 7.1 step 3.b.i: the array identifies no digest, so the Disclosure the wire form carries is unreferenced and step 5 refuses the token.");
     }
 
 
@@ -779,18 +754,13 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintSharedSaltDisclosures();
 
-        FormatException failure = Assert.Throws<FormatException>(
-            () => SdJwtSerializer.ParseToken(
-                compactSdJwt,
-                TestSetup.Base64UrlDecoder,
-                TestSetup.Base64UrlEncoder,
-                Pool,
-                TestSalts.TestSaltTag),
-            "Section 9.3: a new salt is chosen for each claim, so a wire form reusing one is malformed and never parses.");
+        var failure = TestReadings.SdJwtRefusal(compactSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+
+        Assert.AreEqual(SdJwtWireDefect.SaltRepeated, failure.Defect, "Section 9.3: a new salt is chosen for each claim, so a wire form reusing one is malformed and never parses.");
 
         Assert.Contains(
             "9.3",
-            failure.Message,
+            failure.Description,
             StringComparison.Ordinal,
             "The refusal names the clause the wire form breaks.");
     }
@@ -809,14 +779,9 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintRecursiveDisclosureChain(depth: 4000);
 
-        _ = Assert.Throws<FormatException>(
-            () => SdJwtSerializer.ParseToken(
-                compactSdJwt,
-                TestSetup.Base64UrlDecoder,
-                TestSetup.Base64UrlEncoder,
-                Pool,
-                TestSalts.TestSaltTag),
-            "Section 4.2.6: a recursive-Disclosure chain past the parse's stated depth is a refusal, never an unwindable failure.");
+        var failure = TestReadings.SdJwtRefusal(compactSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+
+        Assert.AreEqual(SdJwtWireDefect.NestingTooDeep, failure.Defect, "Section 4.2.6: a recursive-Disclosure chain past the parse's stated depth is a refusal, never an unwindable failure.");
     }
 
 
@@ -919,7 +884,7 @@ internal sealed class SdTokenPathSelectionTests
             presentation = SdJwtSerializer.SerializeToken(selected, TestSetup.Base64UrlEncoder);
         }
 
-        using SdToken<string> received = SdJwtSerializer.ParseToken(
+        using SdToken<string> received = TestReadings.SdJwtToken(
             presentation, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
 
         SdVerificationResult result = await received.VerifyAsync(

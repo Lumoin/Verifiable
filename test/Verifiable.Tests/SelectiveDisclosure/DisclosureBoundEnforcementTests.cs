@@ -801,7 +801,7 @@ internal sealed class DisclosureBoundEnforcementTests
         using SdToken<string> presentationToken = issuedToken.SelectDisclosures(selected, Pool);
         string wireFormat = SdJwtSerializer.SerializeToken(presentationToken, TestSetup.Base64UrlEncoder);
 
-        using SdToken<string> parsed = SdJwtSerializer.ParseToken(
+        using SdToken<string> parsed = TestReadings.SdJwtToken(
             wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
 
         HashSet<string> claimNamesOnTheWire = parsed.Disclosures
@@ -902,7 +902,7 @@ internal sealed class DisclosureBoundEnforcementTests
 
         string wireFormat = $"{jwt}~{givenNameEncoded}~{familyNameEncoded}~{nationalityEncoded}~";
 
-        return SdJwtSerializer.ParseToken(
+        return TestReadings.SdJwtToken(
             wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
     }
 

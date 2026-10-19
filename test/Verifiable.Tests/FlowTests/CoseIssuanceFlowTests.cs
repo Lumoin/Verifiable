@@ -108,7 +108,7 @@ internal sealed class CoseIssuanceFlowTests
 
         //Serialize to CBOR wire format and parse back (simulates network transit).
         using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = TestReadings.CoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
 
         //Verify the signature from the parsed message.
         CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(

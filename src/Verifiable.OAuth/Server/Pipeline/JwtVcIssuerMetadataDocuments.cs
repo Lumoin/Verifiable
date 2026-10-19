@@ -5,7 +5,6 @@ using Verifiable.Core.Outbound;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Federation;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Server.Pipeline;
@@ -308,30 +307,18 @@ public static class JwtVcIssuerMetadataDocuments
             ? JwkJsonReader.SelectSoleKey(jwksBytes, WellKnownJwkValues.UseSigUtf8)
             : JwkJsonReader.SelectKeyByKeyId(jwksBytes, keyId, WellKnownJwkValues.UseSigUtf8);
 
-        if(!selection.IsSelected)
+        if(selection is not { IsSelected: true, Members: { } members })
         {
             return null;
         }
-
-        Dictionary<string, object> jwk = FederationKeyResolver.CopyJwk(selection.Members!);
 
         //A selected key still is not necessarily one CryptoFormatConversions can build: a set of one
         //eligible-but-malformed element (a missing kty, or missing coordinates for its kty) reaches
-        //here Selected. Refuses like every other non-Selected outcome instead of letting the
-        //converter's exception escape into the verification pipeline.
-        try
-        {
-            (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, pool, base64UrlDecoder);
-
-            Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
-
-            return new PublicKeyMemory(keyMaterial, tag);
-        }
-        catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
-        {
-            return null;
-        }
+        //here Selected. The reconstruction's typed refusal refuses like every other non-Selected outcome; a
+        //failure of the decoder beyond its refusal or of the allocator is a fault and surfaces as one.
+        return CryptoFormatConversions.DefaultJwkToAlgorithmConverter(FederationKeyResolver.CopyJwk(members), pool, base64UrlDecoder) is JwkKeyReconstructed reconstructed
+            ? reconstructed.ToPublicKeyMemory()
+            : null;
     }
 
 

@@ -357,7 +357,7 @@ internal sealed class DcqlPresentationFlowTests
         Assert.IsTrue(vpToken.ContainsKey("mdl"));
 
         //Verify the PID issuer signature is still valid from the serialized form.
-        SdToken<string> parsedPid = SdJwtSerializer.ParseToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Encoder, Pool, TestSalts.TestSaltTag);
+        SdToken<string> parsedPid = TestReadings.SdJwtToken(vpToken[EudiPid.DefaultCredentialQueryId], Decoder, Encoder, Pool, TestSalts.TestSaltTag);
         bool pidSignatureValid = await Jws.VerifyAsync(
             parsedPid.IssuerSigned, Decoder, Pool,
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
@@ -492,7 +492,7 @@ internal sealed class DcqlPresentationFlowTests
         Assert.EndsWith("~", wireFormat, "SD-JWT without key binding must end with tilde.");
         Assert.Contains("~", wireFormat);
 
-        SdToken<string> parsed = SdJwtSerializer.ParseToken(wireFormat, Decoder, Encoder, Pool, TestSalts.TestSaltTag);
+        SdToken<string> parsed = TestReadings.SdJwtToken(wireFormat, Decoder, Encoder, Pool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(issuedToken.IssuerSigned, parsed.IssuerSigned);
         Assert.HasCount(issuedToken.Disclosures.Count, parsed.Disclosures);
@@ -802,7 +802,7 @@ internal sealed class DcqlPresentationFlowTests
             wireFormat = SdJwtSerializer.SerializeToken(issued, Encoder);
         }
 
-        return SdJwtSerializer.ParseToken(wireFormat, Decoder, Encoder, Pool, TestSalts.TestSaltTag);
+        return TestReadings.SdJwtToken(wireFormat, Decoder, Encoder, Pool, TestSalts.TestSaltTag);
     }
 
 

@@ -367,7 +367,7 @@ internal static class SdJwtVpFixture
         BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
-        using SdToken<string> token = SdJwtSerializer.ParseToken(
+        using SdToken<string> token = TestReadings.SdJwtToken(
             sdJwtWithoutKb, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, pool, TestSalts.TestSaltTag);
 
         string hashInput = SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder);
@@ -412,7 +412,7 @@ internal static class SdJwtVpFixture
         BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
-        using var token = SdJwtSerializer.ParseToken(
+        using var token = TestReadings.SdJwtToken(
             sdJwtWithoutKb, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, pool, TestSalts.TestSaltTag);
 
         var hashInput = SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder);
@@ -437,7 +437,7 @@ internal static class SdJwtVpFixture
     /// <returns>The presentation.</returns>
     public static string PresentWithKeyBindingJwt(string sdJwtWithoutKb, string compactKeyBindingJwt, BaseMemoryPool pool)
     {
-        using var token = SdJwtSerializer.ParseToken(
+        using var token = TestReadings.SdJwtToken(
             sdJwtWithoutKb, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, pool, TestSalts.TestSaltTag);
 
         return SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder) + compactKeyBindingJwt;

@@ -475,7 +475,7 @@ internal sealed class TestWallet
         string credentialQueryId,
         CancellationToken cancellationToken)
     {
-        using SdToken<string> token = SdJwtSerializer.ParseToken(
+        using SdToken<string> token = TestReadings.SdJwtToken(
             sdJwtWithoutKb, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag);
 
         //Minimal disclosure (data minimization) computed through the same Core engine

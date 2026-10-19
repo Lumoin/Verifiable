@@ -812,7 +812,7 @@ internal sealed class MdocVpTokenVerificationStatusTests
     /// <returns>The encoded MSO map.</returns>
     private static byte[] ReadMobileSecurityObjectBytes(MdocIssuerAuth issuerAuth)
     {
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(
+        using CoseSign1Message parsed = TestReadings.CoseSign1(
             issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), Pool);
 
         EncodedCborItem wrapper = EncodedCborItem.Read(

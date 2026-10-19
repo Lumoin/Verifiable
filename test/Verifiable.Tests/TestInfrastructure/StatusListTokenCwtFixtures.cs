@@ -83,7 +83,7 @@ internal static class StatusListTokenCwtFixtures
         string? contentType = response.Content.Headers.ContentType?.ToString();
         byte[] coseSign1Bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
-        using CoseSign1Message message = CoseSerialization.ParseCoseSign1(coseSign1Bytes, Pool);
+        using CoseSign1Message message = TestReadings.CoseSign1(coseSign1Bytes, Pool);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(message, CoseSerialization.BuildSigStructure, issuerPublic, cancellationToken).ConfigureAwait(false);
         if(!isValid)

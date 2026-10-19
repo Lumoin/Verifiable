@@ -72,7 +72,7 @@ internal sealed class SdJwtSerializerTests
     {
         string sdJwt = $"{Rfc9901IssuerSignedJwt}~";
 
-        using SdToken<string> token = SdJwtSerializer.ParseToken(sdJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdToken<string> token = TestReadings.SdJwtToken(sdJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(Rfc9901IssuerSignedJwt, token.IssuerSigned);
         Assert.IsEmpty(token.Disclosures);
@@ -86,7 +86,7 @@ internal sealed class SdJwtSerializerTests
     {
         string sdJwt = $"{Rfc9901IssuerSignedJwt}~{DisclosureGivenName}~{DisclosureFamilyName}~";
 
-        using SdToken<string> token = SdJwtSerializer.ParseToken(sdJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdToken<string> token = TestReadings.SdJwtToken(sdJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(Rfc9901IssuerSignedJwt, token.IssuerSigned);
         Assert.HasCount(2, token.Disclosures);
@@ -104,7 +104,7 @@ internal sealed class SdJwtSerializerTests
             $"{DisclosureGivenName}~{DisclosureFamilyName}~{DisclosureEmail}~" +
             $"{DisclosureNationalityUs}~{DisclosureNationalityDe}~";
 
-        using SdToken<string> token = SdJwtSerializer.ParseToken(sdJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdToken<string> token = TestReadings.SdJwtToken(sdJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.HasCount(5, token.Disclosures);
         Assert.IsFalse(token.HasKeyBinding);
@@ -118,7 +118,7 @@ internal sealed class SdJwtSerializerTests
             $"{DisclosureGivenName}~{DisclosureFamilyName}~" +
             $"{Rfc9901KeyBindingJwt}";
 
-        using SdToken<string> token = SdJwtSerializer.ParseToken(sdJwtKb, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdToken<string> token = TestReadings.SdJwtToken(sdJwtKb, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(Rfc9901IssuerSignedJwt, token.IssuerSigned);
         Assert.HasCount(2, token.Disclosures);
@@ -132,7 +132,7 @@ internal sealed class SdJwtSerializerTests
     {
         string sdJwtKb = $"{Rfc9901IssuerSignedJwt}~{Rfc9901KeyBindingJwt}";
 
-        using SdToken<string> token = SdJwtSerializer.ParseToken(sdJwtKb, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdToken<string> token = TestReadings.SdJwtToken(sdJwtKb, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.IsEmpty(token.Disclosures);
         Assert.IsTrue(token.HasKeyBinding);
@@ -155,8 +155,8 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void SerializeSdJwtWithDisclosuresProducesValidFormat()
     {
-        using SdDisclosure d1 = SdJwtSerializer.ParseDisclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
-        using SdDisclosure d2 = SdJwtSerializer.ParseDisclosure(DisclosureFamilyName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure d1 = TestReadings.Disclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure d2 = TestReadings.Disclosure(DisclosureFamilyName, Decoder, MemoryPool, TestSalts.TestSaltTag);
 
         using var token = new SdToken<string>(Rfc9901IssuerSignedJwt, [d1, d2]);
 
@@ -170,7 +170,7 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void SerializeSdJwtWithKeyBindingProducesValidFormat()
     {
-        using SdDisclosure d1 = SdJwtSerializer.ParseDisclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure d1 = TestReadings.Disclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
 
         using var token = new SdToken<string>(Rfc9901IssuerSignedJwt, [d1], Rfc9901KeyBindingJwt);
 
@@ -193,13 +193,13 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void RoundTripSdJwtPreservesAllData()
     {
-        using SdDisclosure d1 = SdJwtSerializer.ParseDisclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
-        using SdDisclosure d2 = SdJwtSerializer.ParseDisclosure(DisclosureFamilyName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure d1 = TestReadings.Disclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure d2 = TestReadings.Disclosure(DisclosureFamilyName, Decoder, MemoryPool, TestSalts.TestSaltTag);
 
         using var original = new SdToken<string>(Rfc9901IssuerSignedJwt, [d1, d2]);
         string serialized = $"{Rfc9901IssuerSignedJwt}~{DisclosureGivenName}~{DisclosureFamilyName}~";
 
-        using SdToken<string> parsed = SdJwtSerializer.ParseToken(serialized, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdToken<string> parsed = TestReadings.SdJwtToken(serialized, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(original.IssuerSigned, parsed.IssuerSigned);
         Assert.HasCount(original.Disclosures.Count, parsed.Disclosures);
@@ -216,12 +216,12 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void RoundTripSdJwtKbPreservesAllData()
     {
-        using SdDisclosure d1 = SdJwtSerializer.ParseDisclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure d1 = TestReadings.Disclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
 
         using var original = new SdToken<string>(Rfc9901IssuerSignedJwt, [d1], Rfc9901KeyBindingJwt);
         string serialized = $"{Rfc9901IssuerSignedJwt}~{DisclosureGivenName}~{Rfc9901KeyBindingJwt}";
 
-        using SdToken<string> parsed = SdJwtSerializer.ParseToken(serialized, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdToken<string> parsed = TestReadings.SdJwtToken(serialized, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.AreEqual(original.IssuerSigned, parsed.IssuerSigned);
         Assert.HasCount(original.Disclosures.Count, parsed.Disclosures);
@@ -232,7 +232,7 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void ParseDisclosureExtractsClaimNameAndValue()
     {
-        using SdDisclosure disclosure = SdJwtSerializer.ParseDisclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure disclosure = TestReadings.Disclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.AreEqual("given_name", disclosure.ClaimName);
         Assert.AreEqual("John", disclosure.ClaimValue);
@@ -242,7 +242,7 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void ParseArrayElementDisclosureHasNullClaimName()
     {
-        using SdDisclosure disclosure = SdJwtSerializer.ParseDisclosure(DisclosureNationalityUs, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure disclosure = TestReadings.Disclosure(DisclosureNationalityUs, Decoder, MemoryPool, TestSalts.TestSaltTag);
 
         Assert.IsNull(disclosure.ClaimName);
         Assert.AreEqual("US", disclosure.ClaimValue);
@@ -252,7 +252,7 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void GetSdJwtForHashingExcludesKbJwt()
     {
-        using SdDisclosure d1 = SdJwtSerializer.ParseDisclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure d1 = TestReadings.Disclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
 
         using var tokenWithKb = new SdToken<string>(Rfc9901IssuerSignedJwt, [d1], Rfc9901KeyBindingJwt);
 
@@ -263,50 +263,42 @@ internal sealed class SdJwtSerializerTests
     }
 
 
+    /// <summary>An Issuer-signed JWT that is no compact JWS is refused as such by the reading, never thrown.</summary>
     [TestMethod]
-    public void ParseInvalidJwtThrows()
+    public void ParseInvalidJwtIsRefused()
     {
-        _ = Assert.Throws<FormatException>(() =>
-            SdJwtSerializer.ParseToken("not-a-jwt~", Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag));
+        Assert.AreEqual(
+            SdJwtWireDefect.IssuerJwtNotCompactJws,
+            TestReadings.SdJwtRefusal("not-a-jwt~", Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag).Defect);
     }
 
 
+    /// <summary>An Issuer-signed JWT followed by no separator is refused as such by the reading, never thrown.</summary>
     [TestMethod]
-    public void ParseMissingSeparatorThrows()
+    public void ParseMissingSeparatorIsRefused()
     {
-        _ = Assert.Throws<FormatException>(() =>
-            SdJwtSerializer.ParseToken(Rfc9901IssuerSignedJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag));
+        Assert.AreEqual(
+            SdJwtWireDefect.SeparatorMissing,
+            TestReadings.SdJwtRefusal(Rfc9901IssuerSignedJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag).Defect);
     }
 
 
+    /// <summary>The reading of a value that is no SD-JWT answers its refusal and no token.</summary>
     [TestMethod]
-    public void TryParseReturnsFalseForInvalidInput()
+    public void ReadingRefusesInvalidInput()
     {
-        bool result = SdJwtSerializer.TryParseToken("invalid", Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag, out SdToken<string>? token);
-
-        Assert.IsFalse(result);
-        Assert.IsNull(token);
+        Assert.IsInstanceOfType<SdJwtRefused>(
+            SdJwtSerializer.ParseToken("invalid", Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana));
     }
 
 
+    /// <summary>The reading of an Issuer-signed JWT and its closing separator answers the token it states.</summary>
     [TestMethod]
-    public void TryParseReturnsTrueForValidInput()
+    public void ReadingReadsValidInput()
     {
-        string sdJwt = $"{Rfc9901IssuerSignedJwt}~";
+        using var token = TestReadings.SdJwtToken($"{Rfc9901IssuerSignedJwt}~", Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag);
 
-        //token is an out-parameter target; a using declaration cannot target a variable assigned through
-        //an out parameter after declaration.
-        bool result = SdJwtSerializer.TryParseToken(sdJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag, out SdToken<string>? token);
-
-        try
-        {
-            Assert.IsTrue(result);
-            Assert.IsNotNull(token);
-        }
-        finally
-        {
-            token?.Dispose();
-        }
+        Assert.AreEqual(Rfc9901IssuerSignedJwt, token.IssuerSigned);
     }
 
 
@@ -342,7 +334,7 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void ComputeSdHashProducesNonEmptyResult()
     {
-        using SdDisclosure d1 = SdJwtSerializer.ParseDisclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
+        using SdDisclosure d1 = TestReadings.Disclosure(DisclosureGivenName, Decoder, MemoryPool, TestSalts.TestSaltTag);
         using var token = new SdToken<string>(Rfc9901IssuerSignedJwt, [d1]);
 
         string sdHash = ComputeSdHash(token, "sha-256");

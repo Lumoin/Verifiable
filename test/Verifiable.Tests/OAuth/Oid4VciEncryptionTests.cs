@@ -453,10 +453,7 @@ internal sealed class Oid4VciEncryptionTests
                     jwkDict[member.Key] = member.Value;
                 }
 
-                var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                    jwkDict, Pool, TestSetup.Base64UrlDecoder);
-                Tag recipientTag = Tag.Create(algorithm).With(purpose).With(scheme);
-                using PublicKeyMemory recipientKey = new(keyBytes, recipientTag);
+                using var recipientKey = TestReadings.JwkKey(jwkDict, Pool, TestSetup.Base64UrlDecoder).ToPublicKeyMemory();
 
                 //§10: the JWE alg comes from the JWK's alg member (never hardcoded) and the JWK's
                 //kid — when present — is copied into the JWE protected header. The library has

@@ -629,7 +629,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
         IReadOnlySet<CredentialPath> selectedPaths,
         CancellationToken cancellationToken)
     {
-        using SdToken<string> storedToken = SdJwtSerializer.ParseToken(
+        using SdToken<string> storedToken = TestReadings.SdJwtToken(
             serializedSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
 
         using SdToken<string> presentationToken = storedToken.SelectDisclosures(selectedPaths, Pool).Token;
@@ -690,7 +690,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             vpToken,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(issuerPublicKey),
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -1182,7 +1182,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
         var (serializedSdJwt, issuerPublicKey) = await NestedSdJwtVcFixtures.MintHolderBoundCredentialAsync(
             holderPublicKey, NestedSdJwtVcFixtures.Vct, cancellationToken).ConfigureAwait(false);
 
-        using var storedToken = SdJwtSerializer.ParseToken(
+        using var storedToken = TestReadings.SdJwtToken(
             serializedSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
         using var presentationToken = storedToken.SelectDisclosures(
             new HashSet<CredentialPath> { CredentialPath.FromJsonPointer(NestedSdJwtVcFixtures.NestedFamilyNamePointer) }, Pool).Token;
@@ -1478,7 +1478,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             vpToken,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(issuerPublicKey),
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -1508,7 +1508,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             vpToken,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: static (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null),
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,

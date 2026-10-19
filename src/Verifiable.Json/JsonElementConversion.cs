@@ -1,4 +1,6 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using Verifiable.JCose;
 
 namespace Verifiable.Json;
 
@@ -17,7 +19,7 @@ internal static class JsonElementConversion
     /// <list type="bullet">
     /// <item><description><see cref="JsonValueKind.String"/> -> <see cref="string"/>.</description></item>
     /// <item><description><see cref="JsonValueKind.True"/> and <see cref="JsonValueKind.False"/> -> <see cref="bool"/>.</description></item>
-    /// <item><description><see cref="JsonValueKind.Number"/> -> <see cref="int"/> if representable, then <see cref="long"/>, otherwise <see cref="decimal"/>.</description></item>
+    /// <item><description><see cref="JsonValueKind.Number"/> -> <see cref="int"/> if representable, then <see cref="long"/>, otherwise the number held exactly (<see cref="NarrowNumber"/>).</description></item>
     /// <item><description><see cref="JsonValueKind.Null"/> -> <see langword="null"/>.</description></item>
     /// <item><description><see cref="JsonValueKind.Object"/> -> <see cref="Dictionary{TKey,TValue}"/> of string to object.</description></item>
     /// <item><description><see cref="JsonValueKind.Array"/> -> <see cref="List{T}"/> of object.</description></item>
@@ -52,26 +54,40 @@ internal static class JsonElementConversion
 
 
     /// <summary>
-    /// Narrows a JSON number to the smallest fitting CLR integer type,
-    /// falling back to <see cref="decimal"/> for non-integer values.
-    /// The narrowing order is <see cref="int"/> then <see cref="long"/>
-    /// then <see cref="decimal"/>, matching the behavior of
+    /// Narrows a JSON number to the smallest fitting CLR integer type, and holds any other number exactly: an <see cref="int"/>
+    /// when the token is an integer one holds, a <see cref="long"/> when one holds it, and otherwise the value
+    /// <see cref="DecimalNumber.ToClaimValue"/> boxes the number as - a <see cref="long"/> for a whole number of another spelling
+    /// a long holds, a <see cref="decimal"/> for a number a decimal holds exactly, and the <see cref="DecimalNumber"/> itself for
+    /// any other, so a number past a decimal's range or precision is never refused nor rounded. The same narrowing as
     /// <see cref="ManualJsonReader.ReadNumber"/>.
     /// </summary>
+    /// <param name="element">The number.</param>
+    /// <returns>The boxed number.</returns>
     internal static object NarrowNumber(JsonElement element)
     {
-        if(element.TryGetInt32(out int i))
+        if(element.TryGetInt32(out var whole))
         {
-            return i;
+            return whole;
         }
 
-        if(element.TryGetInt64(out long l))
+        if(element.TryGetInt64(out var wide))
         {
-            return l;
+            return wide;
         }
 
-        return element.GetDecimal();
+        return ExactNumberOf(JsonMarshal.GetRawUtf8Value(element));
     }
+
+
+    /// <summary>
+    /// The value a JSON number token boxes as when no <see cref="int"/> or <see cref="long"/> holds its spelling, held exactly
+    /// (<see cref="DecimalNumber.ToClaimValue"/>).
+    /// </summary>
+    /// <param name="utf8Number">The number token's UTF-8 bytes, which the JSON reader has read as one number token.</param>
+    /// <returns>The boxed number.</returns>
+    internal static object ExactNumberOf(ReadOnlySpan<byte> utf8Number) =>
+        DecimalNumber.FromJsonNumber(utf8Number)?.ToClaimValue()
+            ?? throw new InvalidOperationException("The JSON reader read as a number a token that is no JSON number.");
 
 
     //Materializes an object/array (and everything nested within) using an explicit

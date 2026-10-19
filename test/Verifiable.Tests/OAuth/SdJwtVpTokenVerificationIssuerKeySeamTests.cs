@@ -71,7 +71,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: RecordingResolver,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -113,7 +113,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: RecordingResolver,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -167,7 +167,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: ResolveIssuerKeyThroughX5c,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -222,7 +222,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: ResolveIssuerKeyThroughX5c,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -266,7 +266,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: RecordingResolver,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -314,7 +314,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: resolveIssuerKey,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -361,7 +361,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: resolveIssuerKey,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -414,7 +414,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: resolveIssuerKey,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -689,7 +689,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             resolveIssuerKey: resolveIssuerKey,
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,

@@ -122,7 +122,7 @@ internal sealed class TrustMarkDelegationEvaluatorTests
 
         Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
         TrustMarkDelegationFailureContext ctx = (TrustMarkDelegationFailureContext)claim.Context;
-        Assert.AreEqual("DelegationSubjectMismatch", ctx.Reason);
+        Assert.AreEqual(TrustMarkDelegationFailureReason.DelegationSubjectMismatch, ctx.Reason);
     }
 
 
@@ -174,7 +174,7 @@ internal sealed class TrustMarkDelegationEvaluatorTests
 
         Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
         TrustMarkDelegationFailureContext ctx = (TrustMarkDelegationFailureContext)claim.Context;
-        Assert.AreEqual("OwnerNotRegistered", ctx.Reason);
+        Assert.AreEqual(TrustMarkDelegationFailureReason.OwnerNotRegistered, ctx.Reason);
     }
 
 
@@ -226,7 +226,7 @@ internal sealed class TrustMarkDelegationEvaluatorTests
 
         Assert.AreEqual(ClaimOutcome.Failure, claim.Outcome);
         TrustMarkDelegationFailureContext ctx = (TrustMarkDelegationFailureContext)claim.Context;
-        Assert.AreEqual("DelegationIssuedInFuture", ctx.Reason);
+        Assert.AreEqual(TrustMarkDelegationFailureReason.DelegationIssuedInFuture, ctx.Reason);
     }
 
 
@@ -261,9 +261,9 @@ internal sealed class TrustMarkDelegationEvaluatorTests
     /// <param name="reason">The refusal's reason.</param>
     /// <returns>A task completing once the delegation is evaluated.</returns>
     [TestMethod]
-    [DataRow("keyed-by-owner", "OwnerNotRegistered", DisplayName = "Owners keyed by the owner's identifier")]
-    [DataRow("another-owner", "OwnerMismatch", DisplayName = "Another owner declared for the type")]
-    public async Task TheOwnerIsTheOneDeclaredForTheMarksType(string ownersCase, string reason)
+    [DataRow("keyed-by-owner", TrustMarkDelegationFailureReason.OwnerNotRegistered, DisplayName = "Owners keyed by the owner's identifier")]
+    [DataRow("another-owner", TrustMarkDelegationFailureReason.OwnerMismatch, DisplayName = "Another owner declared for the type")]
+    public async Task TheOwnerIsTheOneDeclaredForTheMarksType(string ownersCase, TrustMarkDelegationFailureReason reason)
     {
         var now = TestClock.CanonicalEpoch;
         using var subject = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/subject"));

@@ -1604,7 +1604,7 @@ internal sealed class HostedAuthorizationServer : IClientRegistrationStore
             encoder: TestSetup.Base64UrlEncoder,
             resolveIssuerKey: resolveIssuerKey,
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                 t, TestSetup.Base64UrlEncoder),
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
@@ -1714,7 +1714,7 @@ internal sealed class HostedAuthorizationServer : IClientRegistrationStore
             resolveDidVerificationKey: resolveDidVerificationKey,
             resolveIssuerKey: resolveIssuerKey,
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
-                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
+                s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag, WellKnownHashAlgorithms.Sha256Iana),
             computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                 t, TestSetup.Base64UrlEncoder),
             computeDigest: MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,

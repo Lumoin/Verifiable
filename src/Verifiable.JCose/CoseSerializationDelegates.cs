@@ -47,19 +47,70 @@ public delegate EncodedCoseSign1 SerializeCoseSign1Delegate(CoseSign1Message mes
 
 
 /// <summary>
-/// Delegate for parsing COSE_Sign1 bytes into a message.
+/// Delegate for reading COSE_Sign1 bytes into a message.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The protected header and signature inside the parsed message are
-/// pool-routed semantic carriers; the caller owns the returned message
+/// The protected header and signature inside the read message are
+/// pool-routed semantic carriers; the caller owns the message the reading answers
 /// and disposes it.
 /// </para>
 /// </remarks>
 /// <param name="coseSign1Bytes">The CBOR-encoded COSE_Sign1 bytes.</param>
 /// <param name="pool">Memory pool the inner carriers rent their buffers from.</param>
-/// <returns>The parsed COSE_Sign1 message.</returns>
-public delegate CoseSign1Message ParseCoseSign1Delegate(ReadOnlyMemory<byte> coseSign1Bytes, BaseMemoryPool pool);
+/// <returns>
+/// The message read (<see cref="CoseSign1Read"/>), which the caller owns; or the refusal of bytes that are no COSE_Sign1 of the
+/// shape RFC 9052 section 4.2 defines (<see cref="CoseSign1Refused"/>). The reading answers every refusal of the bytes so, never
+/// with an exception: an exception out of it is a fault of the reading or of the allocator, cancellation among them.
+/// </returns>
+public delegate CoseSign1Reading ParseCoseSign1Delegate(ReadOnlyMemory<byte> coseSign1Bytes, BaseMemoryPool pool);
+
+
+/// <summary>The part of a COSE_Sign1 wire form (RFC 9052 section 4.2) its reading refuses.</summary>
+public enum CoseSign1Defect
+{
+    /// <summary>The bytes are not one well-formed CBOR data item: truncated, malformed, or past a size the reader admits.</summary>
+    NotWellFormedCbor,
+
+    /// <summary>The item carries no COSE_Sign1 tag (18) where the reading requires one, or carries another tag.</summary>
+    NotTaggedCoseSign1,
+
+    /// <summary>The item is no definite-length array of the four elements a COSE_Sign1 is.</summary>
+    NotAnArrayOfFour,
+
+    /// <summary>The protected header is no byte string.</summary>
+    ProtectedHeaderNotAByteString,
+
+    /// <summary>The unprotected header is no map.</summary>
+    UnprotectedHeaderNotAMap,
+
+    /// <summary>A label of the unprotected header is no integer the reading holds (RFC 9052 section 3.1 labels the reading supports).</summary>
+    HeaderLabelNotAnInteger,
+
+    /// <summary>The payload is no byte string, nor the nil a detached payload is where the reading admits one.</summary>
+    PayloadNotAByteString,
+
+    /// <summary>The signature is no byte string.</summary>
+    SignatureNotAByteString,
+
+    /// <summary>Bytes follow the COSE_Sign1 item, so the bytes are not one COSE_Sign1.</summary>
+    TrailingBytes
+}
+
+
+/// <summary>What the reading of a COSE_Sign1 wire form answers: the message, or the refusal of the bytes.</summary>
+public abstract record CoseSign1Reading;
+
+
+/// <summary>The COSE_Sign1 message the bytes state, read; the receiver owns and disposes it.</summary>
+/// <param name="Message">The message.</param>
+public sealed record CoseSign1Read(CoseSign1Message Message) : CoseSign1Reading;
+
+
+/// <summary>The refusal of bytes that are no COSE_Sign1 of the shape RFC 9052 section 4.2 defines.</summary>
+/// <param name="Defect">The part refused.</param>
+/// <param name="Description">The refusal's description.</param>
+public sealed record CoseSign1Refused(CoseSign1Defect Defect, string Description) : CoseSign1Reading;
 
 
 /// <summary>

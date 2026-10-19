@@ -214,7 +214,7 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
                 //Verbose captures, it does not reconstruct: the threaded payload must be
                 //byte-identical to the COSE_Sign1 payload the signature actually covers.
-                using CoseSign1Message message = CoseSerialization.ParseCoseSign1(
+                using CoseSign1Message message = TestReadings.CoseSign1(
                     signed.IssuerSigned.IssuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), BaseMemoryPool.Shared);
                 Assert.IsTrue(
                     message.Payload.Span.SequenceEqual(signedMsoPayload.Span),

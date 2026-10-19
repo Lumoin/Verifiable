@@ -80,7 +80,7 @@ internal sealed class SdTokenDcqlAdapterTests
         string jwt = CreateMinimalJwt(payloadJson);
         string wireFormat = $"{jwt}~{givenNameEncoded}~{employerEncoded}~{familyNameEncoded}~";
 
-        return SdJwtSerializer.ParseToken(
+        return TestReadings.SdJwtToken(
             wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
     }
 
@@ -107,7 +107,7 @@ internal sealed class SdTokenDcqlAdapterTests
         string jwt = CreateMinimalJwt(payloadJson);
         string wireFormat = $"{jwt}~{givenNameEncoded}~";
 
-        return SdJwtSerializer.ParseToken(
+        return TestReadings.SdJwtToken(
             wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
     }
 

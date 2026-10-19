@@ -4754,8 +4754,8 @@ countingMetadataBuilder
             }
         }
 
-        using PublicKeyMemory publishedKey = DpopJwkUtilities.PublicKeyFromJwk(
-            jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+        using PublicKeyMemory publishedKey = TestReadings.PublicKeyOf(DpopJwkUtilities.PublicKeyFromJwk(
+            jwk, WellKnownJwaValues.Es256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
         ReadOnlySpan<byte> text = "key set signature check"u8;
         using IMemoryOwner<byte> message = BaseMemoryPool.Shared.Rent(text.Length);
         text.CopyTo(message.Memory.Span);

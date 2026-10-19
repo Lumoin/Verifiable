@@ -138,7 +138,7 @@ internal sealed class CosePresentationFlowTests
 
         //Verifier decodes the COSE bytes from the data: URL, parses, and verifies the signature.
         byte[] decodedCose = Convert.FromBase64String(envelopedId[VcCoseDataUrlPrefix.Length..]);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(decodedCose, BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = TestReadings.CoseSign1(decodedCose, BaseMemoryPool.Shared);
 
         CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
             parsed,

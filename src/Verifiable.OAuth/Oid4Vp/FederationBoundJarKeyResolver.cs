@@ -155,7 +155,8 @@ public static class FederationBoundJarKeyResolver
     /// subject's decoded <c>jwks</c> claim by the library's one JWK Set
     /// selection (<see cref="FederationKeyResolver"/>), the set judged whole:
     /// the key of the JAR header's <c>kid</c>, or the set's sole signing key
-    /// when the header names none (RFC 7515 section 4.1.4); a set holding an
+    /// when the header names none (RFC 7515 section 4.1.4); a header whose
+    /// <c>kid</c> is of another JSON type than a string, a set holding an
     /// element that is no object, a <c>kid</c> on more than one key, more than
     /// one key with no <c>kid</c> named, private or symmetric material, or a
     /// selected key the library reconstructs no key from resolves no key.
@@ -182,8 +183,15 @@ public static class FederationBoundJarKeyResolver
             return null;
         }
 
-        var targetKid = jarHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out var kidObj) && kidObj is string kid ? kid : null;
+        //RFC 7515 section 4.1.4: a kid is a case-sensitive string. A header carrying one of another JSON type names no key, and is
+        //never read as a header naming none, which would select the set's sole key in its stead.
+        var hasKid = jarHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out var kidObj);
 
-        return FederationKeyResolver.SigningKeyOfSet(jwksClaim, targetKid, base64UrlDecoder, memoryPool);
+        if(hasKid && kidObj is not string)
+        {
+            return null;
+        }
+
+        return FederationKeyResolver.SigningKeyOfSet(jwksClaim, kidObj as string, base64UrlDecoder, memoryPool);
     }
 }

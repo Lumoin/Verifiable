@@ -102,32 +102,20 @@ internal sealed class CryptoFormatConversionsBrainpoolJwkTests
                 [WellKnownJwkMemberNames.Y] = jwk.Y!
             };
 
-            //keyMaterialOwner is a tuple-deconstruction target, disposed in the finally block below because a
-            //using declaration cannot target one.
-            (CryptoAlgorithm roundTrippedAlgorithm, Purpose roundTrippedPurpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterialOwner) =
-                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                    jwkDictionary,
-                    BaseMemoryPool.Shared,
-                    TestSetup.Base64UrlDecoder);
+            var roundTripped = TestReadings.JwkKey(jwkDictionary, BaseMemoryPool.Shared, TestSetup.Base64UrlDecoder);
+            using var keyMaterialOwner = roundTripped.KeyMaterial;
 
-            try
-            {
-                Assert.AreEqual(expectedAlgorithm, roundTrippedAlgorithm,
-                    "JWK crv resolution must return the Brainpool algorithm we started with.");
-                Assert.AreEqual(Purpose.Verification, roundTrippedPurpose);
-                Assert.AreEqual(EncodingScheme.EcCompressed, scheme);
+            Assert.AreEqual(expectedAlgorithm, roundTripped.Algorithm,
+                "JWK crv resolution must return the Brainpool algorithm we started with.");
+            Assert.AreEqual(Purpose.Verification, roundTripped.Purpose);
+            Assert.AreEqual(EncodingScheme.EcCompressed, roundTripped.Scheme);
 
-                //The compressed form produced by the round-trip must match the
-                //original — proving the JWK {x, y} → compressed SEC1 path round-trips
-                //through the Brainpool decompression math added in Q.2.X.
-                Assert.IsTrue(
-                    keyMaterialOwner.Memory.Span.SequenceEqual(keyMaterial.PublicKey.AsReadOnlySpan()),
-                    "Compressed key material recovered from JWK x/y must match the original compressed public key.");
-            }
-            finally
-            {
-                keyMaterialOwner.Dispose();
-            }
+            //The compressed form produced by the round-trip must match the
+            //original — proving the JWK {x, y} → compressed SEC1 path round-trips
+            //through the Brainpool decompression math added in Q.2.X.
+            Assert.IsTrue(
+                keyMaterialOwner.Memory.Span.SequenceEqual(keyMaterial.PublicKey.AsReadOnlySpan()),
+                "Compressed key material recovered from JWK x/y must match the original compressed public key.");
         }
         finally
         {

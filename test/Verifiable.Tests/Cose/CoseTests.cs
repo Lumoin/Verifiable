@@ -220,7 +220,7 @@ internal sealed class CoseTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = TestReadings.CoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
 
         Assert.IsTrue(message.ProtectedHeader.AsReadOnlySpan().SequenceEqual(parsed.ProtectedHeader.AsReadOnlySpan()), "Protected header must round-trip.");
         Assert.IsTrue(message.Payload.Span.SequenceEqual(parsed.Payload.Span), "Payload must round-trip.");
@@ -268,7 +268,7 @@ internal sealed class CoseTests
         Assert.AreEqual(0, message.ProtectedHeader.Length, "Precondition: the signed message's own protected header is genuinely zero-length.");
 
         using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = TestReadings.CoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
 
         Assert.AreEqual(0, parsed.ProtectedHeader.Length, "A genuinely zero-length protected header must parse, not throw on a zero-length pool rental.");
 
@@ -299,7 +299,7 @@ internal sealed class CoseTests
         writer.WriteEndArray();
         byte[] wireBytes = writerBuffer.WrittenSpan.ToArray();
 
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1AllowingNilPayload(wireBytes, BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = TestReadings.CoseSign1AllowingNilPayload(wireBytes, BaseMemoryPool.Shared);
 
         Assert.AreEqual(0, parsed.ProtectedHeader.Length, "A genuinely zero-length protected header must parse, not throw on a zero-length pool rental.");
         Assert.IsTrue(parsed.Payload.IsEmpty, "The nil payload sentinel must still decode to the detached (empty) form.");
