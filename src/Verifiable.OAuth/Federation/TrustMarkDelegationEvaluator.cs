@@ -32,18 +32,26 @@ public static class TrustMarkDelegationEvaluator
     /// <summary>
     /// Evaluates a mark carrying no <c>delegation</c> claim (§7.3): "If the trust_mark_type of the instance appears in the
     /// trust_mark_owners Claim in the Trust Anchor's Entity Configuration, then the instance MUST contain a delegation Claim",
-    /// so a mark of a type the Trust Anchor declares an owner of fails as a delegation required and absent; a mark of any other
-    /// type is not delegated and the pathway does not apply.
+    /// so a mark of a type the Trust Anchor declares an owner of fails as a delegation required and absent, and a mark whose
+    /// owner declaration the Trust Anchor carries malformed - a <c>trust_mark_owners</c> claim that is no object, or a declaration
+    /// of the type that is no object of a string <c>sub</c> and an object <c>jwks</c> - fails as that, since whether its type
+    /// requires a delegation is unknown; only a mark of a type the Trust Anchor's well-formed claim does not list, or a Trust
+    /// Anchor carrying no such claim, is not delegated, and the pathway does not apply.
     /// </summary>
     /// <param name="mark">The mark.</param>
     /// <param name="chain">The trust chain whose Trust Anchor declares the owners.</param>
-    /// <returns>The not-applicable claim, or the failure of a required delegation.</returns>
-    public static Claim EvaluateAbsent(TrustMark mark, TrustChain chain)
+    /// <returns>The not-applicable claim, or the failure of a required delegation or of a malformed owner declaration.</returns>
+    internal static Claim EvaluateAbsent(TrustMark mark, TrustChain chain)
     {
         ArgumentNullException.ThrowIfNull(mark);
         ArgumentNullException.ThrowIfNull(chain);
 
-        return OwnerListingOf(chain, mark.MarkId) is TrustMarkOwnerNotListed ? NotApplicable() : BuildFailure(mark, "DelegationRequired");
+        return OwnerListingOf(chain, mark.MarkId) switch
+        {
+            TrustMarkOwnerNotListed => NotApplicable(),
+            TrustMarkOwnerListed => BuildFailure(mark, TrustMarkDelegationFailureReason.DelegationRequired),
+            _ => BuildFailure(mark, TrustMarkDelegationFailureReason.OwnerDeclarationMalformed)
+        };
     }
 
 
@@ -76,51 +84,51 @@ public static class TrustMarkDelegationEvaluator
         //THIS issuer for this mark id.
         if(!string.Equals(delegation.Issuer.Value, mark.Issuer.Value, StringComparison.Ordinal))
         {
-            return BuildFailure(mark, "DelegationSubjectMismatch");
+            return BuildFailure(mark, TrustMarkDelegationFailureReason.DelegationSubjectMismatch);
         }
 
         //(2) delegation.id MUST equal mark.id.
         if(!string.Equals(delegation.MarkId, mark.MarkId, StringComparison.Ordinal))
         {
-            return BuildFailure(mark, "DelegationIdMismatch");
+            return BuildFailure(mark, TrustMarkDelegationFailureReason.DelegationIdMismatch);
         }
 
         //(3) The Trust Anchor's trust_mark_owners claim declares, under the mark's type, the owner whose keys validate the
-        //delegation; a type it declares no owner of leaves the delegation nothing to validate against, and a declaration that is
-        //no object of a sub and a jwks (§3.1.2) declares no owner.
+        //delegation; a type it declares no owner of leaves the delegation nothing to validate against, and a claim that is no
+        //object, or a declaration that is no object of a sub and a jwks (§3.1.2), declares no owner and is malformed.
         var listing = OwnerListingOf(chain, mark.MarkId);
         if(listing is TrustMarkOwnerNotListed)
         {
-            return BuildFailure(mark, "OwnerNotRegistered");
+            return BuildFailure(mark, TrustMarkDelegationFailureReason.OwnerNotRegistered);
         }
 
         if(listing is not TrustMarkOwnerListed listed)
         {
-            return BuildFailure(mark, "OwnerDeclarationMalformed");
+            return BuildFailure(mark, TrustMarkDelegationFailureReason.OwnerDeclarationMalformed);
         }
 
         //(4) signature MUST verify against one of the declared owner's keys (pre-computed).
         if(!delegationSignatureVerified)
         {
-            return BuildFailure(mark, "DelegationSignatureFailed");
+            return BuildFailure(mark, TrustMarkDelegationFailureReason.DelegationSignatureFailed);
         }
 
         //(5) delegation.iss MUST be the owner the Trust Anchor declares for the mark's type.
         if(!string.Equals(delegation.Owner.Value, listed.Owner, StringComparison.Ordinal))
         {
-            return BuildFailure(mark, "OwnerMismatch");
+            return BuildFailure(mark, TrustMarkDelegationFailureReason.OwnerMismatch);
         }
 
         //(6) delegation.exp (if present) MUST be in the future (with skew tolerance).
         if(delegation.ExpiresAt is { } exp && exp.CompareToEarlierBy(now, clockSkew) <= 0)
         {
-            return BuildFailure(mark, "DelegationExpired");
+            return BuildFailure(mark, TrustMarkDelegationFailureReason.DelegationExpired);
         }
 
         //(7) §7.2.2: the current time MUST be after the delegation's iat (with skew tolerance).
         if(delegation.IssuedAt.CompareToLaterBy(now, clockSkew) > 0)
         {
-            return BuildFailure(mark, "DelegationIssuedInFuture");
+            return BuildFailure(mark, TrustMarkDelegationFailureReason.DelegationIssuedInFuture);
         }
 
         return new Claim(WellKnownFederationClaimIds.TrustMarkDelegationValid, ClaimOutcome.Success);
@@ -129,8 +137,10 @@ public static class TrustMarkDelegationEvaluator
 
     /// <summary>
     /// The Trust Anchor's declaration of the owner of a Trust Mark type (§3.1.2, <c>trust_mark_owners</c>), the claim read from
-    /// the chain's last statement, the Trust Anchor's Entity Configuration, keyed by the type: not listed, listed with its owner
-    /// and keys, or listed as no object of a string <c>sub</c> and an object <c>jwks</c>.
+    /// the chain's last statement, the Trust Anchor's Entity Configuration, keyed by the type: not listed, when the Trust Anchor
+    /// carries no such claim or its claim does not list the type; listed with its owner and keys; or malformed, when the claim
+    /// the Trust Anchor carries is no JSON object or its declaration of the type is no object of a string <c>sub</c> and an
+    /// object <c>jwks</c>. A malformed claim is never read as an absent one.
     /// </summary>
     /// <param name="chain">The trust chain.</param>
     /// <param name="markType">The Trust Mark type identifier.</param>
@@ -139,9 +149,17 @@ public static class TrustMarkDelegationEvaluator
     {
         if(chain.Statements.Count == 0
             || chain.Statements[^1] is not EntityConfiguration anchorConfig
-            || !anchorConfig.Payload.TryGetValue(WellKnownFederationClaimNames.TrustMarkOwners, out var ownersObj)
-            || ownersObj is not IReadOnlyDictionary<string, object> ownersMap
-            || !ownersMap.TryGetValue(markType, out var declaration))
+            || !anchorConfig.Payload.TryGetValue(WellKnownFederationClaimNames.TrustMarkOwners, out var ownersObj))
+        {
+            return new TrustMarkOwnerNotListed();
+        }
+
+        if(ownersObj is not IReadOnlyDictionary<string, object> ownersMap)
+        {
+            return new TrustMarkOwnerDeclarationMalformed();
+        }
+
+        if(!ownersMap.TryGetValue(markType, out var declaration))
         {
             return new TrustMarkOwnerNotListed();
         }
@@ -152,7 +170,7 @@ public static class TrustMarkDelegationEvaluator
             && entry.TryGetValue(WellKnownFederationClaimNames.Jwks, out var jwks)
             && jwks is IReadOnlyDictionary<string, object>
                 ? new TrustMarkOwnerListed(owner, jwks)
-                : new TrustMarkOwnerListedMalformed();
+                : new TrustMarkOwnerDeclarationMalformed();
     }
 
 
@@ -160,7 +178,7 @@ public static class TrustMarkDelegationEvaluator
     /// <param name="mark">The mark.</param>
     /// <param name="reason">The reason.</param>
     /// <returns>The claim.</returns>
-    private static Claim BuildFailure(TrustMark mark, string reason) =>
+    private static Claim BuildFailure(TrustMark mark, TrustMarkDelegationFailureReason reason) =>
         new(
             WellKnownFederationClaimIds.TrustMarkDelegationValid,
             ClaimOutcome.Failure,
@@ -188,5 +206,8 @@ internal sealed record TrustMarkOwnerNotListed : TrustMarkOwnerListing;
 internal sealed record TrustMarkOwnerListed(string Owner, object Jwks) : TrustMarkOwnerListing;
 
 
-/// <summary>The Trust Anchor lists the type with a declaration that is no object of a string <c>sub</c> and an object <c>jwks</c>.</summary>
-internal sealed record TrustMarkOwnerListedMalformed : TrustMarkOwnerListing;
+/// <summary>
+/// The Trust Anchor's <c>trust_mark_owners</c> claim is no JSON object, or lists the type with a declaration that is no object of
+/// a string <c>sub</c> and an object <c>jwks</c>.
+/// </summary>
+internal sealed record TrustMarkOwnerDeclarationMalformed : TrustMarkOwnerListing;

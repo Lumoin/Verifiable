@@ -3433,11 +3433,9 @@ public static class JwkJsonReader
             return JwkSelectionResult.MalformedDocument();
         }
 
-        var carriesPrivateOrSymmetricMember = false;
+        var judgement = new JwkSetJudgement(keyId is not null);
         var selectedStart = -1;
         var selectedEnd = -1;
-        var eligibleMatchCount = 0;
-        var keyIdMatchCount = 0;
 
         //A use whose bytes are no well-formed UTF-8 (RFC 8259 section 8.1) spells no use, so no key is eligible for it, a key
         //carrying no use of its own included; the walk still judges every element, so its refusals keep their precedence.
@@ -3469,53 +3467,28 @@ public static class JwkJsonReader
 
             var candidate = json[objectStart..objectEnd];
 
-            if(!carriesPrivateOrSymmetricMember && ElementCarriesPrivateOrSymmetricMember(candidate))
+            //The one whole-set judgement every selection of a JWK Set shares, whatever the set is read from.
+            if(judgement.Observe(
+                ElementCarriesPrivateOrSymmetricMember(candidate),
+                keyId is not null && KeyIdMatches(candidate, keyId),
+                filterSpellsAUse && IsUseEligible(candidate, publicKeyUse)))
             {
-                carriesPrivateOrSymmetricMember = true;
-            }
-
-            var isUseEligible = filterSpellsAUse && IsUseEligible(candidate, publicKeyUse);
-
-            if(keyId is not null)
-            {
-                if(KeyIdMatches(candidate, keyId))
-                {
-                    keyIdMatchCount++;
-                    if(keyIdMatchCount == 1 && isUseEligible)
-                    {
-                        selectedStart = objectStart;
-                        selectedEnd = objectEnd;
-                    }
-                }
-            }
-            else if(isUseEligible)
-            {
-                eligibleMatchCount++;
-                if(eligibleMatchCount == 1)
-                {
-                    selectedStart = objectStart;
-                    selectedEnd = objectEnd;
-                }
+                selectedStart = objectStart;
+                selectedEnd = objectEnd;
             }
 
             cursor = objectEnd;
         }
 
-        if(carriesPrivateOrSymmetricMember)
+        return judgement.Outcome switch
         {
-            return JwkSelectionResult.PrivateOrSymmetricMemberPresent();
-        }
-
-        var matchCount = keyId is not null ? keyIdMatchCount : eligibleMatchCount;
-
-        return matchCount switch
-        {
-            0 => JwkSelectionResult.NoMatch(),
-            1 when selectedStart < 0 => JwkSelectionResult.NoMatch(),
-            1 => ExtractJwkStringMembersDecoded(json[selectedStart..selectedEnd]) is { } members
+            JwkSelectionOutcome.Selected => ExtractJwkStringMembersDecoded(json[selectedStart..selectedEnd]) is { } members
                 ? JwkSelectionResult.Selected(members)
                 : JwkSelectionResult.MalformedDocument(),
-            _ => JwkSelectionResult.MultipleKeysMatched()
+            JwkSelectionOutcome.NoMatch => JwkSelectionResult.NoMatch(),
+            JwkSelectionOutcome.MultipleKeysMatched => JwkSelectionResult.MultipleKeysMatched(),
+            JwkSelectionOutcome.PrivateOrSymmetricMemberPresent => JwkSelectionResult.PrivateOrSymmetricMemberPresent(),
+            var outcome => throw new InvalidOperationException($"The key set's judgement answered {outcome}, an outcome it never answers.")
         };
     }
 

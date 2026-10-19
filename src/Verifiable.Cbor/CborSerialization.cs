@@ -107,129 +107,142 @@ public static class CoseSerialization
 
 
     /// <summary>
-    /// Gets a delegate that parses COSE_Sign1 bytes into a message.
+    /// Gets a delegate that reads tagged COSE_Sign1 bytes (RFC 9052 section 4.2, tag 18) into a message whose payload is attached,
+    /// the unprotected header's values converted to CLR values. Its refusals are typed (<see cref="CoseSign1Refused"/>): bytes that
+    /// are not one well-formed CBOR item, no tag 18, no array of four, a header, payload or signature of another kind, a label that
+    /// is no integer, or bytes after the item.
     /// </summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of protectedHeaderCarrier and signatureCarrier transfers to the returned CoseSign1Message; the caller disposes the message.")]
     public static ParseCoseSign1Delegate ParseCoseSign1 { get; } = static (coseSign1Bytes, pool) =>
-    {
-        var reader = new CborReader(coseSign1Bytes, CborOptions.Lax);
-
-        //Read and validate tag.
-        CborTag tag = reader.ReadTag();
-        if((int)tag.Value != CoseTags.Sign1)
-        {
-            throw new InvalidOperationException($"Expected COSE_Sign1 tag (18), got {(int)tag.Value}.");
-        }
-
-        //Read array.
-        int? arrayLength = reader.ReadStartArray();
-        if(arrayLength != 4)
-        {
-            throw new InvalidOperationException($"COSE_Sign1 must have 4 elements, got {arrayLength}.");
-        }
-
-        //Protected header — copy CborReader's heap byte[] into a pool-rented buffer wrapped in the
-        //semantic carrier via EncodedCoseProtectedHeader.FromBytes, which routes a genuinely
-        //zero-length header (RFC 9052 §3's empty_or_serialized_map, bstr .size 0 arm) through the
-        //shared EmptyMemoryOwner singleton rather than a bare pool.Rent(0), which throws.
-        byte[] protectedHeaderBytes = reader.ReadByteString();
-        EncodedCoseProtectedHeader protectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(protectedHeaderBytes, pool);
-
-        //Unprotected header.
-        Dictionary<int, object>? unprotectedHeader = null;
-        int? mapLength = reader.ReadStartMap();
-        if(mapLength > 0)
-        {
-            unprotectedHeader = [];
-            for(int i = 0; i < mapLength; i++)
-            {
-                int key = reader.ReadInt32();
-                object? value = CborValueConverter.ReadValue(reader);
-                if(value is not null)
-                {
-                    unprotectedHeader[key] = value;
-                }
-            }
-        }
-        reader.ReadEndMap();
-
-        //Payload (borrowed; the message's lifetime brackets the caller's
-        //use of this returned reference).
-        byte[] payload = reader.ReadByteString();
-
-        //Signature — route through pool into a Signature carrier. The
-        //signature carries a tag the verifier inspects; reuse the signing
-        //tag conventions where possible. Here we use a generic
-        //"signature value" Tag composition.
-        byte[] signature = reader.ReadByteString();
-        IMemoryOwner<byte> signatureOwner = pool.Rent(signature.Length);
-        signature.CopyTo(signatureOwner.Memory.Span);
-        Signature signatureCarrier = new(signatureOwner, CryptoTags.AlgorithmAgnosticSignature);
-
-        reader.ReadEndArray();
-
-        return new CoseSign1Message(
-            protectedHeaderCarrier,
-            unprotectedHeader,
-            payload,
-            signatureCarrier);
-    };
+        ReadCoseSign1(coseSign1Bytes, pool, CoseSign1Form.Attached);
 
 
     /// <summary>
-    /// Gets a delegate that parses a COSE_Sign1 whose payload slot may be the nil sentinel — the
+    /// Gets a delegate that reads a COSE_Sign1 whose payload slot may be the nil sentinel — the
     /// detached form ISO/IEC 18013-5 §9.1.3.4 uses for mdoc device signatures. The standard
-    /// <see cref="ParseCoseSign1"/> rejects nil payloads (correct for SD-CWT, wrong for mdoc device
+    /// <see cref="ParseCoseSign1"/> refuses nil payloads (correct for SD-CWT, wrong for mdoc device
     /// auth), so this shares the <see cref="ParseCoseSign1Delegate"/> shape and the mdoc device
-    /// verifier wires it as the parse seam. Routes protected-header + signature bytes through the
-    /// pool; the returned message owns its carriers and the caller disposes it.
+    /// verifier wires it as the parse seam. The unprotected header's values are kept as their encoded bytes; the verification
+    /// math never touches them. Its refusals are typed as <see cref="ParseCoseSign1"/>'s are.
     /// </summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of protectedHeaderCarrier and signatureCarrier transfers to the returned CoseSign1Message; the caller disposes the message.")]
     public static ParseCoseSign1Delegate ParseCoseSign1AllowingNilPayload { get; } = static (coseSign1Bytes, pool) =>
+        ReadCoseSign1(coseSign1Bytes, pool, CoseSign1Form.DetachedAdmitted);
+
+
+    /// <summary>Which COSE_Sign1 form a reading admits.</summary>
+    private enum CoseSign1Form
     {
-        var reader = new CborReader(coseSign1Bytes, CborOptions.Lax);
+        /// <summary>The payload is attached, and the unprotected header's values are converted to CLR values.</summary>
+        Attached,
 
-        CborTag tag = reader.ReadTag();
-        if((int)tag.Value != CoseTags.Sign1)
+        /// <summary>The payload may be the nil of a detached payload, and the unprotected header's values are kept encoded.</summary>
+        DetachedAdmitted
+    }
+
+
+    /// <summary>
+    /// The one reading of a COSE_Sign1 wire form both parse seams compose: every element is judged by the state the CBOR reader
+    /// peeks before it is read, so a wrong kind is the typed refusal of its part; the CBOR reader's refusal of bytes that are no
+    /// well-formed item (its <see cref="CborException"/>) or of an integer past what the reader holds (its
+    /// <see cref="OverflowException"/>) is the refusal of the wire form. The pool-routed carriers are rented only once every
+    /// element is read, so a refusal leaves nothing rented.
+    /// </summary>
+    /// <param name="coseSign1Bytes">The wire form.</param>
+    /// <param name="pool">The pool the carriers rent from.</param>
+    /// <param name="form">The form the reading admits.</param>
+    /// <returns>The message read, or the refusal.</returns>
+    private static CoseSign1Reading ReadCoseSign1(ReadOnlyMemory<byte> coseSign1Bytes, BaseMemoryPool pool, CoseSign1Form form)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        CoseSign1Elements? elements;
+        try
         {
-            throw new InvalidOperationException($"Expected COSE_Sign1 tag ({CoseTags.Sign1}), got {(int)tag.Value}.");
-        }
-
-        int? arrayLength = reader.ReadStartArray();
-        if(arrayLength != 4)
-        {
-            throw new InvalidOperationException($"COSE_Sign1 must have 4 elements, got {arrayLength}.");
-        }
-
-        //EncodedCoseProtectedHeader.FromBytes routes a genuinely zero-length header (RFC 9052 §3's
-        //empty_or_serialized_map, bstr .size 0 arm) through the shared EmptyMemoryOwner singleton
-        //rather than a bare pool.Rent(0), which throws.
-        byte[] protectedHeader = reader.ReadByteString();
-        EncodedCoseProtectedHeader protectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(protectedHeader, pool);
-
-        //Unprotected header — read raw encoded value bytes; the verification math never touches it.
-        Dictionary<int, object>? unprotectedHeader = null;
-        if(reader.PeekState() == CborReaderState.StartMap)
-        {
-            int? mapEntries = reader.ReadStartMap();
-            if(mapEntries is null || mapEntries.Value > 0)
+            if(!TryReadCoseSign1Elements(new CborReader(coseSign1Bytes, CborOptions.Lax), form, out elements, out var refusal))
             {
-                unprotectedHeader = [];
-                while(reader.PeekState() != CborReaderState.EndMap)
-                {
-                    int label = (int)reader.ReadInt64();
-                    byte[] valueBytes = reader.ReadEncodedValue().ToArray();
-                    unprotectedHeader[label] = valueBytes;
-                }
+                return refusal;
             }
-            reader.ReadEndMap();
+        }
+        catch(CborException)
+        {
+            return new CoseSign1Refused(CoseSign1Defect.NotWellFormedCbor, "The bytes are not one well-formed CBOR data item (RFC 8949 section 3).");
+        }
+        catch(OverflowException)
+        {
+            return new CoseSign1Refused(CoseSign1Defect.NotWellFormedCbor, "An integer of the COSE_Sign1 lies past the range the reading holds.");
         }
 
-        //Payload: nil for the detached form, byte string for the attached form.
+        return new CoseSign1Read(MessageOf(elements, pool));
+    }
+
+
+    /// <summary>
+    /// Reads the four elements of a tagged COSE_Sign1, each judged by the peeked state before it is read.
+    /// </summary>
+    /// <param name="reader">The reader over the wire form.</param>
+    /// <param name="form">The form the reading admits.</param>
+    /// <param name="elements">The elements read, when the wire form is a COSE_Sign1.</param>
+    /// <param name="refusal">The refusal, when it is none.</param>
+    /// <returns><see langword="true"/> when the elements are read.</returns>
+    private static bool TryReadCoseSign1Elements(
+        CborReader reader,
+        CoseSign1Form form,
+        [NotNullWhen(true)] out CoseSign1Elements? elements,
+        [NotNullWhen(false)] out CoseSign1Refused? refusal)
+    {
+        elements = null;
+        refusal = null;
+
+        if(reader.PeekState() != CborReaderState.Tag || (int)reader.ReadTag().Value != CoseTags.Sign1)
+        {
+            return Refused(CoseSign1Defect.NotTaggedCoseSign1, $"A COSE_Sign1 is tagged {CoseTags.Sign1} (RFC 9052 section 4.2).", out refusal);
+        }
+
+        if(reader.PeekState() != CborReaderState.StartArray || reader.ReadStartArray() != 4)
+        {
+            return Refused(CoseSign1Defect.NotAnArrayOfFour, "A COSE_Sign1 is a definite-length array of four elements (RFC 9052 section 4.2).", out refusal);
+        }
+
+        if(reader.PeekState() != CborReaderState.ByteString)
+        {
+            return Refused(CoseSign1Defect.ProtectedHeaderNotAByteString, "A COSE_Sign1's protected header is a byte string (RFC 9052 section 3).", out refusal);
+        }
+
+        var protectedHeader = reader.ReadByteString();
+
+        if(reader.PeekState() != CborReaderState.StartMap)
+        {
+            return Refused(CoseSign1Defect.UnprotectedHeaderNotAMap, "A COSE_Sign1's unprotected header is a map (RFC 9052 section 3).", out refusal);
+        }
+
+        var mapEntries = reader.ReadStartMap();
+        var unprotectedHeader = mapEntries is 0 ? null : new Dictionary<int, object>();
+
+        while(reader.PeekState() != CborReaderState.EndMap)
+        {
+            if(reader.PeekState() is not (CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger))
+            {
+                return Refused(CoseSign1Defect.HeaderLabelNotAnInteger, "A label of the unprotected header is no integer the reading holds (RFC 9052 section 3.1).", out refusal);
+            }
+
+            var label = reader.ReadInt32();
+            var value = form == CoseSign1Form.DetachedAdmitted ? reader.ReadEncodedValue().ToArray() : CborValueConverter.ReadValue(reader);
+
+            if(value is not null && unprotectedHeader is not null)
+            {
+                unprotectedHeader[label] = value;
+            }
+        }
+
+        reader.ReadEndMap();
+
+        var payloadState = reader.PeekState();
+        if(payloadState != CborReaderState.ByteString && !(form == CoseSign1Form.DetachedAdmitted && payloadState == CborReaderState.Null))
+        {
+            return Refused(CoseSign1Defect.PayloadNotAByteString, "A COSE_Sign1's payload is a byte string, or the nil of a detached payload where it is admitted (RFC 9052 section 4.2).", out refusal);
+        }
+
         ReadOnlyMemory<byte> payload = ReadOnlyMemory<byte>.Empty;
-        if(reader.PeekState() == CborReaderState.Null)
+        if(payloadState == CborReaderState.Null)
         {
             reader.ReadNull();
         }
@@ -238,19 +251,68 @@ public static class CoseSerialization
             payload = reader.ReadByteString();
         }
 
-        byte[] signature = reader.ReadByteString();
-        IMemoryOwner<byte> signatureOwner = pool.Rent(signature.Length);
-        signature.CopyTo(signatureOwner.Memory.Span);
-        Signature signatureCarrier = new(signatureOwner, CryptoTags.AlgorithmAgnosticSignature);
+        if(reader.PeekState() != CborReaderState.ByteString)
+        {
+            return Refused(CoseSign1Defect.SignatureNotAByteString, "A COSE_Sign1's signature is a byte string (RFC 9052 section 4.2).", out refusal);
+        }
+
+        var signature = reader.ReadByteString();
+
+        if(reader.PeekState() != CborReaderState.EndArray)
+        {
+            return Refused(CoseSign1Defect.NotAnArrayOfFour, "A COSE_Sign1 is a definite-length array of four elements (RFC 9052 section 4.2).", out refusal);
+        }
 
         reader.ReadEndArray();
 
-        return new CoseSign1Message(
-            protectedHeaderCarrier,
-            unprotectedHeader,
-            payload,
-            signatureCarrier);
-    };
+        if(reader.PeekState() != CborReaderState.Finished)
+        {
+            return Refused(CoseSign1Defect.TrailingBytes, "Bytes follow the COSE_Sign1 data item, so the bytes are not one COSE_Sign1.", out refusal);
+        }
+
+        elements = new CoseSign1Elements(protectedHeader, unprotectedHeader, payload, signature);
+
+        return true;
+    }
+
+
+    /// <summary>Answers the refusal of a part of the wire form.</summary>
+    /// <param name="defect">The part refused.</param>
+    /// <param name="description">The refusal's description.</param>
+    /// <param name="refusal">Receives the refusal.</param>
+    /// <returns><see langword="false"/>, the elements' reading refused.</returns>
+    private static bool Refused(CoseSign1Defect defect, string description, out CoseSign1Refused refusal)
+    {
+        refusal = new CoseSign1Refused(defect, description);
+
+        return false;
+    }
+
+
+    /// <summary>
+    /// The message of read elements: the protected header and the signature copied into pool-routed carriers, which the message
+    /// owns. <see cref="EncodedCoseProtectedHeader.FromBytes"/> routes a genuinely zero-length header (RFC 9052 §3's
+    /// empty_or_serialized_map, bstr .size 0 arm) through the shared EmptyMemoryOwner singleton rather than a bare pool.Rent(0),
+    /// which throws. The payload is borrowed; the message's lifetime brackets the caller's use of it.
+    /// </summary>
+    /// <param name="elements">The elements read.</param>
+    /// <param name="pool">The pool the carriers rent from.</param>
+    /// <returns>The message, which the caller owns.</returns>
+    private static CoseSign1Message MessageOf(CoseSign1Elements elements, BaseMemoryPool pool) =>
+        CoseSign1Message.FromElements(
+            elements.ProtectedHeader, elements.UnprotectedHeader, elements.Payload, elements.Signature, CryptoTags.AlgorithmAgnosticSignature, pool);
+
+
+    /// <summary>The four elements of a COSE_Sign1, read and not yet routed into carriers.</summary>
+    /// <param name="ProtectedHeader">The protected header's bytes.</param>
+    /// <param name="UnprotectedHeader">The unprotected header, or <see langword="null"/> when it is empty.</param>
+    /// <param name="Payload">The payload, empty for a detached one.</param>
+    /// <param name="Signature">The signature's bytes.</param>
+    private sealed record CoseSign1Elements(
+        byte[] ProtectedHeader,
+        Dictionary<int, object>? UnprotectedHeader,
+        ReadOnlyMemory<byte> Payload,
+        byte[] Signature);
 
 
     /// <summary>

@@ -89,31 +89,40 @@ public static class SdCwtVpTokenVerification
             return Result.Failure<VpTokenParsed, SdCwtPresentationDefect>(SdCwtPresentationDefect.NotBase64UrlText);
         }
 
-        //When an x5chain evidence resolver is wired, extract the embedded presentation SD-CWT's own
-        //COSE_Sign1 bytes independently (the same kcwt protected-header parameter
-        //KbCwtVerification.VerifyAsync below re-parses) so its x5chain can be read for OID4VP 1.0
-        //§6.1.1 trust evidence. The chain certificates are pool-owned copies, safe to keep past this
-        //probe parse's own disposal; they are resolved and disposed once the verified iss is known. Each reading's refusal is the
-        //defect of the part it reads.
+        //The Key Binding Token is read once, by its typed reading, and its embedded presentation SD-CWT extracted once from the
+        //kcwt protected-header parameter; both are handed to the verification, which reads neither again. Each reading's refusal
+        //is the defect of the part it reads. This method owns the read token and disposes it once the verification is done.
+        if(seams.ParseCoseSign1(kbtBytes.Memory, pool) is not CoseSign1Read { Message: var kbtMessage })
+        {
+            return Result.Failure<VpTokenParsed, SdCwtPresentationDefect>(SdCwtPresentationDefect.KeyBindingTokenMalformed);
+        }
+
+        using var keyBindingToken = kbtMessage;
+
+        if(KbCwtVerification.EmbeddedSdCwtOrNone(keyBindingToken, seams.ExtractKcwt) is not { } embeddedSdCwt)
+        {
+            return Result.Failure<VpTokenParsed, SdCwtPresentationDefect>(SdCwtPresentationDefect.EmbeddedCredentialMalformed);
+        }
+
+        //When an x5chain evidence resolver is wired, the embedded SD-CWT's x5chain is read for OID4VP 1.0 §6.1.1 trust evidence
+        //from the bytes extracted above. The chain certificates are pool-owned copies; they are resolved and disposed once the
+        //verified iss is known.
         var trustedAuthorityChain = (IReadOnlyList<PkiCertificateMemory>)[];
         if(seams.ResolveTrustedAuthorityEvidence is not null && seams.ExtractCoseSign1X5Chain is not null)
         {
-            var probe = ProbedChainOf(kbtBytes.Memory, seams, seams.ExtractCoseSign1X5Chain, pool);
-
-            if(!probe.IsSuccess)
+            if(ChainOrNone(embeddedSdCwt, seams.ExtractCoseSign1X5Chain, pool) is not { } chain)
             {
-                return Result.Failure<VpTokenParsed, SdCwtPresentationDefect>(probe.Error);
+                return Result.Failure<VpTokenParsed, SdCwtPresentationDefect>(SdCwtPresentationDefect.CertificateChainMalformed);
             }
 
-            trustedAuthorityChain = probe.Value;
+            trustedAuthorityChain = chain;
         }
 
         try
         {
-            var verification = await KbCwtVerification.VerifyAsync(
-                kbtBytes.Memory,
-                seams.ParseCoseSign1,
-                seams.ExtractKcwt,
+            var verification = await KbCwtVerification.VerifyReadAsync(
+                keyBindingToken,
+                embeddedSdCwt,
                 seams.ParseSdCwt,
                 seams.ExtractHolderKey,
                 seams.ReadKbtClaims,
@@ -192,51 +201,25 @@ public static class SdCwtVpTokenVerification
 
 
     /// <summary>
-    /// The embedded presentation SD-CWT's <c>x5chain</c>, read by a probe parse of the Key Binding Token apart from the
-    /// verification, or the defect of the part a reading seam refused with its <see cref="FormatException"/>: the Key Binding
-    /// Token, the embedded SD-CWT's extraction, or the chain's extraction. Any other failure of a seam is a fault and surfaces as
-    /// one.
+    /// The embedded presentation SD-CWT's <c>x5chain</c>, or <see langword="null"/> when the chain's extraction refuses it with
+    /// its <see cref="FormatException"/>. Any other failure of the extraction is a fault and surfaces as one.
     /// </summary>
-    /// <param name="kbtBytes">The Key Binding Token's wire bytes.</param>
-    /// <param name="seams">The reading seams.</param>
+    /// <param name="embeddedSdCwt">The embedded SD-CWT's wire bytes, extracted once from the Key Binding Token.</param>
     /// <param name="extractX5Chain">The chain's extraction.</param>
-    /// <param name="pool">The pool the parse and the certificates are rented from.</param>
-    /// <returns>The chain, which the caller disposes, or the defect.</returns>
-    private static Result<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect> ProbedChainOf(
-        ReadOnlyMemory<byte> kbtBytes,
-        SdCwtVpVerificationSeams seams,
+    /// <param name="pool">The pool the certificates are rented from.</param>
+    /// <returns>The chain, which the caller disposes, or <see langword="null"/>.</returns>
+    private static IReadOnlyList<PkiCertificateMemory>? ChainOrNone(
+        ReadOnlyMemory<byte> embeddedSdCwt,
         ExtractCoseSign1X5ChainDelegate extractX5Chain,
         BaseMemoryPool pool)
     {
-        CoseSign1Message probeMessage;
         try
         {
-            probeMessage = seams.ParseCoseSign1(kbtBytes, pool);
+            return extractX5Chain(embeddedSdCwt, pool);
         }
         catch(FormatException)
         {
-            return Result.Failure<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect>(SdCwtPresentationDefect.KeyBindingTokenMalformed);
-        }
-
-        using var probeKbt = probeMessage;
-
-        ReadOnlyMemory<byte> embeddedSdCwt;
-        try
-        {
-            embeddedSdCwt = seams.ExtractKcwt(probeKbt.ProtectedHeader.AsReadOnlyMemory());
-        }
-        catch(FormatException)
-        {
-            return Result.Failure<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect>(SdCwtPresentationDefect.EmbeddedCredentialMalformed);
-        }
-
-        try
-        {
-            return Result.Success<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect>(extractX5Chain(embeddedSdCwt, pool));
-        }
-        catch(FormatException)
-        {
-            return Result.Failure<IReadOnlyList<PkiCertificateMemory>, SdCwtPresentationDefect>(SdCwtPresentationDefect.CertificateChainMalformed);
+            return null;
         }
     }
 }

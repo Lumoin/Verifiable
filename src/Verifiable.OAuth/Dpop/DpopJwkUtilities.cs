@@ -240,13 +240,21 @@ public static class DpopJwkUtilities
 
 
     /// <summary>
-    /// Reconstructs a <see cref="PublicKeyMemory"/> from a JWK dictionary
-    /// embedded in a DPoP proof header. The <paramref name="alg"/> parameter
-    /// is currently informational — the underlying converter resolves the
-    /// algorithm from <c>kty</c> and <c>crv</c> per RFC 7518 — but is
-    /// retained so the caller's intent is documented at the call site.
+    /// Reconstructs the public key a JWK dictionary embedded in a DPoP proof header states, through the library's one JWK
+    /// reconstruction (<see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/>). The <paramref name="alg"/> parameter
+    /// is currently informational — the underlying converter resolves the algorithm from <c>kty</c> and <c>crv</c> per RFC 7518
+    /// — but is retained so the caller's intent is documented at the call site.
     /// </summary>
-    public static PublicKeyMemory PublicKeyFromJwk(
+    /// <param name="jwk">The JWK's members.</param>
+    /// <param name="alg">The proof's <c>alg</c>.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's members.</param>
+    /// <param name="memoryPool">The pool the key material is rented from.</param>
+    /// <returns>
+    /// The key reconstructed (<see cref="JwkKeyReconstructed"/>, whose <see cref="JwkKeyReconstructed.ToPublicKeyMemory"/> the
+    /// caller owns), or the reconstruction's typed refusal of the JWK (<see cref="JwkKeyRefused"/>). Any other failure of the
+    /// decoder or of the allocator is theirs and surfaces as it is.
+    /// </returns>
+    public static JwkKeyReconstruction PublicKeyFromJwk(
         IReadOnlyDictionary<string, string> jwk,
         string alg,
         DecodeDelegate base64UrlDecoder,
@@ -257,17 +265,12 @@ public static class DpopJwkUtilities
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        Dictionary<string, object> jwkDict = new(jwk.Count, StringComparer.Ordinal);
-        foreach(KeyValuePair<string, string> entry in jwk)
+        var jwkDict = new Dictionary<string, object>(jwk.Count, StringComparer.Ordinal);
+        foreach(var entry in jwk)
         {
             jwkDict[entry.Key] = entry.Value;
         }
 
-        (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-            CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwkDict, memoryPool, base64UrlDecoder);
-
-        Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
-
-        return new PublicKeyMemory(keyMaterial, tag);
+        return CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwkDict, memoryPool, base64UrlDecoder);
     }
 }

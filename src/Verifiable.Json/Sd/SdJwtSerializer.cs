@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -22,7 +21,9 @@ namespace Verifiable.Json.Sd;
 public static class SdJwtSerializer
 {
     /// <summary>
-    /// Serializes a disclosure to its Base64Url-encoded form.
+    /// Serializes a disclosure to its Base64Url-encoded form. A disclosure read from the wire keeps its salt's wire string
+    /// (<see cref="SdDisclosure.EncodedSalt"/>), which is written as it was read; a disclosure created from salt bytes writes them
+    /// base64url-encoded.
     /// </summary>
     /// <param name="disclosure">The disclosure to serialize.</param>
     /// <param name="encoder">Delegate for Base64Url encoding.</param>
@@ -32,7 +33,7 @@ public static class SdJwtSerializer
         ArgumentNullException.ThrowIfNull(disclosure);
         ArgumentNullException.ThrowIfNull(encoder);
 
-        string saltString = encoder(disclosure.Salt.AsReadOnlySpan());
+        var saltString = disclosure.EncodedSalt ?? encoder(disclosure.Salt.AsReadOnlySpan());
 
         using var stream = new MemoryStream();
         using(var writer = new Utf8JsonWriter(stream))
@@ -54,9 +55,11 @@ public static class SdJwtSerializer
 
 
     /// <summary>
-    /// Parses a disclosure from its Base64Url-encoded form. The wire-decoded salt
-    /// bytes are wrapped in a <see cref="Salt"/> with the supplied <paramref name="saltTag"/>;
-    /// the resulting disclosure owns that salt and disposes it on disposal.
+    /// Reads a disclosure from its Base64Url-encoded form (RFC 9901 section 4.2). Its salt is a JSON string, kept as the wire
+    /// wrote it (<see cref="SdDisclosure.EncodedSalt"/>); its bytes, the identity the disclosure is compared and committed to
+    /// by, are those the string encodes when it is base64url text and its UTF-8 bytes otherwise. Its claim name, of a
+    /// three-element disclosure, is any JSON string, the empty string among them. The disclosure owns a salt rented from
+    /// <paramref name="pool"/> and disposes it on disposal.
     /// </summary>
     /// <param name="encoded">The Base64Url-encoded disclosure string.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
@@ -66,151 +69,124 @@ public static class SdJwtSerializer
     /// originated from a wire decode (no entropy operation in this process). The
     /// application supplies a tag with appropriate <c>Purpose</c> and provenance entries.
     /// </param>
-    /// <returns>The parsed disclosure.</returns>
-    /// <exception cref="SdJwtWireFormatException">
-    /// The disclosure is not of the shape RFC 9901 section 4.2 defines: the decoder refuses it or its salt as no base64url text
-    /// (its <see cref="FormatException"/>), it is no JSON array of two or three elements, or its salt or claim name is no JSON
-    /// string or its claim name is empty. Any other failure of the decoder or of the allocator, cancellation among them, is
+    /// <returns>
+    /// The disclosure read (<see cref="SdDisclosureRead"/>), which the caller owns; or the refusal of a disclosure of no shape
+    /// RFC 9901 section 4.2 defines (<see cref="SdDisclosureRefused"/>): text the decoder refuses as no base64url (its
+    /// <see cref="FormatException"/>), decoded text that is not valid JSON, no JSON array of two or three elements, or a salt or
+    /// claim name that is no JSON string. Any other failure of the decoder or of the allocator, cancellation among them, is
     /// theirs and surfaces as it is.
-    /// </exception>
-    [SuppressMessage(
-        "Reliability", "CA2000",
-        Justification =
-            "The constructed Salt's ownership is transferred to the SdDisclosure via " +
-            "CreateProperty/CreateArrayElement. Those factories dispose the salt on " +
-            "construction failure. The remaining failure cases (claim-name validation) " +
-            "explicitly dispose `salt` before throwing. The analyzer cannot see this " +
-            "ownership transfer through factory methods.")]
-    public static SdDisclosure ParseDisclosure(string encoded, DecodeDelegate decoder, BaseMemoryPool pool, Tag saltTag)
+    /// </returns>
+    public static SdDisclosureReading ParseDisclosure(string encoded, DecodeDelegate decoder, BaseMemoryPool pool, Tag saltTag)
     {
         ArgumentException.ThrowIfNullOrEmpty(encoded);
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(saltTag);
 
-        using var jsonBytes = DecodedWireText(encoded, decoder, pool, "The disclosure is no base64url text (RFC 9901 section 4.2).");
+        using var jsonBytes = DecodedWireText(encoded, decoder, pool);
 
-        JsonDocument doc;
-        try
+        if(jsonBytes is null)
         {
-            doc = JsonDocument.Parse(jsonBytes.Memory);
-        }
-        catch(JsonException exception)
-        {
-            throw new SdJwtWireFormatException("The disclosure is not valid JSON (RFC 9901 section 4.2).", exception);
+            return new SdDisclosureRefused(SdJwtWireDefect.DisclosureNotBase64UrlText, "The disclosure is no base64url text (RFC 9901 section 4.2).");
         }
 
-        using(doc)
+        using var document = JsonDocumentOrNone(jsonBytes.Memory);
+
+        if(document is null)
         {
-            var root = doc.RootElement;
-
-            if(root.ValueKind != JsonValueKind.Array)
-            {
-                throw new SdJwtWireFormatException("A disclosure is a JSON array (RFC 9901 section 4.2).");
-            }
-
-            var length = root.GetArrayLength();
-
-            if(length is < 2 or > 3)
-            {
-                throw new SdJwtWireFormatException($"A disclosure array has two or three elements (RFC 9901 section 4.2), this one {length}.");
-            }
-
-            //RFC 9901 sections 4.2.1 and 4.2.2: the salt and the claim name are each a JSON string; an element of another kind is a
-            //disclosure of no shape the section defines, refused here before any element is read as a string.
-            if(root[0].ValueKind != JsonValueKind.String || root[0].GetString() is not { } saltText)
-            {
-                throw new SdJwtWireFormatException("A disclosure's salt is a JSON string (RFC 9901 section 4.2.1).");
-            }
-
-            var saltOwner = DecodedWireText(saltText, decoder, pool, "A disclosure's salt is base64url text (RFC 9901 section 4.2.1).");
-
-            //Wrap the wire-decoded salt bytes in a Salt instance. Ownership of saltOwner
-            //transfers into the Salt. The Salt then transfers into the SdDisclosure via
-            //CreateProperty/CreateArrayElement; the disclosure disposes the Salt (and
-            //therefore the IMemoryOwner) when the disclosure is disposed.
-            //
-            //If wrapping or factory construction fails before the disclosure exists,
-            //we own the IMemoryOwner and must dispose it explicitly. The Salt instance
-            //itself, once constructed, takes care of its own owner via Dispose.
-            Salt salt;
-            try
-            {
-                salt = new Salt(saltOwner, saltTag, lifetime: null);
-            }
-            catch
-            {
-                saltOwner.Dispose();
-                throw;
-            }
-
-            //From here, ownership is with `salt`. CreateProperty/CreateArrayElement take ownership of
-            //`salt` and dispose it on construction failure, so once one of them is reached, this method
-            //disposes salt no further. Reading a value element below can itself throw before that
-            //hand-off, at which point salt is still unowned.
-            if(length == 2)
-            {
-                object? arrayValue;
-                try
-                {
-                    arrayValue = JsonElementConversion.Convert(root[1]);
-                }
-                catch
-                {
-                    salt.Dispose();
-
-                    throw;
-                }
-
-                return SdDisclosure.CreateArrayElement(salt, arrayValue);
-            }
-
-            if(root[1].ValueKind != JsonValueKind.String || root[1].GetString() is not { Length: > 0 } claimName)
-            {
-                salt.Dispose();
-
-                throw new SdJwtWireFormatException("A disclosure's claim name is a non-empty JSON string (RFC 9901 section 4.2.1).");
-            }
-
-            object? propertyValue;
-            try
-            {
-                propertyValue = JsonElementConversion.Convert(root[2]);
-            }
-            catch
-            {
-                salt.Dispose();
-
-                throw;
-            }
-
-            return SdDisclosure.CreateProperty(salt, claimName, propertyValue);
+            return new SdDisclosureRefused(SdJwtWireDefect.DisclosureNotJson, "The disclosure is not valid JSON (RFC 9901 section 4.2).");
         }
+
+        var root = document.RootElement;
+
+        if(root.ValueKind != JsonValueKind.Array)
+        {
+            return new SdDisclosureRefused(SdJwtWireDefect.DisclosureNotAnArray, "A disclosure is a JSON array (RFC 9901 section 4.2).");
+        }
+
+        var length = root.GetArrayLength();
+
+        if(length is < 2 or > 3)
+        {
+            return new SdDisclosureRefused(
+                SdJwtWireDefect.DisclosureElementCount, $"A disclosure array has two or three elements (RFC 9901 section 4.2), this one {length}.");
+        }
+
+        //RFC 9901 section 4.2.1: the salt and the claim name are each a JSON string, and nothing more is required of either; the
+        //names _sd and ... are reserved, which the digest resolution refuses where a disclosure is placed into an object.
+        if(root[0].ValueKind != JsonValueKind.String || root[0].GetString() is not { } saltText)
+        {
+            return new SdDisclosureRefused(SdJwtWireDefect.SaltNotAString, "A disclosure's salt is a JSON string (RFC 9901 section 4.2.1).");
+        }
+
+        var claimName = length == 3 ? ClaimNameOrNone(root[1]) : null;
+
+        if(length == 3 && claimName is null)
+        {
+            return new SdDisclosureRefused(SdJwtWireDefect.ClaimNameNotAString, "A disclosure's claim name is a JSON string (RFC 9901 section 4.2.1).");
+        }
+
+        var value = JsonElementConversion.Convert(root[length - 1]);
+
+        //The salt's bytes are those its text encodes when it is base64url text, which RFC 9901 section 4.2.1 recommends, and the
+        //text's own UTF-8 bytes otherwise; the text itself is kept as the wire wrote it.
+        using var decodedSalt = IsBase64UrlText(saltText) ? DecodedWireText(saltText, decoder, pool) : null;
+
+        var saltBytes = decodedSalt is not null ? decodedSalt.Memory.Span : Encoding.UTF8.GetBytes(saltText);
+
+        return claimName is null
+            ? new SdDisclosureRead(SdDisclosure.ReadArrayElement(saltBytes, saltText, saltTag, pool, value))
+            : new SdDisclosureRead(SdDisclosure.ReadProperty(saltBytes, saltText, saltTag, pool, claimName, value));
     }
 
 
+    /// <summary>The claim name a disclosure's second element states, or <see langword="null"/> when it is no JSON string.</summary>
+    /// <param name="element">The element.</param>
+    /// <returns>The claim name, the empty string among them, or <see langword="null"/>.</returns>
+    private static string? ClaimNameOrNone(JsonElement element) =>
+        element.ValueKind == JsonValueKind.String ? element.GetString() : null;
+
+
     /// <summary>
-    /// The bytes a base64url text of the wire names, the decoder's refusal of the text as no base64url, its
-    /// <see cref="FormatException"/>, answered as the wire's refusal; any other failure of the decoder or of the allocator,
-    /// cancellation among them, is theirs and surfaces as it is.
+    /// The bytes a base64url text of the wire names, or <see langword="null"/> when the decoder refuses the text as no base64url,
+    /// its <see cref="FormatException"/>; any other failure of the decoder or of the allocator, cancellation among them, is theirs
+    /// and surfaces as it is.
     /// </summary>
     /// <param name="text">The base64url text.</param>
     /// <param name="decoder">The decoder.</param>
     /// <param name="pool">The pool the bytes are rented from.</param>
-    /// <param name="refusal">The description of the wire's refusal.</param>
-    /// <returns>The bytes, which the caller disposes.</returns>
-    /// <exception cref="SdJwtWireFormatException">The decoder refuses the text.</exception>
-    internal static IMemoryOwner<byte> DecodedWireText(string text, DecodeDelegate decoder, BaseMemoryPool pool, string refusal)
+    /// <returns>The bytes, which the caller disposes, or <see langword="null"/>.</returns>
+    internal static IMemoryOwner<byte>? DecodedWireText(string text, DecodeDelegate decoder, BaseMemoryPool pool)
     {
         try
         {
             return decoder(text, pool);
         }
-        catch(FormatException exception)
+        catch(FormatException)
         {
-            throw new SdJwtWireFormatException(refusal, exception);
+            return null;
         }
     }
+
+
+    /// <summary>
+    /// The JSON document a UTF-8 text is, or <see langword="null"/> when the text is not valid JSON, the reader's refusal, its
+    /// <see cref="JsonException"/>.
+    /// </summary>
+    /// <param name="utf8Json">The UTF-8 text.</param>
+    /// <returns>The document, which the caller disposes, or <see langword="null"/>.</returns>
+    internal static JsonDocument? JsonDocumentOrNone(ReadOnlyMemory<byte> utf8Json)
+    {
+        try
+        {
+            return JsonDocument.Parse(utf8Json);
+        }
+        catch(JsonException)
+        {
+            return null;
+        }
+    }
+
 
     /// <summary>
     /// Serializes an SD-JWT token to its wire format.
@@ -245,9 +221,11 @@ public static class SdJwtSerializer
 
 
     /// <summary>
-    /// Parses an SD-JWT token from its wire format. Computes <see cref="SdToken{TEnvelope}.DisclosurePaths"/>
-    /// and <see cref="SdToken{TEnvelope}.IssuerSignedClaims"/> by walking the issuer-signed
-    /// payload's digest tree, sharing the walker core with <see cref="SdJwtPathExtraction.ExtractPaths"/>.
+    /// Reads an SD-JWT token from its compact serialization by the grammar of RFC 9901 section 4: the Issuer-signed JWT, a
+    /// <c>~</c>, each disclosure followed by its <c>~</c>, and then either nothing, which leaves the serialization's last
+    /// component empty, or exactly one Key Binding JWT. Computes <see cref="SdToken{TEnvelope}.DisclosurePaths"/> and
+    /// <see cref="SdToken{TEnvelope}.IssuerSignedClaims"/> by walking the issuer-signed payload's digest tree, sharing the walker
+    /// core with <see cref="SdJwtPathExtraction.ExtractPaths"/>.
     /// </summary>
     /// <param name="sdJwt">The SD-JWT string.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
@@ -257,167 +235,206 @@ public static class SdJwtSerializer
     /// The tag to stamp on each wire-decoded <see cref="Salt"/> (one per disclosure).
     /// </param>
     /// <param name="hashAlgorithm">The disclosure-digest hash algorithm in IANA format.</param>
-    /// <returns>The parsed token. Caller owns the returned token; disposing it disposes
-    /// all contained disclosures and their salts.</returns>
-    /// <exception cref="SdJwtWireFormatException">
-    /// The wire shape is refused: the issuer JWT is no compact JWS, a disclosure is refused by
-    /// <see cref="ParseDisclosure"/>, the issuer-signed payload is no base64url text or not valid JSON, two
-    /// disclosures carry the same salt bytes (RFC 9901 §9.3), a digest rule of RFC 9901 §7.1 step 3.c or 4
-    /// fails, or a disclosure is not referenced by any digest in the payload (RFC 9901 §7.1 step 5). A
-    /// failure of the decoder beyond its refusal of text as no base64url, of the encoder, of the digest
-    /// implementation or of the allocator, cancellation among them, is theirs and surfaces as it is.
-    /// </exception>
-    public static SdToken<string> ParseToken(
+    /// <returns>
+    /// The token read (<see cref="SdJwtRead"/>), which the caller owns: disposing it disposes all contained disclosures and their
+    /// salts. Or the refusal of the wire shape (<see cref="SdJwtRefused"/>): no separator, an empty component before the last, a
+    /// compact JWS among the disclosures (a Key Binding JWT repeated or not final), a last component that is neither empty nor
+    /// one compact JWS, an Issuer-signed JWT that is no compact JWS, a disclosure <see cref="ParseDisclosure"/> refuses, an
+    /// issuer-signed payload that is no base64url text or not valid JSON, two disclosures under one salt string (RFC 9901
+    /// section 9.3), a digest rule of RFC 9901 section 7.1 step 3.c or 4 broken, or a disclosure no digest references (step 5).
+    /// A failure of the decoder beyond its refusal of text as no base64url, of the encoder, of the digest implementation or of
+    /// the allocator, cancellation among them, is theirs and surfaces as it is.
+    /// </returns>
+    public static SdJwtReading ParseToken(
         string sdJwt,
         DecodeDelegate decoder,
         EncodeDelegate encoder,
         BaseMemoryPool pool,
         Tag saltTag,
-        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
+        string hashAlgorithm)
     {
         ArgumentException.ThrowIfNullOrEmpty(sdJwt);
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(encoder);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(saltTag);
+        ArgumentException.ThrowIfNullOrEmpty(hashAlgorithm);
 
-        string[] parts = sdJwt.Split(SdConstants.JwtSeparator);
+        var components = sdJwt.Split(SdConstants.JwtSeparator);
 
-        if(parts.Length < 2)
+        if(components.Length < 2)
         {
-            throw new SdJwtWireFormatException("An SD-JWT carries at least an issuer JWT and one separator (RFC 9901 section 4).");
+            return new SdJwtRefused(SdJwtWireDefect.SeparatorMissing, "An SD-JWT carries the Issuer-signed JWT followed by a separator (RFC 9901 section 4).");
         }
 
-        string issuerJwt = parts[0];
+        var issuerJwt = components[0];
 
         if(!IsCompactJws(issuerJwt))
         {
-            throw new SdJwtWireFormatException("The Issuer-signed JWT is no compact JWS of three base64url segments (RFC 7515 section 7.1).");
+            return new SdJwtRefused(SdJwtWireDefect.IssuerJwtNotCompactJws, "The Issuer-signed JWT is no compact JWS of three base64url segments (RFC 7515 section 7.1).");
         }
+
+        //RFC 9901 section 4: every disclosure is followed by its separator, so every component between the Issuer-signed JWT and
+        //the last separator is one disclosure, never empty and never a JWT; the last component is empty, an SD-JWT's closing
+        //separator having nothing after it, or the one Key Binding JWT of an SD-JWT+KB.
+        var lastComponent = components[^1];
+
+        if(lastComponent.Length > 0 && !IsCompactJws(lastComponent))
+        {
+            return new SdJwtRefused(
+                SdJwtWireDefect.TerminatorMissing,
+                "The last component of an SD-JWT is empty, after the separator closing its disclosures, or one Key Binding JWT (RFC 9901 section 4).");
+        }
+
+        for(var i = 1; i < components.Length - 1; i++)
+        {
+            if(components[i].Length == 0)
+            {
+                return new SdJwtRefused(SdJwtWireDefect.ComponentEmpty, "A disclosure of an SD-JWT is never empty: two separators do not follow each other (RFC 9901 section 4).");
+            }
+
+            if(IsCompactJws(components[i]))
+            {
+                return new SdJwtRefused(SdJwtWireDefect.KeyBindingJwtNotFinal, "A Key Binding JWT is the one final component of an SD-JWT+KB (RFC 9901 section 4).");
+            }
+        }
+
+        var keyBindingJwt = lastComponent.Length > 0 ? lastComponent : null;
 
         var disclosures = new List<SdDisclosure>();
-        var digestToDisclosure = new Dictionary<string, SdDisclosure>(StringComparer.Ordinal);
+        var reading = ReadDisclosures(components, decoder, encoder, pool, saltTag, hashAlgorithm, disclosures);
 
-        //RFC 9901 §9.3: "The Issuer MUST ensure that a new salt value is chosen for each claim,
-        //including when the same claim name occurs at different places in the structure of the
-        //SD-JWT." SdDisclosure equality is its salt bytes, so this set is exactly a
-        //salt-collision detector: a wire form carrying two disclosures under one salt is
-        //malformed, and admitting it would let a forged disclosure ride a legitimate one's
-        //identity through the parse plumbing.
-        var saltsSeen = new HashSet<SdDisclosure>();
-        string? keyBindingJwt = null;
-        SdJwtWalkResult walkResult;
-
-        try
+        if(reading is SdJwtWalked walked)
         {
-            for(int i = 1; i < parts.Length; i++)
+            //The reading takes the token's ownership and passes it to the caller with the answer it is carried in.
+            var token = SdToken<string>.CreateParsed(
+                issuerJwt,
+                disclosures,
+                new SdDisclosurePaths(walked.Result.DisclosurePaths),
+                walked.Result.IssuerSignedClaims,
+                walked.Result.DisclosureInteriorClaims,
+                keyBindingJwt);
+
+            try
             {
-                string part = parts[i];
+                var read = new SdJwtRead(token);
+                token = null;
 
-                if(string.IsNullOrEmpty(part))
-                {
-                    continue;
-                }
-
-                if(IsCompactJws(part))
-                {
-                    keyBindingJwt = part;
-                }
-                else
-                {
-                    SdDisclosure disclosure = ParseDisclosure(part, decoder, pool, saltTag);
-                    disclosures.Add(disclosure);
-
-                    if(!saltsSeen.Add(disclosure))
-                    {
-                        throw new SdJwtWireFormatException(
-                            "RFC 9901 §9.3: two Disclosures carry the same salt value; the Issuer must choose a new salt for each claim.");
-                    }
-
-                    //The digest is computed over the disclosure exactly as it appeared on the
-                    //wire (RFC 9901 §4.2.3) — the original encoded text, never a re-serialization
-                    //of the parsed value, which could legitimately differ byte-for-byte.
-                    string digest = SdJwtPathExtraction.ComputeDisclosureDigest(part, hashAlgorithm, encoder, pool);
-                    digestToDisclosure[digest] = disclosure;
-                }
+                return read;
             }
-
-            walkResult = SdJwtPathExtraction.Walk(issuerJwt, digestToDisclosure, decoder, pool);
-
-            //RFC 9901 §7.1 step 5: every Disclosure the wire form carries must be referenced by
-            //some digest, directly or recursively via another Disclosure — a Disclosure Walk
-            //could not place is a parse failure, not silently dropped.
-            foreach(SdDisclosure disclosure in disclosures)
+            finally
             {
-                if(!walkResult.DisclosurePaths.ContainsKey(disclosure))
-                {
-                    throw new SdJwtWireFormatException(
-                        $"RFC 9901 §7.1 step 5: the disclosure '{disclosure}' is not referenced by any digest in the issuer-signed payload.");
-                }
+                token?.Dispose();
             }
         }
-        catch
+
+        //The token never came into existence: every disclosure already read is released before the refusal is answered.
+        foreach(SdDisclosure disclosure in disclosures)
         {
-            //If any disclosure fails to parse, or the payload fails the digest-resolution
-            //rules, dispose every disclosure already constructed before propagating. The
-            //token never came into existence.
-            foreach(SdDisclosure d in disclosures)
-            {
-                d.Dispose();
-            }
-            throw;
+            disclosure.Dispose();
         }
 
-        return SdToken<string>.CreateParsed(
-            issuerJwt,
-            disclosures,
-            new SdDisclosurePaths(walkResult.DisclosurePaths),
-            walkResult.IssuerSignedClaims,
-            walkResult.DisclosureInteriorClaims,
-            keyBindingJwt);
+        return reading is SdJwtWalkRefused refused
+            ? new SdJwtRefused(refused.Defect, refused.Description)
+            : throw new InvalidOperationException("The reading of the disclosures answered a reading it never answers.");
     }
 
 
     /// <summary>
-    /// Attempts to parse an SD-JWT token.
+    /// Reads the disclosures of a serialization whose grammar is checked, adding each to <paramref name="disclosures"/> as it is
+    /// read so the caller releases every one on any refusal or fault, then walks the issuer-signed payload's digests over them.
     /// </summary>
-    /// <param name="sdJwt">The SD-JWT string.</param>
+    /// <param name="components">The serialization's components: the Issuer-signed JWT, the disclosures, the last component.</param>
     /// <param name="decoder">Delegate for Base64Url decoding.</param>
     /// <param name="encoder">Delegate for Base64Url encoding, used to compute disclosure digests.</param>
     /// <param name="pool">Memory pool for allocations.</param>
-    /// <param name="saltTag">
-    /// The tag to stamp on each wire-decoded <see cref="Salt"/>.
-    /// </param>
-    /// <param name="token">The parsed token if successful. Caller owns and disposes.</param>
+    /// <param name="saltTag">The tag stamped on each disclosure's salt.</param>
     /// <param name="hashAlgorithm">The disclosure-digest hash algorithm in IANA format.</param>
-    /// <returns>
-    /// <c>true</c> if parsing succeeded; <c>false</c> when the wire shape is refused (<see cref="SdJwtWireFormatException"/>).
-    /// Any other failure of a delegate supplied, cancellation among them, surfaces as it is.
-    /// </returns>
-    public static bool TryParseToken(
-        string? sdJwt,
+    /// <param name="disclosures">Receives each disclosure read.</param>
+    /// <returns>The walk of the payload (<see cref="SdJwtWalked"/>), or the refusal (<see cref="SdJwtWalkRefused"/>).</returns>
+    private static SdJwtWalkReading ReadDisclosures(
+        string[] components,
         DecodeDelegate decoder,
         EncodeDelegate encoder,
         BaseMemoryPool pool,
         Tag saltTag,
-        out SdToken<string>? token,
-        string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
+        string hashAlgorithm,
+        List<SdDisclosure> disclosures)
     {
-        token = null;
+        var digestToDisclosure = new Dictionary<string, SdDisclosure>(StringComparer.Ordinal);
 
-        if(string.IsNullOrEmpty(sdJwt))
-        {
-            return false;
-        }
+        //RFC 9901 section 9.3: "The Issuer MUST ensure that a new salt value is chosen for each claim, including when the same
+        //claim name occurs at different places in the structure of the SD-JWT." A salt is the string the wire carries, so a
+        //wire form carrying one salt string in two disclosures is refused; admitting it would let a forged disclosure ride a
+        //legitimate one's identity through the parse plumbing.
+        var saltsSeen = new HashSet<string>(StringComparer.Ordinal);
 
         try
         {
-            token = ParseToken(sdJwt, decoder, encoder, pool, saltTag, hashAlgorithm);
-            return true;
+            for(var i = 1; i < components.Length - 1; i++)
+            {
+                var component = components[i];
+                var disclosureReading = ParseDisclosure(component, decoder, pool, saltTag);
+
+                if(disclosureReading is SdDisclosureRefused refused)
+                {
+                    return new SdJwtWalkRefused(refused.Defect, refused.Description);
+                }
+
+                if(disclosureReading is not SdDisclosureRead { Disclosure: var disclosure })
+                {
+                    throw new InvalidOperationException("The disclosure reading answered a reading it never answers.");
+                }
+
+                disclosures.Add(disclosure);
+
+                var encodedSalt = disclosure.EncodedSalt ?? throw new InvalidOperationException("A disclosure read from the wire keeps its salt's wire string.");
+
+                if(!saltsSeen.Add(encodedSalt))
+                {
+                    return new SdJwtWalkRefused(
+                        SdJwtWireDefect.SaltRepeated,
+                        "RFC 9901 section 9.3: two disclosures carry the same salt; the Issuer chooses a new salt for each claim.");
+                }
+
+                //The digest is computed over the disclosure exactly as it appeared on the wire (RFC 9901 section 4.2.3), the original
+                //encoded text, never a re-serialization of the parsed value, which could legitimately differ byte for byte.
+                digestToDisclosure[SdJwtPathExtraction.ComputeDisclosureDigest(component, hashAlgorithm, encoder, pool)] = disclosure;
+            }
+
+            var walk = SdJwtPathExtraction.Walk(components[0], digestToDisclosure, decoder, pool);
+
+            if(walk is not SdJwtWalked walked)
+            {
+                return walk;
+            }
+
+            //RFC 9901 section 7.1 step 5: every disclosure the wire form carries is referenced by some digest, directly or
+            //recursively through another disclosure; a disclosure the walk could not place is refused, never silently dropped.
+            foreach(SdDisclosure disclosure in disclosures)
+            {
+                if(!walked.Result.DisclosurePaths.ContainsKey(disclosure))
+                {
+                    return new SdJwtWalkRefused(
+                        SdJwtWireDefect.DisclosureUnreferenced,
+                        $"RFC 9901 section 7.1 step 5: the disclosure '{disclosure}' is not referenced by any digest in the issuer-signed payload.");
+                }
+            }
+
+            return walked;
         }
-        catch(SdJwtWireFormatException)
+        catch
         {
-            return false;
+            //A fault of a delegate composed here surfaces as it is; the disclosures already read are released first, since the
+            //token that would own them never comes into existence.
+            foreach(SdDisclosure disclosure in disclosures)
+            {
+                disclosure.Dispose();
+            }
+
+            disclosures.Clear();
+
+            throw;
         }
     }
 
@@ -469,17 +486,9 @@ public static class SdJwtSerializer
 
         foreach(string part in parts)
         {
-            if(string.IsNullOrEmpty(part) || part.Length % 4 == 1)
+            if(!IsBase64UrlText(part))
             {
                 return false;
-            }
-
-            foreach(char c in part)
-            {
-                if(!IsBase64UrlChar(c))
-                {
-                    return false;
-                }
             }
         }
 
@@ -488,23 +497,22 @@ public static class SdJwtSerializer
 
 
     /// <summary>
-    /// Tells whether <paramref name="c"/> is a member of the Base64URL alphabet
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc4648#section-5">RFC 4648 section 5</see>). The
-    /// boolean expression mirrors the alphabet's four character classes directly; a named predicate per
-    /// class would only rename the citation, not simplify it.
+    /// Whether a text is unpadded base64url text (RFC 4648 section 5): not empty, every character of the base64url alphabet, and
+    /// of a length some encoding has - never a whole number of four-character quanta plus one character, which encodes no octets.
     /// </summary>
-    /// <param name="c">The character to classify.</param>
-    /// <returns><see langword="true"/> when <paramref name="c"/> is in the Base64URL alphabet.</returns>
-    private static bool IsBase64UrlChar(char c)
-    {
-        return c is (>= 'A' and <= 'Z') or
-               (>= 'a' and <= 'z') or
-               (>= '0' and <= '9') or
-               '-' or
-               '_';
-    }
+    /// <param name="text">The text.</param>
+    /// <returns><see langword="true"/> when the text is unpadded base64url text.</returns>
+    private static bool IsBase64UrlText(string text) =>
+        text.Length > 0 && text.Length % 4 != 1 && !text.AsSpan().ContainsAnyExcept(Base64UrlAlphabet);
 
 
+    /// <summary>The base64url alphabet (RFC 4648 section 5).</summary>
+    private static SearchValues<char> Base64UrlAlphabet { get; } = SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_");
+
+
+    /// <summary>Writes a claim value as JSON.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="value">The value.</param>
     private static void WriteClaimValue(Utf8JsonWriter writer, object? value) =>
         ManualJsonWriter.WriteValue(writer, value);
 }

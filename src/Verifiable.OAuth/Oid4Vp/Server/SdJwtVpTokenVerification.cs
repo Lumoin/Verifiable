@@ -101,9 +101,9 @@ public static class SdJwtVpTokenVerification
     /// Carried onto <see cref="VpTokenParsed.CredentialQueryId"/>.
     /// </param>
     /// <param name="parseSdJwtToken">
-    /// Delegate for parsing the SD-JWT wire format.
-    /// Wired to <c>SdJwtSerializer.ParseToken</c>, which refuses a wire shape with <see cref="SdJwtWireFormatException"/>, the one
-    /// exception of the parse this verification answers as a malformed presentation.
+    /// Delegate for reading the SD-JWT wire format.
+    /// Wired to <c>SdJwtSerializer.ParseToken</c>, whose refusal of a wire shape (<see cref="SdJwtRefused"/>) this verification
+    /// answers as a malformed presentation; an exception out of it is a fault and surfaces as one.
     /// </param>
     /// <param name="computeHashInput">
     /// Delegate for computing the <c>sd_hash</c> input string.
@@ -188,17 +188,17 @@ public static class SdJwtVpTokenVerification
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        //Parse the SD-JWT wire format into issuer JWS, disclosures, and KB-JWT: the presentation's input boundary, where the
-        //parse's refusal of the wire format, its SdJwtWireFormatException, is a presentation no conformant Wallet produces. The token
-        //owns a pooled salt buffer per disclosure, so it is disposed on every exit from this method; everything the returned
-        //VpTokenParsed carries is a detached CLR value (claim values come from the parse's own object graph, keys are
-        //CredentialPath, the rest are strings).
-        if(ParsedOrNone(vpToken, parseSdJwtToken) is not { } parsedToken)
+        //Read the SD-JWT wire format into issuer JWS, disclosures, and KB-JWT: the presentation's input boundary, where the
+        //reading's refusal of the wire format is a presentation no conformant Wallet produces. The token owns a pooled salt
+        //buffer per disclosure, so it is disposed on every exit from this method; everything the returned VpTokenParsed carries
+        //is a detached CLR value (claim values come from the parse's own object graph, keys are CredentialPath, the rest are
+        //strings).
+        if(parseSdJwtToken(vpToken) is not SdJwtRead { Token: var parsedToken })
         {
             return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.CompactSerializationMalformed);
         }
 
-        using SdToken<string> token = parsedToken;
+        using var token = parsedToken;
 
         //Decode the issuer JWT payload and extract all fields synchronously
         //before any await boundaries (ReadOnlySpan cannot cross await).
@@ -262,18 +262,17 @@ public static class SdJwtVpTokenVerification
                     ? StatusClaimReader.Read(Encoding.UTF8.GetBytes(statusMember.Text))
                     : new StatusClaimRefused();
 
-                switch(statusReading)
+                if(statusReading is StatusClaimIndexBeyondCapacity)
                 {
-                    case StatusClaimRead { Claim: var statusClaim }:
-                        credentialStatus = statusClaim;
-                        break;
-                    case StatusClaimIndexBeyondCapacity:
-                        return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.StatusIndexBeyondCapacity);
-                    case StatusClaimRefused:
-                        return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.StatusClaimMalformed);
-                    default:
-                        throw new InvalidOperationException($"The status claim's reading answered {statusReading.GetType().FullName}, a reading it never answers.");
+                    return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.StatusIndexBeyondCapacity);
                 }
+
+                if(statusReading is not StatusClaimRead { Claim: var statusClaim })
+                {
+                    return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.StatusClaimMalformed);
+                }
+
+                credentialStatus = statusClaim;
             }
         }
 
@@ -532,28 +531,6 @@ public static class SdJwtVpTokenVerification
 
 
     /// <summary>
-    /// The token the parse of the SD-JWT wire format reads, or <see langword="null"/> when the parse refuses the wire format at
-    /// the reading that owns it, its <see cref="SdJwtWireFormatException"/> (<c>SdJwtSerializer.ParseToken</c>'s contract for
-    /// every wire-shape rejection). Any other exception - a <see cref="FormatException"/> of a decoder, an encoder or a digest
-    /// implementation the parse composes among them, cancellation too - is a fault of the parse and surfaces as one.
-    /// </summary>
-    /// <param name="vpToken">The presentation's compact serialization.</param>
-    /// <param name="parseSdJwtToken">The parse of the wire format.</param>
-    /// <returns>The token, which the caller disposes, or <see langword="null"/>.</returns>
-    private static SdToken<string>? ParsedOrNone(string vpToken, ParseSdJwtTokenDelegate parseSdJwtToken)
-    {
-        try
-        {
-            return parseSdJwtToken(vpToken);
-        }
-        catch(SdJwtWireFormatException)
-        {
-            return null;
-        }
-    }
-
-
-    /// <summary>
     /// The decoded payload of a compact JWS (RFC 7515 section 7.1) the presentation carries, or <see langword="null"/> when the
     /// JWS is not three segments, its payload segment is empty, which no JWT's claims set is, or the decoder refuses the segment
     /// as no base64url text; any other failure of the decoder or of the allocator is a fault and surfaces as one.
@@ -589,26 +566,16 @@ public static class SdJwtVpTokenVerification
 
     /// <summary>
     /// The holder's public key the Issuer-signed JWT's <c>cnf.jwk</c> states (RFC 7800 section 3.2), or <see langword="null"/>
-    /// when the library's reconstruction of the key refuses it (<see cref="JwkPublicKeyException"/>, or
-    /// <see cref="RsaPublicKeyException"/> for an RSA key's parameters) or the decoder refuses one of its members as no base64url
-    /// text (its <see cref="FormatException"/>). Any other failure, of the decoder beyond its refusal or of the allocator, is a
-    /// fault and surfaces as one.
+    /// when the library's reconstruction of the key refuses it (<see cref="JwkKeyRefused"/>), a member the decoder refuses as no
+    /// base64url text among its refusals. Any failure of the decoder beyond its refusal or of the allocator is a fault and
+    /// surfaces as one.
     /// </summary>
     /// <param name="jwk">The <c>cnf.jwk</c> members.</param>
     /// <param name="decoder">The base64url decoder.</param>
     /// <param name="pool">The pool the key material is rented from.</param>
     /// <returns>The key, which the caller disposes, or <see langword="null"/>.</returns>
-    private static PublicKeyMemory? ConfirmationKeyOrNone(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool)
-    {
-        try
-        {
-            var (algorithm, purpose, scheme, keyBytesOwner) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, pool, decoder);
-
-            return new PublicKeyMemory(keyBytesOwner, Tag.Create(algorithm).With(purpose).With(scheme));
-        }
-        catch(Exception exception) when(exception is JwkPublicKeyException or RsaPublicKeyException or FormatException)
-        {
-            return null;
-        }
-    }
+    private static PublicKeyMemory? ConfirmationKeyOrNone(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool) =>
+        CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, pool, decoder) is JwkKeyReconstructed reconstructed
+            ? reconstructed.ToPublicKeyMemory()
+            : null;
 }

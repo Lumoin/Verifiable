@@ -15,10 +15,25 @@ namespace Verifiable.Json;
 /// <param name="DisclosurePaths">Each disclosure's resolved path.</param>
 /// <param name="IssuerSignedClaims">Every unconditionally disclosed node, keyed by its path.</param>
 /// <param name="DisclosureInteriorClaims">Every node interior to a resolved disclosure, keyed by its path.</param>
-internal readonly record struct SdJwtWalkResult(
+internal sealed record SdJwtWalkResult(
     IReadOnlyDictionary<SdDisclosure, CredentialPath> DisclosurePaths,
     IReadOnlyDictionary<CredentialPath, object?> IssuerSignedClaims,
     IReadOnlyDictionary<CredentialPath, object?> DisclosureInteriorClaims);
+
+
+/// <summary>What the walk of an SD-JWT issuer-signed payload answers: the walk's result, or the refusal of the payload's shape.</summary>
+internal abstract record SdJwtWalkReading;
+
+
+/// <summary>The payload walked.</summary>
+/// <param name="Result">The walk's result.</param>
+internal sealed record SdJwtWalked(SdJwtWalkResult Result) : SdJwtWalkReading;
+
+
+/// <summary>The refusal of the payload's or a disclosure's shape.</summary>
+/// <param name="Defect">The part refused.</param>
+/// <param name="Description">The refusal's description, naming the rule the wire breaks.</param>
+internal sealed record SdJwtWalkRefused(SdJwtWireDefect Defect, string Description) : SdJwtWalkReading;
 
 /// <summary>
 /// Provides JSON-specific path extraction for SD-JWT structures.
@@ -54,6 +69,10 @@ public static class SdJwtPathExtraction
     /// <param name="pool">Memory pool for allocations.</param>
     /// <param name="hashAlgorithm">The hash algorithm name (default: "sha-256").</param>
     /// <returns>A dictionary mapping each disclosure to its credential path.</returns>
+    /// <exception cref="ArgumentException">
+    /// The token's issuer-signed payload breaks a rule the reading of an SD-JWT refuses (<see cref="SdJwtSerializer.ParseToken"/>),
+    /// so the token is none the reading produced.
+    /// </exception>
     public static IReadOnlyDictionary<SdDisclosure, CredentialPath> ExtractPaths(
         SdToken<string> token,
         DecodeDelegate decoder,
@@ -75,9 +94,12 @@ public static class SdJwtPathExtraction
             digestToDisclosure[digest] = disclosure;
         }
 
-        SdJwtWalkResult result = Walk(token.IssuerSigned, digestToDisclosure, decoder, pool);
-
-        return result.DisclosurePaths;
+        return Walk(token.IssuerSigned, digestToDisclosure, decoder, pool) switch
+        {
+            SdJwtWalked walked => walked.Result.DisclosurePaths,
+            SdJwtWalkRefused refused => throw new ArgumentException($"The token is none the SD-JWT reading produced: {refused.Description}", nameof(token)),
+            _ => throw new InvalidOperationException("The walk answered a reading it never answers.")
+        };
     }
 
 
@@ -124,28 +146,88 @@ public static class SdJwtPathExtraction
     /// <param name="digestToDisclosure">Every disclosure's wire digest, computed by the caller.</param>
     /// <param name="decoder">Delegate for Base64Url decoding the JWS payload segment.</param>
     /// <param name="pool">Memory pool for allocations.</param>
-    /// <returns>Each disclosure's resolved path, every unconditionally disclosed node and every disclosure-interior node.</returns>
-    /// <exception cref="SdJwtWireFormatException">
-    /// Thrown when the payload fails a step 3.c or 4 rule, or when its nesting exceeds
+    /// <returns>
+    /// Each disclosure's resolved path, every unconditionally disclosed node and every disclosure-interior node
+    /// (<see cref="SdJwtWalked"/>); or the refusal (<see cref="SdJwtWalkRefused"/>) of a JWT that is not three segments, a payload
+    /// that is no base64url text or not valid JSON, a payload failing a step 3.c or 4 rule, or a nesting deeper than
     /// <see cref="MaximumWalkDepth"/>.
-    /// </exception>
-    internal static SdJwtWalkResult Walk(
+    /// </returns>
+    internal static SdJwtWalkReading Walk(
         string issuerJwt,
         IReadOnlyDictionary<string, SdDisclosure> digestToDisclosure,
         DecodeDelegate decoder,
         BaseMemoryPool pool)
     {
-        JsonElement payload = ParseJwtPayload(issuerJwt, decoder, pool);
-        object? payloadGraph = JsonElementConversion.Convert(payload);
+        return ReadJwtPayload(issuerJwt, decoder, pool) switch
+        {
+            PayloadRead read => WalkPayload(read.Payload, digestToDisclosure),
+            PayloadRefused refused => refused.Refusal,
+            _ => throw new InvalidOperationException("The payload's reading answered a reading it never answers.")
+        };
+    }
 
-        var disclosurePaths = new Dictionary<SdDisclosure, CredentialPath>(ReferenceEqualityComparer.Instance);
-        var issuerSignedClaims = new Dictionary<CredentialPath, object?>();
-        var interiorClaims = new Dictionary<CredentialPath, object?>();
-        var seenDigests = new HashSet<string>(StringComparer.Ordinal);
 
-        _ = WalkAndClean(payloadGraph, CredentialPath.Root, digestToDisclosure, disclosurePaths, issuerSignedClaims, interiorClaims, seenDigests, depth: 0);
+    /// <summary>Walks a payload read as JSON over the disclosures given.</summary>
+    /// <param name="payload">The payload.</param>
+    /// <param name="digestToDisclosure">Every disclosure's wire digest.</param>
+    /// <returns>The walk's result, or the refusal of the rule the payload breaks.</returns>
+    private static SdJwtWalkReading WalkPayload(JsonElement payload, IReadOnlyDictionary<string, SdDisclosure> digestToDisclosure)
+    {
+        var state = new WalkState(digestToDisclosure);
+        _ = WalkAndClean(JsonElementConversion.Convert(payload), CredentialPath.Root, state, state.IssuerSignedClaims, 0);
 
-        return new SdJwtWalkResult(disclosurePaths, issuerSignedClaims, interiorClaims);
+        if(state.Refusal is { } refusal)
+        {
+            return refusal;
+        }
+
+        return new SdJwtWalked(new SdJwtWalkResult(state.DisclosurePaths, state.IssuerSignedClaims, state.InteriorClaims));
+    }
+
+
+    /// <summary>
+    /// The state of one walk of a payload: every disclosure's wire digest, what the walk accumulates, and the refusal that ends
+    /// it, once a rule is broken.
+    /// </summary>
+    private sealed class WalkState
+    {
+        /// <summary>Creates the state of a walk over the disclosures given.</summary>
+        /// <param name="digestToDisclosure">Every disclosure's wire digest.</param>
+        public WalkState(IReadOnlyDictionary<string, SdDisclosure> digestToDisclosure)
+        {
+            DigestToDisclosure = digestToDisclosure;
+        }
+
+
+        /// <summary>Every disclosure's wire digest, computed by the caller.</summary>
+        public IReadOnlyDictionary<string, SdDisclosure> DigestToDisclosure { get; }
+
+        /// <summary>Each resolved disclosure's path, keyed by the disclosure instance.</summary>
+        public Dictionary<SdDisclosure, CredentialPath> DisclosurePaths { get; } = new(ReferenceEqualityComparer.Instance);
+
+        /// <summary>Every unconditionally disclosed node, keyed by its path.</summary>
+        public Dictionary<CredentialPath, object?> IssuerSignedClaims { get; } = [];
+
+        /// <summary>Every node interior to a resolved disclosure, keyed by its path.</summary>
+        public Dictionary<CredentialPath, object?> InteriorClaims { get; } = [];
+
+        /// <summary>Every digest value encountered so far, for the step 4 check.</summary>
+        public HashSet<string> SeenDigests { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The refusal that ended the walk, or <see langword="null"/> while no rule is broken.</summary>
+        public SdJwtWalkRefused? Refusal { get; private set; }
+
+
+        /// <summary>Ends the walk with the refusal of a broken rule.</summary>
+        /// <param name="defect">The part refused.</param>
+        /// <param name="description">The refusal's description.</param>
+        /// <returns><see langword="null"/>, the value a refused node walks to.</returns>
+        public object? Refuse(SdJwtWireDefect defect, string description)
+        {
+            Refusal ??= new SdJwtWalkRefused(defect, description);
+
+            return null;
+        }
     }
 
 
@@ -155,168 +237,206 @@ public static class SdJwtPathExtraction
     /// of <see cref="object"/> for a JSON array, or a scalar), resolving digests to disclosures and
     /// recursing into a resolved disclosure's own <see cref="SdDisclosure.ClaimValue"/> so a
     /// recursive disclosure (RFC 9901 §4.2.6 — one disclosed field revealing further
-    /// selectively-disclosable fields) resolves through its parent's path.
+    /// selectively-disclosable fields) resolves through its parent's path. A broken rule ends the walk: the state records its
+    /// refusal and every node from there walks to nothing.
     /// </summary>
     /// <param name="node">The node being walked.</param>
     /// <param name="currentPath">The node's own path.</param>
-    /// <param name="digestToDisclosure">Every disclosure's wire digest.</param>
-    /// <param name="disclosurePaths">Accumulates each resolved disclosure's path.</param>
+    /// <param name="state">The walk's state, its refusal among it.</param>
     /// <param name="claims">
     /// Accumulates this node's children: the unconditionally disclosed map while the walk is over
     /// the payload itself, the interior map once it has descended into a disclosure's own value.
     /// </param>
-    /// <param name="interiorClaims">Accumulates every node interior to a resolved disclosure.</param>
-    /// <param name="seenDigests">Every digest value encountered so far, for the step 4 check.</param>
     /// <param name="depth">How many containers and disclosure values this node sits below.</param>
     /// <returns>
     /// This node's value with the <c>_sd</c>/<c>_sd_alg</c> mechanism keys and the resolved or
     /// decoy array markers removed — what <see cref="SdToken{TEnvelope}.IssuerSignedClaims"/>
-    /// stores for a container node.
+    /// stores for a container node; <see langword="null"/> once the walk is refused.
     /// </returns>
-    /// <exception cref="SdJwtWireFormatException">
-    /// Thrown when a step 3.c or 4 rule is violated, or when the nesting exceeds
-    /// <see cref="MaximumWalkDepth"/>.
-    /// </exception>
     private static object? WalkAndClean(
         object? node,
         CredentialPath currentPath,
-        IReadOnlyDictionary<string, SdDisclosure> digestToDisclosure,
-        Dictionary<SdDisclosure, CredentialPath> disclosurePaths,
+        WalkState state,
         Dictionary<CredentialPath, object?> claims,
-        Dictionary<CredentialPath, object?> interiorClaims,
-        HashSet<string> seenDigests,
         int depth)
     {
+        if(state.Refusal is not null)
+        {
+            return null;
+        }
+
         if(depth > MaximumWalkDepth)
         {
-            throw new SdJwtWireFormatException(
-                $"RFC 9901 §4.2.6: the payload's nesting of containers and recursive Disclosures exceeds the {MaximumWalkDepth} levels this parse admits.");
+            return state.Refuse(
+                SdJwtWireDefect.NestingTooDeep,
+                $"RFC 9901 section 4.2.6: the payload's nesting of containers and recursive disclosures exceeds the {MaximumWalkDepth} levels this reading admits.");
         }
 
-        if(node is Dictionary<string, object> obj)
+        return node switch
         {
-            var localNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach(string key in obj.Keys)
+            Dictionary<string, object> container => WalkObject(container, currentPath, state, claims, depth),
+            List<object> array => WalkArray(array, currentPath, state, claims, depth),
+            _ => node
+        };
+    }
+
+
+    /// <summary>
+    /// Walks one JSON object of the payload or of a disclosure's value: resolves the digests of its <c>_sd</c> array to the
+    /// object-property disclosures they name (RFC 9901 section 7.1 step 3.c.ii), then walks each of its own members.
+    /// </summary>
+    /// <param name="container">The object's members.</param>
+    /// <param name="currentPath">The object's own path.</param>
+    /// <param name="state">The walk's state.</param>
+    /// <param name="claims">Accumulates the object's members.</param>
+    /// <param name="depth">How many containers and disclosure values the object sits below.</param>
+    /// <returns>The object without its mechanism keys, or <see langword="null"/> once the walk is refused.</returns>
+    private static object? WalkObject(
+        Dictionary<string, object> container,
+        CredentialPath currentPath,
+        WalkState state,
+        Dictionary<CredentialPath, object?> claims,
+        int depth)
+    {
+        var localNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach(var key in container.Keys)
+        {
+            if(key is not SdConstants.SdClaimName and not SdConstants.SdAlgorithmClaimName)
             {
-                if(key is not SdConstants.SdClaimName and not SdConstants.SdAlgorithmClaimName)
-                {
-                    _ = localNames.Add(key);
-                }
+                _ = localNames.Add(key);
             }
+        }
 
-            if(obj.TryGetValue(SdConstants.SdClaimName, out object? sdArrayObj)
-                && sdArrayObj is List<object> sdArray
-                && IsArrayOfStrings(sdArray))
+        if(container.TryGetValue(SdConstants.SdClaimName, out var sdArrayObj)
+            && sdArrayObj is List<object> sdArray
+            && IsArrayOfStrings(sdArray))
+        {
+            foreach(var digest in sdArray.OfType<string>())
             {
-                foreach(object? digestObj in sdArray)
+                if(!RecordDigest(digest, state))
                 {
-                    string digest = (string)digestObj;
-
-                    RecordDigest(digest, seenDigests);
-
-                    //Step 3.c.i: a digest with no matching Disclosure is a decoy and is ignored.
-                    if(!digestToDisclosure.TryGetValue(digest, out SdDisclosure? disclosure))
-                    {
-                        continue;
-                    }
-
-                    //Step 3.c.ii.1: a digest found in an object's _sd key must resolve to a
-                    //three-element (object-property) Disclosure.
-                    if(disclosure.ClaimName is not { } claimName)
-                    {
-                        throw new SdJwtWireFormatException(
-                            "RFC 9901 §7.1 step 3.c.ii.1: a digest in an object's _sd array resolved to an array-element Disclosure.");
-                    }
-
-                    //Step 3.c.ii.2: the claim name must not be a mechanism key.
-                    if(SdConstants.IsReservedClaimName(claimName))
-                    {
-                        throw new SdJwtWireFormatException(
-                            $"RFC 9901 §7.1 step 3.c.ii.2: the claim name '{claimName}' is a reserved mechanism key.");
-                    }
-
-                    //Step 3.c.ii.3: the claim name must not already exist at this level.
-                    if(!localNames.Add(claimName))
-                    {
-                        throw new SdJwtWireFormatException(
-                            $"RFC 9901 §7.1 step 3.c.ii.3: the claim name '{claimName}' already exists at this level.");
-                    }
-
-                    CredentialPath disclosurePath = currentPath.Append(claimName);
-                    disclosurePaths[disclosure] = disclosurePath;
-
-                    //Step 3.c.ii.5: recursively process the Disclosure's own value. Everything it
-                    //carries is interior to it — reading any of it costs this Disclosure's release.
-                    _ = WalkAndClean(disclosure.ClaimValue, disclosurePath, digestToDisclosure, disclosurePaths, interiorClaims, interiorClaims, seenDigests, depth + 1);
+                    return null;
                 }
-            }
 
-            var cleaned = new Dictionary<string, object?>(StringComparer.Ordinal);
-            foreach(KeyValuePair<string, object> property in obj)
-            {
-                if(property.Key is SdConstants.SdClaimName or SdConstants.SdAlgorithmClaimName)
+                //Step 3.c.i: a digest with no matching disclosure is a decoy and is ignored.
+                if(!state.DigestToDisclosure.TryGetValue(digest, out var disclosure))
                 {
                     continue;
                 }
 
-                CredentialPath childPath = currentPath.Append(property.Key);
-                object? cleanedChild = WalkAndClean(property.Value, childPath, digestToDisclosure, disclosurePaths, claims, interiorClaims, seenDigests, depth + 1);
-                claims[childPath] = cleanedChild;
-                cleaned[property.Key] = cleanedChild;
-            }
-
-            return cleaned;
-        }
-
-        if(node is List<object> array)
-        {
-            var cleaned = new List<object?>();
-            int index = 0;
-
-            foreach(object? item in array)
-            {
-                if(item is Dictionary<string, object> marker
-                    && marker.Count == 1
-                    && marker.TryGetValue(SdConstants.ArrayDigestKey, out object? digestValue)
-                    && digestValue is string digest)
+                //Step 3.c.ii.1: a digest found in an object's _sd key resolves to a three-element (object-property) disclosure.
+                if(disclosure.ClaimName is not { } claimName)
                 {
-                    RecordDigest(digest, seenDigests);
-
-                    //Step 3.c.i: a digest with no matching Disclosure is a decoy; step (d) removes
-                    //it from the visible structure, but its position still counts toward the index.
-                    if(digestToDisclosure.TryGetValue(digest, out SdDisclosure? disclosure))
-                    {
-                        //Step 3.c.iii.1: a digest found in an array element must resolve to a
-                        //two-element (array-element) Disclosure.
-                        if(disclosure.ClaimName is not null)
-                        {
-                            throw new SdJwtWireFormatException(
-                                "RFC 9901 §7.1 step 3.c.iii.1: a digest in an array resolved to an object-property Disclosure.");
-                        }
-
-                        CredentialPath elementPath = currentPath.Append(index);
-                        disclosurePaths[disclosure] = elementPath;
-
-                        //Step 3.c.iii.3: recursively process the Disclosure's own value, whose
-                        //nodes are interior to it.
-                        _ = WalkAndClean(disclosure.ClaimValue, elementPath, digestToDisclosure, disclosurePaths, interiorClaims, interiorClaims, seenDigests, depth + 1);
-                    }
-
-                    index++;
-                    continue;
+                    return state.Refuse(
+                        SdJwtWireDefect.ObjectDigestOfArrayElementDisclosure,
+                        "RFC 9901 section 7.1 step 3.c.ii.1: a digest in an object's _sd array resolved to an array-element disclosure.");
                 }
 
-                CredentialPath itemPath = currentPath.Append(index);
-                object? cleanedItem = WalkAndClean(item, itemPath, digestToDisclosure, disclosurePaths, claims, interiorClaims, seenDigests, depth + 1);
-                claims[itemPath] = cleanedItem;
-                cleaned.Add(cleanedItem);
+                //Step 3.c.ii.2: the claim name is no mechanism key.
+                if(SdConstants.IsReservedClaimName(claimName))
+                {
+                    return state.Refuse(
+                        SdJwtWireDefect.MechanismClaimName, $"RFC 9901 section 7.1 step 3.c.ii.2: the claim name '{claimName}' is a reserved mechanism key.");
+                }
+
+                //Step 3.c.ii.3: the claim name does not already exist at this level.
+                if(!localNames.Add(claimName))
+                {
+                    return state.Refuse(
+                        SdJwtWireDefect.ClaimNameRepeated, $"RFC 9901 section 7.1 step 3.c.ii.3: the claim name '{claimName}' already exists at this level.");
+                }
+
+                var disclosurePath = currentPath.Append(claimName);
+                state.DisclosurePaths[disclosure] = disclosurePath;
+
+                //Step 3.c.ii.5: the disclosure's own value is processed recursively. Everything it carries is interior to it:
+                //reading any of it costs this disclosure's release.
+                _ = WalkAndClean(disclosure.ClaimValue, disclosurePath, state, state.InteriorClaims, depth + 1);
+            }
+        }
+
+        var cleaned = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach(var property in container)
+        {
+            if(property.Key is SdConstants.SdClaimName or SdConstants.SdAlgorithmClaimName)
+            {
+                continue;
+            }
+
+            var childPath = currentPath.Append(property.Key);
+            var cleanedChild = WalkAndClean(property.Value, childPath, state, claims, depth + 1);
+            claims[childPath] = cleanedChild;
+            cleaned[property.Key] = cleanedChild;
+        }
+
+        return state.Refusal is null ? cleaned : null;
+    }
+
+
+    /// <summary>
+    /// Walks one JSON array of the payload or of a disclosure's value: resolves each <c>{"...": digest}</c> marker to the
+    /// array-element disclosure it names (RFC 9901 section 7.1 step 3.c.iii), then walks each of its other elements.
+    /// </summary>
+    /// <param name="array">The array's elements.</param>
+    /// <param name="currentPath">The array's own path.</param>
+    /// <param name="state">The walk's state.</param>
+    /// <param name="claims">Accumulates the array's elements.</param>
+    /// <param name="depth">How many containers and disclosure values the array sits below.</param>
+    /// <returns>The array without its markers, or <see langword="null"/> once the walk is refused.</returns>
+    private static object? WalkArray(
+        List<object> array,
+        CredentialPath currentPath,
+        WalkState state,
+        Dictionary<CredentialPath, object?> claims,
+        int depth)
+    {
+        var cleaned = new List<object?>();
+        var index = 0;
+
+        foreach(var item in array)
+        {
+            if(item is Dictionary<string, object> marker
+                && marker.Count == 1
+                && marker.TryGetValue(SdConstants.ArrayDigestKey, out var digestValue)
+                && digestValue is string digest)
+            {
+                if(!RecordDigest(digest, state))
+                {
+                    return null;
+                }
+
+                //Step 3.c.i: a digest with no matching disclosure is a decoy; step (d) removes it from the visible structure,
+                //but its position still counts toward the index.
+                if(state.DigestToDisclosure.TryGetValue(digest, out var disclosure))
+                {
+                    //Step 3.c.iii.1: a digest found in an array element resolves to a two-element (array-element) disclosure.
+                    if(disclosure.ClaimName is not null)
+                    {
+                        return state.Refuse(
+                            SdJwtWireDefect.ArrayDigestOfPropertyDisclosure,
+                            "RFC 9901 section 7.1 step 3.c.iii.1: a digest in an array resolved to an object-property disclosure.");
+                    }
+
+                    var elementPath = currentPath.Append(index);
+                    state.DisclosurePaths[disclosure] = elementPath;
+
+                    //Step 3.c.iii.3: the disclosure's own value is processed recursively, its nodes interior to it.
+                    _ = WalkAndClean(disclosure.ClaimValue, elementPath, state, state.InteriorClaims, depth + 1);
+                }
+
                 index++;
+
+                continue;
             }
 
-            return cleaned;
+            var itemPath = currentPath.Append(index);
+            var cleanedItem = WalkAndClean(item, itemPath, state, claims, depth + 1);
+            claims[itemPath] = cleanedItem;
+            cleaned.Add(cleanedItem);
+            index++;
         }
 
-        return node;
+        return state.Refusal is null ? cleaned : null;
     }
 
 
@@ -348,14 +468,18 @@ public static class SdJwtPathExtraction
     /// recursively via other Disclosures), the SD-JWT MUST be rejected."
     /// </summary>
     /// <param name="digest">The digest value encountered.</param>
-    /// <param name="seenDigests">Every digest value encountered so far.</param>
-    /// <exception cref="SdJwtWireFormatException">Thrown when the digest was already seen.</exception>
-    private static void RecordDigest(string digest, HashSet<string> seenDigests)
+    /// <param name="state">The walk's state, whose refusal a repeated digest records.</param>
+    /// <returns><see langword="true"/> when the digest is encountered for the first time; otherwise the walk is refused.</returns>
+    private static bool RecordDigest(string digest, WalkState state)
     {
-        if(!seenDigests.Add(digest))
+        if(state.SeenDigests.Add(digest))
         {
-            throw new SdJwtWireFormatException($"RFC 9901 §7.1 step 4: the digest '{digest}' is encountered more than once.");
+            return true;
         }
+
+        _ = state.Refuse(SdJwtWireDefect.DigestRepeated, $"RFC 9901 section 7.1 step 4: the digest '{digest}' is encountered more than once.");
+
+        return false;
     }
 
 
@@ -375,7 +499,7 @@ public static class SdJwtPathExtraction
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(pool);
 
-        JsonElement payload = ParseJwtPayload(token.IssuerSigned, decoder, pool);
+        var payload = PayloadOf(token, decoder, pool);
 
         var paths = new HashSet<CredentialPath>();
         CollectPathsRecursive(payload, CredentialPath.Root, paths);
@@ -400,7 +524,7 @@ public static class SdJwtPathExtraction
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(pool);
 
-        JsonElement payload = ParseJwtPayload(token.IssuerSigned, decoder, pool);
+        var payload = PayloadOf(token, decoder, pool);
 
         var mandatory = new HashSet<CredentialPath>();
         CollectMandatoryPathsRecursive(payload, CredentialPath.Root, mandatory);
@@ -491,37 +615,73 @@ public static class SdJwtPathExtraction
     }
 
     /// <summary>
-    /// The Issuer-signed JWT's payload as a JSON element, its wire shape refused as the SD-JWT reading refuses it: a JWT that is
-    /// not three segments, a payload the decoder refuses as no base64url text, or a payload that is not valid JSON. Any other
-    /// failure of the decoder or of the allocator is theirs and surfaces as it is.
+    /// The Issuer-signed JWT's payload as a JSON element (<see cref="PayloadRead"/>), or its refusal as the SD-JWT reading refuses
+    /// it (<see cref="PayloadRefused"/>): a JWT that is not three segments, a payload the decoder refuses as no base64url text, or
+    /// a payload that is not valid JSON. Any other failure of the decoder or of the allocator is theirs and surfaces as it is.
     /// </summary>
     /// <param name="jwt">The compact Issuer-signed JWT.</param>
     /// <param name="decoder">The base64url decoder.</param>
     /// <param name="pool">The pool the decoded bytes are rented from.</param>
-    /// <returns>The payload.</returns>
-    /// <exception cref="SdJwtWireFormatException">The wire shape is refused.</exception>
-    private static JsonElement ParseJwtPayload(string jwt, DecodeDelegate decoder, BaseMemoryPool pool)
+    /// <returns>The payload, or its refusal.</returns>
+    private static PayloadReading ReadJwtPayload(string jwt, DecodeDelegate decoder, BaseMemoryPool pool)
     {
-        string[] parts = jwt.Split('.');
+        var parts = jwt.Split('.');
 
         if(parts.Length != 3)
         {
-            throw new SdJwtWireFormatException("The Issuer-signed JWT is no compact JWS of three segments (RFC 7515 section 7.1).");
+            return new PayloadRefused(new SdJwtWalkRefused(
+                SdJwtWireDefect.IssuerJwtNotCompactJws, "The Issuer-signed JWT is no compact JWS of three segments (RFC 7515 section 7.1)."));
         }
 
-        using var payloadBytes = SdJwtSerializer.DecodedWireText(parts[1], decoder, pool, "The Issuer-signed JWT's payload is no base64url text (RFC 7515 section 7.1).");
+        using var payloadBytes = SdJwtSerializer.DecodedWireText(parts[1], decoder, pool);
 
-        try
+        if(payloadBytes is null)
         {
-            using var doc = JsonDocument.Parse(payloadBytes.Memory);
+            return new PayloadRefused(new SdJwtWalkRefused(
+                SdJwtWireDefect.PayloadNotBase64UrlText, "The Issuer-signed JWT's payload is no base64url text (RFC 7515 section 7.1)."));
+        }
 
-            return doc.RootElement.Clone();
-        }
-        catch(JsonException exception)
+        using var document = SdJwtSerializer.JsonDocumentOrNone(payloadBytes.Memory);
+
+        if(document is null)
         {
-            throw new SdJwtWireFormatException("The Issuer-signed JWT's payload is not valid JSON (RFC 7519 section 7.2).", exception);
+            return new PayloadRefused(new SdJwtWalkRefused(
+                SdJwtWireDefect.PayloadNotJson, "The Issuer-signed JWT's payload is not valid JSON (RFC 7519 section 7.2)."));
         }
+
+        return new PayloadRead(document.RootElement.Clone());
     }
+
+
+    /// <summary>
+    /// The payload of a token the SD-JWT reading produced, whose payload that reading has already read.
+    /// </summary>
+    /// <param name="token">The token.</param>
+    /// <param name="decoder">The base64url decoder.</param>
+    /// <param name="pool">The pool the decoded bytes are rented from.</param>
+    /// <returns>The payload.</returns>
+    /// <exception cref="ArgumentException">The token's payload is none the reading of an SD-JWT reads, so the token is none it produced.</exception>
+    private static JsonElement PayloadOf(SdToken<string> token, DecodeDelegate decoder, BaseMemoryPool pool) =>
+        ReadJwtPayload(token.IssuerSigned, decoder, pool) switch
+        {
+            PayloadRead read => read.Payload,
+            PayloadRefused refused => throw new ArgumentException($"The token is none the SD-JWT reading produced: {refused.Refusal.Description}", nameof(token)),
+            _ => throw new InvalidOperationException("The payload's reading answered a reading it never answers.")
+        };
+
+
+    /// <summary>What the reading of the Issuer-signed JWT's payload answers.</summary>
+    private abstract record PayloadReading;
+
+
+    /// <summary>The payload, read as JSON.</summary>
+    /// <param name="Payload">The payload.</param>
+    private sealed record PayloadRead(JsonElement Payload) : PayloadReading;
+
+
+    /// <summary>The refusal of the payload's wire shape.</summary>
+    /// <param name="Refusal">The refusal.</param>
+    private sealed record PayloadRefused(SdJwtWalkRefused Refusal) : PayloadReading;
 
 
     private static void CollectPathsRecursive(

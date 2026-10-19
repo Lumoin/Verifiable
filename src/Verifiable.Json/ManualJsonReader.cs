@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.Json;
 
 namespace Verifiable.Json;
@@ -14,7 +15,7 @@ namespace Verifiable.Json;
 /// <list type="bullet">
 /// <item><description><see cref="JsonTokenType.String"/> produces <see cref="string"/>.</description></item>
 /// <item><description><see cref="JsonTokenType.True"/> and <see cref="JsonTokenType.False"/> produce <see cref="bool"/>.</description></item>
-/// <item><description><see cref="JsonTokenType.Number"/> produces <see cref="int"/> if representable, then <see cref="long"/>, otherwise <see cref="decimal"/>.</description></item>
+/// <item><description><see cref="JsonTokenType.Number"/> produces <see cref="int"/> if representable, then <see cref="long"/>, otherwise the number held exactly (<see cref="ReadNumber"/>).</description></item>
 /// <item><description><see cref="JsonTokenType.Null"/> produces <see langword="null"/>.</description></item>
 /// <item><description><see cref="JsonTokenType.StartObject"/> produces <see cref="Dictionary{TKey,TValue}"/> with <see cref="string"/> keys and <see cref="object"/> values.</description></item>
 /// <item><description><see cref="JsonTokenType.StartArray"/> produces <see cref="List{T}"/> of <see cref="object"/>.</description></item>
@@ -78,11 +79,11 @@ internal static class ManualJsonReader
 
 
     /// <summary>
-    /// Narrows a JSON number to the smallest fitting CLR integer type,
-    /// falling back to <see cref="decimal"/> for non-integer values.
-    /// The narrowing order is <see cref="int"/> then <see cref="long"/>
-    /// then <see cref="decimal"/>, matching the behavior expected by
-    /// consumers that box numeric claims as <see cref="object"/>.
+    /// Narrows a JSON number to the smallest fitting CLR integer type, and holds any other number exactly: an <see cref="int"/>
+    /// when the token is an integer one holds, a <see cref="long"/> when one holds it, and otherwise the value
+    /// <see cref="Verifiable.JCose.DecimalNumber.ToClaimValue"/> boxes the number as - a <see cref="long"/>, a
+    /// <see cref="decimal"/> that holds it exactly, or the <see cref="Verifiable.JCose.DecimalNumber"/> itself - so a number past
+    /// a decimal's range or precision is never refused nor rounded.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -92,7 +93,7 @@ internal static class ManualJsonReader
     /// </para>
     /// <para>
     /// Exponent notation (<c>1e2</c>) and a signed zero (<c>-0</c>) both parse successfully and
-    /// normalize to their plain decimal value — <see cref="decimal"/> has no distinct negative-zero
+    /// normalize to their plain value — the exact number has no distinct negative-zero
     /// representation, and the exponent is applied rather than preserved lexically. An inline
     /// JSON-LD <c>@context</c> definition is an arbitrary JSON object (its own IRI/term-definition
     /// members aside, nothing constrains what a member's value may be), so this narrowing applies
@@ -104,30 +105,23 @@ internal static class ManualJsonReader
     /// materializes an arbitrary JSON object, such as <c>DidDocument.AdditionalData</c>.
     /// </para>
     /// </remarks>
-    /// <exception cref="JsonException">
-    /// Thrown when the number's text is beyond <see cref="decimal"/>'s representable range — a
-    /// malformed-input condition, not a CLR formatting bug, so it is never a <see cref="FormatException"/>.
-    /// </exception>
+    /// <param name="reader">The reader positioned on a number token.</param>
+    /// <returns>The boxed number.</returns>
     internal static object ReadNumber(ref Utf8JsonReader reader)
     {
-        if(reader.TryGetInt32(out int i))
+        if(reader.TryGetInt32(out var whole))
         {
-            return i;
+            return whole;
         }
 
-        if(reader.TryGetInt64(out long l))
+        if(reader.TryGetInt64(out var wide))
         {
-            return l;
+            return wide;
         }
 
-        try
-        {
-            return reader.GetDecimal();
-        }
-        catch(FormatException exception)
-        {
-            throw new JsonException("The JSON number is outside the range decimal can represent.", exception);
-        }
+        return reader.HasValueSequence
+            ? JsonElementConversion.ExactNumberOf(reader.ValueSequence.ToArray())
+            : JsonElementConversion.ExactNumberOf(reader.ValueSpan);
     }
 
 

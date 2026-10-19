@@ -100,9 +100,10 @@ public static class KbCwtVerification
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// The parsed and crypto-verified KBT contents, each check's outcome carried as it came out; or the defect of a presentation
-    /// whose part the reading that owns its wire shape refused (<see cref="SdCwtPresentationDefect"/>): the KBT COSE_Sign1, the
-    /// embedded SD-CWT and its extraction, the holder key, the KBT claims, or the embedded token's <c>iss</c>, <c>vct</c> or
-    /// <c>status</c>, each refused by its seam's <see cref="FormatException"/>. Only those readings' refusals are answered so: a
+    /// whose part the reading that owns its wire shape refused (<see cref="SdCwtPresentationDefect"/>): the KBT COSE_Sign1, refused
+    /// by its typed reading (<see cref="CoseSign1Refused"/>), the embedded SD-CWT and its extraction, the holder key, the KBT
+    /// claims, or the embedded token's <c>iss</c>, <c>vct</c> or <c>status</c>, each refused by its seam's
+    /// <see cref="FormatException"/>. Only those readings' refusals are answered so: a
     /// failure of the issuer-key resolver, of the credential's verification, of the Sig_structure encoder, of a signature or
     /// digest backend or of the allocator, cancellation among them, is a fault and surfaces as one, whatever its type.
     /// </returns>
@@ -138,31 +139,108 @@ public static class KbCwtVerification
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        //Every reading of the presentation's wire shape is one seam, its refusal of the bytes it is handed its FormatException;
-        //each is caught around that seam alone and answered as the defect of the part it reads, so no failure of a delegate
-        //composed beyond the readings is ever answered as a malformed presentation.
-        //Parse the KBT COSE_Sign1 from the wire bytes. The message owns its
-        //pool-routed protected-header and signature carriers; dispose it once
-        //the holder-signature check and claim reads are done.
-        CoseSign1Message kbtMessage;
-        try
-        {
-            kbtMessage = parseCoseSign1(kbtToken, pool);
-        }
-        catch(FormatException)
+        //The KBT COSE_Sign1 is read once by its typed reading, whose refusal is the defect of the token; the message owns its
+        //pool-routed protected-header and signature carriers and is disposed once the verification over it is done.
+        if(parseCoseSign1(kbtToken, pool) is not CoseSign1Read { Message: var kbtMessage })
         {
             return Result.Failure<SdCwtKbtVerificationResult, SdCwtPresentationDefect>(SdCwtPresentationDefect.KeyBindingTokenMalformed);
         }
 
         using var parsedKbt = kbtMessage;
 
-        //Extract and parse the embedded presentation SD-CWT from the kcwt
-        //protected-header parameter. The parsed token owns its disclosures;
-        //dispose it after collecting the disclosed claims.
+        if(EmbeddedSdCwtOrNone(parsedKbt, extractKcwt) is not { } embeddedSdCwt)
+        {
+            return Result.Failure<SdCwtKbtVerificationResult, SdCwtPresentationDefect>(SdCwtPresentationDefect.EmbeddedCredentialMalformed);
+        }
+
+        return await VerifyReadAsync(
+            parsedKbt, embeddedSdCwt, parseSdCwt, extractHolderKey, readKbtClaims, extractIssuer, extractCredentialType, extractStatus,
+            resolveIssuerKey, verifyCredential, buildSigStructure, saltReuseSeam, pool, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The embedded presentation SD-CWT a read Key Binding Token carries under its protected header's <c>kcwt</c> parameter, or
+    /// <see langword="null"/> when the extraction refuses the header, its <see cref="FormatException"/>; any other failure of
+    /// the extraction is a fault and surfaces as one.
+    /// </summary>
+    /// <param name="keyBindingToken">The Key Binding Token, read.</param>
+    /// <param name="extractKcwt">The extraction of the embedded SD-CWT.</param>
+    /// <returns>The embedded SD-CWT's wire bytes, or <see langword="null"/>.</returns>
+    public static ReadOnlyMemory<byte>? EmbeddedSdCwtOrNone(CoseSign1Message keyBindingToken, ExtractKcwtFromKbtDelegate extractKcwt)
+    {
+        ArgumentNullException.ThrowIfNull(keyBindingToken);
+        ArgumentNullException.ThrowIfNull(extractKcwt);
+
+        try
+        {
+            return extractKcwt(keyBindingToken.ProtectedHeader.AsReadOnlyMemory());
+        }
+        catch(FormatException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// Verifies a Key Binding Token its caller has already read, with the embedded SD-CWT it has already extracted, so a
+    /// caller that judges the token's wire shape first - for its trust evidence among them - reads each part once. The message
+    /// and the bytes are borrowed: the caller owns and disposes the message.
+    /// </summary>
+    /// <param name="keyBindingToken">The Key Binding Token's COSE_Sign1, read; borrowed.</param>
+    /// <param name="embeddedSdCwt">The embedded SD-CWT's wire bytes, extracted from the token's <c>kcwt</c>.</param>
+    /// <param name="parseSdCwt">Delegate that parses the embedded SD-CWT wire bytes.</param>
+    /// <param name="extractHolderKey">Delegate that reconstructs the holder public key from the embedded SD-CWT <c>cnf</c>.</param>
+    /// <param name="readKbtClaims">Delegate that reads <c>aud</c>/<c>iat</c>/<c>cnonce</c> from the KBT payload.</param>
+    /// <param name="extractIssuer">Delegate that reads the embedded SD-CWT's <c>iss</c>.</param>
+    /// <param name="extractCredentialType">Delegate that reads the embedded SD-CWT's <c>vct</c>.</param>
+    /// <param name="extractStatus">Delegate that reads the embedded SD-CWT's <c>status</c>.</param>
+    /// <param name="resolveIssuerKey">Application-provided delegate that resolves the issuer's public key from its identifier.</param>
+    /// <param name="verifyCredential">Delegate that verifies the embedded SD-CWT in full.</param>
+    /// <param name="buildSigStructure">Delegate that builds the COSE Sig_structure for the holder-signature check.</param>
+    /// <param name="saltReuseSeam">The commitment-reuse detection seam, or <see langword="null"/> to skip that check.</param>
+    /// <param name="pool">Memory pool for cryptographic allocations.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>As <see cref="VerifyAsync"/> answers, the Key Binding Token's own reading excepted.</returns>
+    public static async ValueTask<Result<SdCwtKbtVerificationResult, SdCwtPresentationDefect>> VerifyReadAsync(
+        CoseSign1Message keyBindingToken,
+        ReadOnlyMemory<byte> embeddedSdCwt,
+        ParseSdCwtTokenDelegate parseSdCwt,
+        ExtractSdCwtHolderKeyDelegate extractHolderKey,
+        ReadKbtCwtClaimsDelegate readKbtClaims,
+        ExtractSdCwtIssuerDelegate extractIssuer,
+        ExtractSdCwtCredentialTypeDelegate extractCredentialType,
+        ExtractSdCwtStatusDelegate extractStatus,
+        ResolveSdCwtIssuerKeyDelegate resolveIssuerKey,
+        VerifySdCwtCredentialDelegate verifyCredential,
+        BuildSigStructureDelegate buildSigStructure,
+        CommitmentReuseDetectionSeam? saltReuseSeam,
+        BaseMemoryPool pool,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(keyBindingToken);
+        ArgumentNullException.ThrowIfNull(parseSdCwt);
+        ArgumentNullException.ThrowIfNull(extractHolderKey);
+        ArgumentNullException.ThrowIfNull(readKbtClaims);
+        ArgumentNullException.ThrowIfNull(extractIssuer);
+        ArgumentNullException.ThrowIfNull(extractCredentialType);
+        ArgumentNullException.ThrowIfNull(extractStatus);
+        ArgumentNullException.ThrowIfNull(resolveIssuerKey);
+        ArgumentNullException.ThrowIfNull(verifyCredential);
+        ArgumentNullException.ThrowIfNull(buildSigStructure);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        //Every reading of the presentation's wire shape is one seam, its refusal of the bytes it is handed its FormatException;
+        //each is caught around that seam alone and answered as the defect of the part it reads, so no failure of a delegate
+        //composed beyond the readings is ever answered as a malformed presentation. The embedded presentation SD-CWT is parsed
+        //first; the parsed token owns its disclosures and is disposed after the disclosed claims are collected.
         SdToken<ReadOnlyMemory<byte>> embeddedSdCwtToken;
         try
         {
-            embeddedSdCwtToken = parseSdCwt(extractKcwt(parsedKbt.ProtectedHeader.AsReadOnlyMemory()));
+            embeddedSdCwtToken = parseSdCwt(embeddedSdCwt);
         }
         catch(FormatException)
         {
@@ -189,7 +267,7 @@ public static class KbCwtVerification
             if(holderPublicKey is not null)
             {
                 holderSignatureValid = await Cose.VerifyAsync(
-                    parsedKbt,
+                    keyBindingToken,
                     buildSigStructure,
                     holderPublicKey,
                     cancellationToken).ConfigureAwait(false);
@@ -200,7 +278,7 @@ public static class KbCwtVerification
         KbtCwtClaims kbtClaims;
         try
         {
-            kbtClaims = readKbtClaims(parsedKbt.Payload);
+            kbtClaims = readKbtClaims(keyBindingToken.Payload);
         }
         catch(FormatException)
         {

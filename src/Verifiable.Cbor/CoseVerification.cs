@@ -43,15 +43,10 @@ public static class CoseVerification
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        CoseSign1Message message;
-        try
+        //Malformed, untagged, or wrong-shape COSE on untrusted input is refused by the typed reading and fails closed, like the
+        //JWS verify paths; a failure of the reading itself or of the allocator is a fault and surfaces as one.
+        if(CoseSerialization.ParseCoseSign1(encodedCoseSign1, pool) is not CoseSign1Read { Message: var message })
         {
-            message = CoseSerialization.ParseCoseSign1(encodedCoseSign1, pool);
-        }
-        catch(Exception ex) when(ex is CborException or InvalidOperationException or ArgumentException or IndexOutOfRangeException)
-        {
-            //Malformed, untagged, or wrong-shape COSE on untrusted input — fail closed, like the JWS
-            //verify paths, rather than letting the CBOR reader's exception escape.
             return CoseVerificationResult.Failed();
         }
 
