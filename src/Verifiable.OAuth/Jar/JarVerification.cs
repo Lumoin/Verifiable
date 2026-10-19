@@ -154,7 +154,7 @@ public static class JarVerification
                     "JAR payload is not well-formed JSON, or carries a duplicate claim name.");
             }
 
-            IReadOnlyDictionary<string, object> claims;
+            IReadOnlyDictionary<string, object?> claims;
             try
             {
                 claims = payloadDeserializer(unverified.Payload.Span);

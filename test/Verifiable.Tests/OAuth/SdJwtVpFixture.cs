@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers.Text;
+using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -386,5 +387,80 @@ internal static class SdJwtVpFixture
         using SdToken<string> tokenWithKb = token.WithKeyBinding(compactKbJwt, pool);
 
         return SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
+    }
+
+
+    /// <summary>
+    /// Binds a serialized SD-JWT VC (issued without a Key Binding JWT) to one presentation under a KB-JWT the Wallet writes by
+    /// hand and signs once: <see cref="WriteKeyBindingJwtAsync"/> over the token's <c>sd_hash</c> input, so a row deciding the
+    /// KB-JWT's <c>iat</c> - omitting it among the choices - has it in the first and only bytes the holder signed.
+    /// </summary>
+    /// <param name="sdJwtWithoutKb">The issued SD-JWT VC, serialized without a Key Binding JWT.</param>
+    /// <param name="holderPrivateKey">The holder's private key; must match the credential's <c>cnf</c>.</param>
+    /// <param name="nonce">The verifier nonce the KB-JWT's <c>nonce</c> claim binds to.</param>
+    /// <param name="audience">The verifier <c>client_id</c> the KB-JWT's <c>aud</c> claim binds to.</param>
+    /// <param name="issuedAt">The KB-JWT's <c>iat</c>, or <see langword="null"/> for a KB-JWT that omits the claim.</param>
+    /// <param name="pool">The pool the parse, the re-serialization and the signing rent transient buffers from.</param>
+    /// <param name="cancellationToken">Cancels the KB-JWT signing.</param>
+    /// <returns>The serialized SD-JWT VC with the KB-JWT appended.</returns>
+    public static async ValueTask<string> PresentWithWrittenKeyBindingAsync(
+        string sdJwtWithoutKb,
+        PrivateKeyMemory holderPrivateKey,
+        string nonce,
+        string audience,
+        DateTimeOffset? issuedAt,
+        BaseMemoryPool pool,
+        CancellationToken cancellationToken)
+    {
+        using var token = SdJwtSerializer.ParseToken(
+            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, pool, TestSalts.TestSaltTag);
+
+        var hashInput = SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder);
+        var compactKbJwt = await WriteKeyBindingJwtAsync(
+            Encoding.UTF8.GetBytes(hashInput), holderPrivateKey, nonce, audience, issuedAt, pool, cancellationToken).ConfigureAwait(false);
+
+        using var tokenWithKb = token.WithKeyBinding(compactKbJwt, pool);
+
+        return SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
+    }
+
+
+    /// <summary>
+    /// Writes a Key Binding JWT by hand and signs it once (RFC 9901 section 4.3): the protected header the library's issuance
+    /// writes, <c>typ</c> <c>kb+jwt</c> and the holder key's <c>alg</c>; the claims set <paramref name="nonce"/>,
+    /// <paramref name="audience"/> as <c>aud</c>, the <c>sd_hash</c> over <paramref name="sdJwtForHashing"/> and, unless
+    /// <paramref name="issuedAt"/> is <see langword="null"/>, its <c>iat</c>; signed under the holder's key over those exact bytes.
+    /// </summary>
+    /// <param name="sdJwtForHashing">The presentation's <c>sd_hash</c> input, as UTF-8.</param>
+    /// <param name="holderPrivateKey">The holder's private key.</param>
+    /// <param name="nonce">The verifier nonce the KB-JWT's <c>nonce</c> claim binds to.</param>
+    /// <param name="audience">The verifier <c>client_id</c> the KB-JWT's <c>aud</c> claim binds to.</param>
+    /// <param name="issuedAt">The KB-JWT's <c>iat</c>, or <see langword="null"/> for a KB-JWT that omits the claim.</param>
+    /// <param name="pool">The pool the signing rents transient buffers from.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The compact KB-JWT.</returns>
+    public static async ValueTask<string> WriteKeyBindingJwtAsync(
+        ReadOnlyMemory<byte> sdJwtForHashing,
+        PrivateKeyMemory holderPrivateKey,
+        string nonce,
+        string audience,
+        DateTimeOffset? issuedAt,
+        BaseMemoryPool pool,
+        CancellationToken cancellationToken)
+    {
+        var algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivateKey.Tag);
+        var headerJson = $"{{\"{WellKnownJoseHeaderNames.Alg}\":\"{algorithm}\",\"{WellKnownJoseHeaderNames.Typ}\":\"{WellKnownMediaTypes.Jwt.KbJwt}\"}}";
+        var sdHash = TestSetup.Base64UrlEncoder(SHA256.HashData(sdJwtForHashing.Span));
+
+        var payloadJson = $"{{\"{WellKnownJwtClaimNames.Nonce}\":\"{nonce}\","
+            + $"\"{WellKnownJwtClaimNames.Aud}\":\"{audience}\","
+            + $"\"{SdConstants.SdHashClaim}\":\"{sdHash}\""
+            + (issuedAt is { } instant ? $",\"{WellKnownJwtClaimNames.Iat}\":{instant.ToUnixTimeSeconds()}" : string.Empty)
+            + "}";
+        var signingInput = $"{TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson))}.{TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson))}";
+
+        using var signature = await holderPrivateKey.SignAsync(Encoding.ASCII.GetBytes(signingInput), pool, cancellationToken).ConfigureAwait(false);
+
+        return $"{signingInput}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
     }
 }

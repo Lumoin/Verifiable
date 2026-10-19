@@ -244,8 +244,8 @@ internal sealed class FederationChainPropertyTests
     {
         Assert.IsTrue(statement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out object? jwksObj),
             "The anchor's Entity Configuration must publish a jwks.");
-        IReadOnlyDictionary<string, object> jwks = (IReadOnlyDictionary<string, object>)jwksObj;
-        IEnumerable<object> keys = (IEnumerable<object>)jwks[WellKnownJwkMemberNames.Keys];
+        var jwks = Assert.IsInstanceOfType<IReadOnlyDictionary<string, object?>>(jwksObj);
+        var keys = Assert.IsInstanceOfType<IEnumerable<object>>(jwks[WellKnownJwkMemberNames.Keys]);
         IReadOnlyDictionary<string, object> firstKey = (IReadOnlyDictionary<string, object>)keys.First();
         return (string)firstKey[WellKnownJwkMemberNames.Kid];
     }
@@ -274,13 +274,13 @@ internal sealed class FederationTopologyFixture : IAsyncDisposable
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
     private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
 

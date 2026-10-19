@@ -59,13 +59,13 @@ internal sealed class FederationTrustPathEvidenceTests
 
     /// <summary>Deserializes a compact JWS header segment for <see cref="TrustChainValidation.BuildInlineValidator"/>.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Deserializes a compact JWS payload segment for <see cref="TrustChainValidation.BuildInlineValidator"/>.</summary>
     private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
 

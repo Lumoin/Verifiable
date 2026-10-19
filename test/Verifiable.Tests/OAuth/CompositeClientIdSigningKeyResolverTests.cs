@@ -38,21 +38,21 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
 
     private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer JwtPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
     private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
 
@@ -157,7 +157,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
                 clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
                 base64UrlEncoder: Encoder,
                 memoryPool: Pool,
-                additionalHeaderClaims: new Dictionary<string, object>
+                additionalHeaderClaims: new Dictionary<string, object?>
                 {
                     [WellKnownJwkMemberNames.X5c] = x5cValues,
                 },
@@ -264,7 +264,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
             clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: Encoder,
             memoryPool: Pool,
-            additionalHeaderClaims: new Dictionary<string, object>
+            additionalHeaderClaims: new Dictionary<string, object?>
             {
                 [WellKnownJoseHeaderNames.Jwt] = attestationCompactJwt,
             },
@@ -391,7 +391,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
             clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: Encoder,
             memoryPool: Pool,
-            additionalHeaderClaims: new Dictionary<string, object>
+            additionalHeaderClaims: new Dictionary<string, object?>
             {
                 [WellKnownFederationClaimNames.TrustChain] = chainHeader,
             },

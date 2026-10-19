@@ -267,6 +267,25 @@ public static class JtiReplayGuard
 
 
     /// <summary>
+    /// The instant a store's own expiry of a record is set to, from how long the record is kept: the exclusive end of a window
+    /// the clock represents, or the clock's last instant for a record kept to the clock's end, which the retention the state
+    /// carries tells apart from a window ending there. A retention of any other kind is none a record is kept by, and is
+    /// refused before the store is consulted.
+    /// </summary>
+    /// <param name="retention">How long the record is kept.</param>
+    /// <returns>The instant.</returns>
+    /// <exception cref="ArgumentException"><paramref name="retention"/> is neither of the two retentions a record is kept by.</exception>
+    private static DateTimeOffset StoredExpiryOf(ReplayRecordRetention retention) => retention switch
+    {
+        ReplayRecordKeptUntil { End: var end } => end,
+        ReplayRecordKeptToTheClocksEnd => DateTimeOffset.MaxValue,
+        _ => throw new ArgumentException(
+            $"The retention {retention.GetType().FullName} is none a replay record is kept by: a record is kept until an instant or to the clock's end.",
+            nameof(retention))
+    };
+
+
+    /// <summary>
     /// The one consultation <see cref="ConsultAsync"/> and <see cref="ConsultDpopProofAsync"/> share: the
     /// policy, the length bound, the store's presence and claim, the record, its read-back and the claim
     /// that decides the first use, over the key <see cref="CorrelationKey(JtiReplayPurpose, string, string?, string)"/>
@@ -300,6 +319,7 @@ public static class JtiReplayGuard
         ArgumentNullException.ThrowIfNull(retention);
         RequireTargetShape(purpose, target);
 
+        var storedExpiry = StoredExpiryOf(retention);
         var oauth = server.OAuth();
 
         JtiReplayPolicy policy = context.JtiReplayPolicy;
@@ -353,7 +373,7 @@ public static class JtiReplayGuard
             FlowId = flowId,
             ExpectedIssuer = issuer,
             EnteredAt = now,
-            ExpiresAt = retention is ReplayRecordKeptUntil { End: var end } ? end : DateTimeOffset.MaxValue,
+            ExpiresAt = storedExpiry,
             Retention = retention,
             Kind = FlowKind.JtiReplay,
             Purpose = purpose,

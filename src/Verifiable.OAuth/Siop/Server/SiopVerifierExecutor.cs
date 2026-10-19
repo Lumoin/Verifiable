@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using Verifiable.Core;
+using Verifiable.Core.Assessment;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
@@ -10,6 +11,7 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Siop.Server;
 
@@ -132,7 +134,8 @@ public static class SiopVerifierExecutor
     /// same classification the OID4VP seat gives the identical Wallet-attributable shape, and the
     /// <c>error_description</c> stays the fixed, non-revealing sentence
     /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-15.9">OID4VP
-    /// 1.0 §15.9</see> asks for. Only once every one of the seven binding checks holds does the handler
+    /// 1.0 §15.9</see> asks for. Only once every one of the eight binding checks holds, the KB-JWT <c>iat</c> required and judged
+    /// by the same freshness checks the OID4VP seat runs among them, does the handler
     /// read the credential's Token Status List status and apply <paramref name="credentialStatusPolicy"/>
     /// — Token Status List §8.3's ordering: "the processing rules for Referenced Tokens … MUST precede
     /// any evaluation of a Referenced Token's status".
@@ -219,7 +222,7 @@ public static class SiopVerifierExecutor
             //and are never overwritten — every other key (x5c, trust_chain, jwt, kid) is copied in.
             if(action.AdditionalHeaderClaims is not null)
             {
-                foreach(KeyValuePair<string, object> claim in action.AdditionalHeaderClaims)
+                foreach(KeyValuePair<string, object?> claim in action.AdditionalHeaderClaims)
                 {
                     if(claim.Key != WellKnownJwkMemberNames.Alg
                         && claim.Key != WellKnownJoseHeaderNames.Typ)
@@ -441,7 +444,8 @@ public static class SiopVerifierExecutor
             //— Malformed, not a 500 fault. VerifyAsync answers such a presentation with its typed refusal, and
             //throws FormatException only from the wire format's own parse; a non-format failure is left on the
             //fault path.
-            SdJwtVpTokenVerificationOutcome verification;
+            Result<VpTokenParsed, SdJwtPresentationDefect> verification;
+
             try
             {
                 verification = await SdJwtVpTokenVerification.VerifyAsync(
@@ -472,19 +476,19 @@ public static class SiopVerifierExecutor
                 };
             }
 
-            if(verification is SdJwtVpTokenRefused { Defect: var defect })
+            //The typed defect rides the failure to the failed state; the Wallet is answered the generic malformed description.
+            if(!verification.IsSuccess)
             {
                 return new SiopFlowFailed
                 {
-                    Reason = $"Malformed vp_token presentation for credential query '{resolvedVpTokenCredentialQueryId}': {defect}.",
+                    Reason = $"Malformed vp_token presentation for credential query '{resolvedVpTokenCredentialQueryId}': {verification.Error}.",
                     FailedAt = now,
-                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
+                    PresentationDefect = verification.Error
                 };
             }
 
-            var parsed = verification is SdJwtVpTokenVerified { Parsed: var verified }
-                ? verified
-                : throw new InvalidOperationException("The SD-JWT VP token verification answered neither its contents nor its refusal.");
+            var parsed = verification.Value;
 
             //SIOPv2 §12 binding: the vp_token's KB-JWT MUST carry the same nonce the RP provided
             //(equal to the verified id_token nonce) and the RP's Client ID as aud. The id_token's
@@ -498,11 +502,26 @@ public static class SiopVerifierExecutor
             bool idTokenNonceBound = string.Equals(verifiedIdToken.Nonce, action.ExpectedNonce, StringComparison.Ordinal);
             bool saltReused = parsed.SaltReused;
 
+            //RFC 9901 section 4.3: the KB-JWT's iat is REQUIRED, the time at which the presentation was made. The checks the OID4VP
+            //seat judges it by judge it here, under the request's own policy where it sets one: an omitted iat, one in the future
+            //beyond the clock-skew tolerance, or one older than the freshness window fails the binding.
+            var kbJwtDates = new ValidationContext
+            {
+                Context = context,
+                Now = now,
+                KbJwtIat = parsed.KbJwtIat
+            };
+
+            var iatNotInFuture = await ValidationChecks.CheckKbJwtIatNotInFuture(kbJwtDates, cancellationToken).ConfigureAwait(false);
+            var iatNotTooOld = await ValidationChecks.CheckKbJwtIatNotTooOld(kbJwtDates, cancellationToken).ConfigureAwait(false);
+            var kbJwtIssuedAtFresh = iatNotInFuture is [{ Outcome: ClaimOutcome.Success }] && iatNotTooOld is [{ Outcome: ClaimOutcome.Success }];
+
             if(!(credentialSignatureValid
                 && kbJwtSignatureValid
                 && sdHashValid
                 && vpNonceBound
                 && vpAudBound
+                && kbJwtIssuedAtFresh
                 && idTokenNonceBound
                 && !saltReused))
             {
@@ -515,13 +534,13 @@ public static class SiopVerifierExecutor
                         "SIOPv2 §12 combined response verification failed "
                         + $"(credentialSignature={credentialSignatureValid}, kbJwtSignature={kbJwtSignatureValid}, "
                         + $"sdHash={sdHashValid}, vpTokenNonceBound={vpNonceBound}, vpTokenAudBound={vpAudBound}, "
-                        + $"idTokenNonceBound={idTokenNonceBound}, saltReused={saltReused}).",
+                        + $"kbJwtIssuedAtFresh={kbJwtIssuedAtFresh}, idTokenNonceBound={idTokenNonceBound}, saltReused={saltReused}).",
                     FailedAt = now,
                     Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Unverifiable)
                 };
             }
 
-            //The seven-way binding holds; only now does Token Status List §8.3's ordering permit reading
+            //The eight-way binding holds; only now does Token Status List §8.3's ordering permit reading
             //the credential's status ("the processing rules for Referenced Tokens … MUST precede any
             //evaluation of a Referenced Token's status"). Run the identical shared step the OID4VP
             //direct_post seat runs.

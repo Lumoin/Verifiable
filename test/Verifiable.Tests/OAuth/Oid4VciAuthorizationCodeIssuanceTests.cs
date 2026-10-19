@@ -79,12 +79,12 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
 

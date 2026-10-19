@@ -52,11 +52,11 @@ internal sealed class CredentialProofEnforcementFlowTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, JoseSerializationOptions);
+            (Dictionary<string, object?>)header, JoseSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, JoseSerializationOptions);
+            (Dictionary<string, object?>)payload, JoseSerializationOptions);
 
 
     /// <summary>

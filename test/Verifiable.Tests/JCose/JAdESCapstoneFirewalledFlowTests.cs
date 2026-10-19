@@ -257,7 +257,7 @@ internal sealed class JAdESCapstoneFirewalledFlowTests
                 [new JAdESUnsignedHeaderElementCounterSignature(
                     PooledMemory.FromBytes(Encoding.UTF8.GetBytes(cSigWireText), BaseMemoryPool.Shared, Tag.Create(Purpose.Data)))]);
 
-            IReadOnlyDictionary<string, object>? unprotectedHeader = JAdESEtsiUJson.Encode(unsignedHeaders);
+            var unprotectedHeader = JAdESEtsiUJson.Encode(unsignedHeaders);
 
             using var newSignatureComponent = new JwsSignatureComponent(
                 embeddingSignature.Protected, embeddingSignature.ProtectedHeader, embeddingSignature.Signature, unprotectedHeader);

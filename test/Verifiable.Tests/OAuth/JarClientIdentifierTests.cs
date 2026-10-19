@@ -51,23 +51,23 @@ internal sealed class JarClientIdentifierTests
 
     private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer JwtPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
     private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
 
@@ -168,7 +168,7 @@ internal sealed class JarClientIdentifierTests
             clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: Encoder,
             memoryPool: Pool,
-            additionalHeaderClaims: new Dictionary<string, object>
+            additionalHeaderClaims: new Dictionary<string, object?>
             {
                 [WellKnownJoseHeaderNames.Jwt] = attestationCompactJwt
             },
@@ -295,7 +295,7 @@ internal sealed class JarClientIdentifierTests
             clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: Encoder,
             memoryPool: Pool,
-            additionalHeaderClaims: new Dictionary<string, object>
+            additionalHeaderClaims: new Dictionary<string, object?>
             {
                 [WellKnownJoseHeaderNames.Jwt] = attestationCompactJwt
             },
@@ -430,7 +430,7 @@ internal sealed class JarClientIdentifierTests
                     m, TestSetup.DefaultSerializationOptions),
                 base64UrlEncoder: Encoder,
                 memoryPool: Pool,
-                additionalHeaderClaims: new Dictionary<string, object>
+                additionalHeaderClaims: new Dictionary<string, object?>
                 {
                     [WellKnownJwkMemberNames.X5c] = x5cValues
                 },
@@ -583,7 +583,7 @@ internal sealed class JarClientIdentifierTests
                     m, TestSetup.DefaultSerializationOptions),
                 base64UrlEncoder: Encoder,
                 memoryPool: Pool,
-                additionalHeaderClaims: new Dictionary<string, object>
+                additionalHeaderClaims: new Dictionary<string, object?>
                 {
                     [WellKnownJwkMemberNames.X5c] = x5cValues
                 },
@@ -672,7 +672,7 @@ internal sealed class JarClientIdentifierTests
             IReadOnlyList<string> list => list,
             IEnumerable<object> enumerable => enumerable.OfType<string>().ToList(),
             _ => throw new FormatException(
-                $"Unexpected x5c value type: {x5cObj.GetType().Name}")
+                $"Unexpected x5c value type: {x5cObj?.GetType().Name}")
         };
     }
 
@@ -760,7 +760,7 @@ internal sealed class JarClientIdentifierTests
             clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: Encoder,
             memoryPool: Pool,
-            additionalHeaderClaims: new Dictionary<string, object>
+            additionalHeaderClaims: new Dictionary<string, object?>
             {
                 [WellKnownJwkMemberNames.Kid] = verificationMethodId,
             },
@@ -931,7 +931,7 @@ internal sealed class JarClientIdentifierTests
             clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: Encoder,
             memoryPool: Pool,
-            additionalHeaderClaims: new Dictionary<string, object>
+            additionalHeaderClaims: new Dictionary<string, object?>
             {
                 [WellKnownFederationClaimNames.TrustChain] = trustChainHeader,
             },

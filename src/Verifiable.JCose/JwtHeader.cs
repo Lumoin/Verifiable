@@ -51,7 +51,7 @@ public sealed class JwtHeader : JoseDictionary, IEquatable<JwtHeader>
     /// <see cref="IDictionary{TKey,TValue}"/>.
     /// </summary>
     /// <param name="parameters">The key-value pairs to copy.</param>
-    public JwtHeader(IEnumerable<KeyValuePair<string, object>> parameters)
+    public JwtHeader(IEnumerable<KeyValuePair<string, object?>> parameters)
         : base(parameters) { }
 
 

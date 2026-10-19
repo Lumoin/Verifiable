@@ -116,7 +116,7 @@ public static class JarExtensions
             JarClaimSerializer<VerifierClientMetadata> clientMetadataSerializer,
             EncodeDelegate base64UrlEncoder,
             BaseMemoryPool memoryPool,
-            IReadOnlyDictionary<string, object>? additionalHeaderClaims = null,
+            IReadOnlyDictionary<string, object?>? additionalHeaderClaims = null,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signingKey);
@@ -146,7 +146,7 @@ public static class JarExtensions
 
             if(additionalHeaderClaims is not null)
             {
-                foreach(KeyValuePair<string, object> claim in additionalHeaderClaims)
+                foreach(KeyValuePair<string, object?> claim in additionalHeaderClaims)
                 {
                     if(claim.Key != WellKnownJwkMemberNames.Alg && claim.Key != WellKnownJoseHeaderNames.Typ)
                     {
@@ -243,7 +243,7 @@ public static class JarExtensions
             JarClaimSerializer<DcqlQuery> dcqlQuerySerializer,
             JarClaimSerializer<VerifierClientMetadata> clientMetadataSerializer,
             EncodeDelegate base64UrlEncoder,
-            IReadOnlyDictionary<string, object>? additionalHeaderClaims = null)
+            IReadOnlyDictionary<string, object?>? additionalHeaderClaims = null)
         {
             ArgumentNullException.ThrowIfNull(headerSerializer);
             ArgumentNullException.ThrowIfNull(payloadSerializer);
@@ -268,7 +268,7 @@ public static class JarExtensions
 
             if(additionalHeaderClaims is not null)
             {
-                foreach(KeyValuePair<string, object> claim in additionalHeaderClaims)
+                foreach(KeyValuePair<string, object?> claim in additionalHeaderClaims)
                 {
                     if(claim.Key != WellKnownJwkMemberNames.Alg
                         && claim.Key != WellKnownJoseHeaderNames.Typ)
@@ -372,7 +372,7 @@ public static class JarExtensions
     //Builder.EncodeJwtPart). A JSON string is returned as-is. Routing the
     //object form through the same JarClaimDeserializer<T> the string form
     //uses keeps one parsing path for the claim rather than two.
-    private static string? ResolveClaimJson(object claimValue)
+    private static string? ResolveClaimJson(object? claimValue)
     {
         switch(claimValue)
         {
@@ -476,7 +476,7 @@ public static class JarExtensions
                 "JAR payload is not well-formed JSON, or carries a duplicate claim name.");
         }
 
-        IReadOnlyDictionary<string, object> claims =
+        var claims =
             payloadDeserializer(unverified.Payload.Span);
 
         //Claim extraction is shared with the unsigned path through the single
@@ -491,7 +491,7 @@ public static class JarExtensions
     //(typically List<object>) from the dictionary converter; every
     //entry MUST be a string per OID4VP 1.0 §8.4 — non-string entries
     //are a structural error.
-    private static List<string> ReadTransactionDataArray(object raw)
+    private static List<string> ReadTransactionDataArray(object? raw)
     {
         if(raw is not IEnumerable<object> items)
         {
@@ -627,7 +627,7 @@ public static class JarExtensions
         using IMemoryOwner<byte> headerOwner = base64UrlDecoder(parts[0], memoryPool);
         using IMemoryOwner<byte> payloadOwner = base64UrlDecoder(parts[1], memoryPool);
 
-        IReadOnlyDictionary<string, object> headerClaims =
+        var headerClaims =
             headerDeserializer(headerOwner.Memory.Span);
 
         if(!headerClaims.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
@@ -639,7 +639,7 @@ public static class JarExtensions
                 $"'{WellKnownMediaTypes.Jwt.OauthAuthzReqJwt}'.");
         }
 
-        IReadOnlyDictionary<string, object> payloadClaims =
+        var payloadClaims =
             payloadDeserializer(payloadOwner.Memory.Span);
 
         AuthorizationRequestObject request = BuildRequestObjectFromClaims(
@@ -655,7 +655,7 @@ public static class JarExtensions
     //optional claims out of it and returns the typed AuthorizationRequest-
     //Object. Single source of truth for the required-claim list.
     private static AuthorizationRequestObject BuildRequestObjectFromClaims(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         StateParameterPolicy statePolicy,
         JarClaimDeserializer<DcqlQuery> dcqlQueryDeserializer,
         JarClaimDeserializer<VerifierClientMetadata> clientMetadataDeserializer)
@@ -860,7 +860,7 @@ public static class JarExtensions
 
 
     private static string RequireClaim(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string name)
     {
         if(!claims.TryGetValue(name, out object? value) || value is not string str)
@@ -874,7 +874,7 @@ public static class JarExtensions
 
 
     private static string? OptionalClaim(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string name)
     {
         return claims.TryGetValue(name, out object? value) && value is string str ? str : null;
@@ -891,7 +891,7 @@ public static class JarExtensions
     /// <returns>The date the claim names.</returns>
     /// <exception cref="FormatException">The claim is absent, or is no NumericDate naming an instant a clock represents.</exception>
     private static NumericDate RequireNumericDate(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string name)
     {
         if(!claims.TryGetValue(name, out object? value) || value is null)

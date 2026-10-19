@@ -24,12 +24,12 @@ internal sealed class JwsCriticalHeaderTests
     /// <summary>Serialises a protected header to UTF-8 JSON bytes.</summary>
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serialises a payload to UTF-8 JSON bytes.</summary>
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
 
     /// <summary>

@@ -100,7 +100,7 @@ public static class CompositeClientIdSigningKeyResolver
     /// </remarks>
     public static ResolveClientIdSigningKeyAsyncDelegate BuildVerifierAttestationHandler(
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> payloadDeserializer,
         BaseMemoryPool pool)
     {

@@ -279,7 +279,7 @@ public static class CredentialJwsExtensions
         //verify; fail closed to an invalid result rather than letting the exception escape. The payload
         //is still decoded only once the signature holds (the firewall below), so this guard does not
         //relax that ordering. Cancellation propagates.
-        Dictionary<string, object>? header = null;
+        Dictionary<string, object?>? header = null;
         try
         {
             using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(parts[0], memoryPool);
@@ -393,7 +393,7 @@ public static class CredentialJwsExtensions
             throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
         }
 
-        Dictionary<string, object>? header = null;
+        Dictionary<string, object?>? header = null;
         try
         {
             using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(parts[0], memoryPool);
@@ -570,7 +570,7 @@ public static class CredentialJwsExtensions
 
         CryptographicKeyEvents.Emit(evt);
 
-        var header = new Dictionary<string, object>(signature.ProtectedHeader);
+        var header = new Dictionary<string, object?>(signature.ProtectedHeader);
         if(!isValid)
         {
             return new JwsCredentialVerificationResult(false, header, null);
@@ -625,7 +625,7 @@ public static class CredentialJwsExtensions
         }
 
         JwsSignatureComponent signature = message.Signatures[0];
-        var header = new Dictionary<string, object>(signature.ProtectedHeader);
+        var header = new Dictionary<string, object?>(signature.ProtectedHeader);
 
         VerifiableCredential credential;
         try
@@ -689,7 +689,7 @@ public static class CredentialJwsExtensions
 
 
     //Reads the JWS 'kid' header as the verification method / key id for the verification context.
-    private static string? ExtractKeyId(Dictionary<string, object>? header)
+    private static string? ExtractKeyId(Dictionary<string, object?>? header)
     {
         if(header is not null && header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? value) && value is string keyId)
         {

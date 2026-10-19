@@ -8,4 +8,4 @@ namespace Verifiable.Core.SecurityEvents;
 /// </summary>
 /// <param name="jsonBytes">The decoded (un-base64url) JSON bytes of one JWT segment.</param>
 /// <returns>The parsed object, or <see langword="null"/> if the bytes are not a JSON object.</returns>
-public delegate Dictionary<string, object>? SecurityEventTokenPartDeserializer(ReadOnlySpan<byte> jsonBytes);
+public delegate Dictionary<string, object?>? SecurityEventTokenPartDeserializer(ReadOnlySpan<byte> jsonBytes);

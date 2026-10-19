@@ -449,6 +449,69 @@ internal sealed class SiopCombinedResponseStatusTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9901#section-4.3">RFC 9901, Section 4.3</see> has the Key Binding JWT's
+    /// <c>iat</c> REQUIRED, the time at which the presentation was made. A SIOPv2 Section 12 combined response whose KB-JWT omits
+    /// it, states an instant an hour ahead of the relying party's clock, or one a day behind it fails the combined response's
+    /// binding - answered as HTTP 400 <c>invalid_request</c>, the flow failing as unverifiable before any Status List Token is
+    /// resolved - by the same freshness checks the OID4VP seat runs. The control, the same KB-JWT written the same way with the
+    /// instant of the presentation, is accepted. The Wallet writes and signs each KB-JWT once, so the bytes judged are the first
+    /// and only bytes the holder signed.
+    /// </summary>
+    /// <param name="writeIat">Whether the KB-JWT carries an <c>iat</c>.</param>
+    /// <param name="iatOffsetMinutes">How far from the relying party's clock the written <c>iat</c> lies.</param>
+    /// <param name="accepted">Whether the combined response is accepted.</param>
+    /// <returns>A task completing once the combined response is judged.</returns>
+    [TestMethod]
+    [DataRow(false, 0, false, DisplayName = "A KB-JWT omitting iat")]
+    [DataRow(true, 60, false, DisplayName = "A KB-JWT whose iat is an hour ahead")]
+    [DataRow(true, -1440, false, DisplayName = "A KB-JWT whose iat is a day old")]
+    [DataRow(true, 0, true, DisplayName = "The control, a KB-JWT whose iat is the presentation's instant")]
+    public async Task AKeyBindingJwtIatOmittedOrOutsideItsWindowFailsTheCombinedResponse(bool writeIat, int iatOffsetMinutes, bool accepted)
+    {
+        using var statusList = StatusListType.Create(
+            StatusListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+
+        var (countingResolver, resolverInvocations) = StatusListFixtures.CountingResolverFor(StatusListUri, statusList, TimeProvider);
+
+        await using TestHostShell host = new(TimeProvider, resolveVerifiedStatusListToken: countingResolver);
+
+        var (serializedSdJwt, holderPrivateKey, issuerPublicKey) =
+            await IssuePidCredentialAsync(new StatusListReference(CredentialIndex, StatusListUri)).ConfigureAwait(false);
+
+        using(holderPrivateKey)
+        using(issuerPublicKey)
+        {
+            host.RegisterIssuerTrust(SiopCombinedResponseFixture.IssuerId, issuerPublicKey);
+
+            DateTimeOffset? keyBindingIssuedAt = writeIat ? TimeProvider.GetUtcNow().AddMinutes(iatOffsetMinutes) : null;
+            var (response, state) = await SiopCombinedResponseFixture.PostCombinedResponseWithKeyBindingIssuedAtAsync(
+                host, serializedSdJwt, holderPrivateKey, $"n-siop-kb-iat-{writeIat}-{iatOffsetMinutes}", keyBindingIssuedAt,
+                TimeProvider, Pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+            if(accepted)
+            {
+                Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
+                _ = Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(state);
+
+                return;
+            }
+
+            Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode, response.Body,
+                "RFC 9901 section 4.3: a KB-JWT whose iat is omitted or outside its window is the Wallet's refusal, never a 500.");
+            Assert.Contains($"\"{OAuthErrors.InvalidRequest}\"", response.Body,
+                "Section 4.1.2.1: a negative Section 12 binding verdict is invalid_request.");
+
+            var failed = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
+            Assert.IsNotNull(failed.Refusal, "The binding conjunction is a classified refusal.");
+            Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal.Value.Kind,
+                "The KB-JWT's iat fails the combined response's binding, the Unverifiable refusal class.");
+            Assert.IsNull(failed.PresentationDefect, "A presentation read whole and refused by its binding carries no reading defect.");
+            Assert.AreEqual(0, resolverInvocations(), "The binding fails before any Status List Token is resolved.");
+        }
+    }
+
+
+    /// <summary>
     /// <see href="https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#section-12">Self-Issued
     /// OpenID Provider v2, Section 12</see> governs a flow that carries "Verifiable Presentations"; a response
     /// carrying only the Self-Issued ID Token presents none, so no Referenced Token exists for
@@ -756,6 +819,8 @@ internal sealed class SiopCombinedResponseStatusTests
                 "A negative idx does not adhere to Section 6.2, so the presentation is a classified refusal.");
             Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind,
                 "A negative idx fails Section 6.2's non-negative-Integer rule, refused as Malformed.");
+            Assert.AreEqual(SdJwtPresentationDefect.StatusClaimMalformed, failed.PresentationDefect,
+                "The failed flow carries the typed reading defect the presentation was refused for.");
             Assert.AreEqual(0, resolverInvocations(),
                 "A malformed reference is refused at the parse boundary, before any Status List Token would be resolved.");
         }
@@ -807,6 +872,10 @@ internal sealed class SiopCombinedResponseStatusTests
                 "A status claim naming no mechanism does not adhere to Section 6.1, so the presentation is a classified refusal.");
             Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind,
                 "Section 6.1: an empty status object is a malformed presentation, not a status the verifier cannot evaluate.");
+            Assert.AreEqual(SdJwtPresentationDefect.StatusClaimMalformed, failed.PresentationDefect,
+                "The failed flow carries the typed reading defect the presentation was refused for.");
+            Assert.DoesNotContain(nameof(SdJwtPresentationDefect.StatusClaimMalformed), response.Body,
+                "The Wallet is answered the generic malformed description, never the verifier's typed defect.");
             Assert.AreEqual(0, resolverInvocations(),
                 "The refusal happens at the parse boundary, before any Status List Token would be resolved.");
         }

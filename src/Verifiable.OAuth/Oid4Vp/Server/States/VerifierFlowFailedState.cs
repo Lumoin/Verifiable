@@ -33,6 +33,13 @@ public sealed record VerifierFlowFailedState : FlowState
     /// </summary>
     public Verifiable.Core.StatusLists.CredentialStatusRefusal? CredentialStatusRefusal { get; init; }
 
+    /// <summary>
+    /// Why an SD-JWT presentation is malformed when the verification refused it as one, carried from
+    /// <see cref="VerifierPresentationRefused.PresentationDefect"/>. Never on the wire; a relying party reads it from the failed
+    /// state for its own logging or evidence. <see langword="null"/> for every other failure.
+    /// </summary>
+    public SdJwtPresentationDefect? PresentationDefect { get; init; }
+
     /// <summary>The UTC instant at which the failure was recorded.</summary>
     public required DateTimeOffset FailedAt { get; init; }
 }

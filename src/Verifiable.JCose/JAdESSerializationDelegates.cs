@@ -109,7 +109,7 @@ public delegate bool TryParseJAdESEtsiUDelegate(
 /// A single-entry dictionary keyed <see cref="WellKnownJAdESHeaderNames.EtsiU"/>, or <see langword="null"/> when
 /// <paramref name="unsignedHeaders"/> is <see langword="null"/>.
 /// </returns>
-public delegate IReadOnlyDictionary<string, object>? EncodeJAdESUnprotectedHeaderDelegate(JAdESUnsignedHeaders? unsignedHeaders);
+public delegate IReadOnlyDictionary<string, object?>? EncodeJAdESUnprotectedHeaderDelegate(JAdESUnsignedHeaders? unsignedHeaders);
 
 
 /// <summary>

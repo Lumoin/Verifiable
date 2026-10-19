@@ -22,10 +22,10 @@ internal sealed class JwtPartJsonTests
     {
         byte[] bytes = Encoding.UTF8.GetBytes("""{"iss":"https://issuer.example","sub":"user-1"}""");
 
-        IReadOnlyDictionary<string, object> claims = JwtPartJson.Default(bytes);
+        var claims = JwtPartJson.Default(bytes);
 
-        Assert.AreEqual("https://issuer.example", claims["iss"].ToString());
-        Assert.AreEqual("user-1", claims["sub"].ToString());
+        Assert.AreEqual("https://issuer.example", claims["iss"]?.ToString());
+        Assert.AreEqual("user-1", claims["sub"]?.ToString());
     }
 
 

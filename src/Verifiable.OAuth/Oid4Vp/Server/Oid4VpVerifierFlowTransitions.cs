@@ -117,6 +117,7 @@ public static class Oid4VpVerifierFlowTransitions
                                 Reason = refused.LogReason,
                                 Refusal = refused.Refusal,
                                 CredentialStatusRefusal = refused.CredentialStatusRefusal,
+                                PresentationDefect = refused.PresentationDefect,
                                 FailedAt = refused.FailedAt
                             },
                             StackAction<Oid4VpVerifierStackSymbol>.None,

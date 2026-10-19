@@ -86,7 +86,7 @@ public static class JarmResponseValidation
         //any await boundaries (ReadOnlySpan cannot cross await).
         string? alg = null;
         string? kid = null;
-        IReadOnlyDictionary<string, object>? claims = null;
+        IReadOnlyDictionary<string, object?>? claims = null;
 
         string[] parts = responseJwt.Split('.');
         if(parts.Length == 3 && parts[0].Length > 0 && parts[1].Length > 0)
@@ -190,11 +190,11 @@ public static class JarmResponseValidation
 
         //§2.4: the grant-type-specific response parameters MUST NOT be processed
         //before all checks succeed — they are only surfaced on a fully valid result.
-        IReadOnlyDictionary<string, object>? parameters = null;
+        IReadOnlyDictionary<string, object?>? parameters = null;
         if(allChecksPassed)
         {
-            Dictionary<string, object> responseParameters = new(claims.Count, StringComparer.Ordinal);
-            foreach(KeyValuePair<string, object> claim in claims)
+            Dictionary<string, object?> responseParameters = new(claims.Count, StringComparer.Ordinal);
+            foreach(KeyValuePair<string, object?> claim in claims)
             {
                 if(!WellKnownJwtClaimNames.IsIss(claim.Key)
                     && !WellKnownJwtClaimNames.IsAud(claim.Key)
@@ -222,7 +222,7 @@ public static class JarmResponseValidation
 
     //The aud claim is a string or an array of strings; deserializers materialise the
     //array shape as an object sequence.
-    private static bool AudienceContains(object audValue, string expectedClientId) => audValue switch
+    private static bool AudienceContains(object? audValue, string expectedClientId) => audValue switch
     {
         string single => string.Equals(single, expectedClientId, StringComparison.Ordinal),
         IEnumerable<object> many => ContainsOrdinalObjects(many, expectedClientId),

@@ -33,6 +33,9 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     private const string EstablishedAcr = "urn:example:acr:established-loa";
     private const string EstablishedSessionId = "session-oidc-nonce-aud-01";
 
+    /// <summary>The authentication method an <c>amr</c> row's issuer contributes (RFC 8176 section 2: a password).</summary>
+    private const string AuthenticationMethod = "pwd";
+
     private static Uri ClientBaseUri { get; } = new(ClientId);
     private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
     private static TimeSpan IatSkew { get; } = TimeSpan.FromSeconds(60);
@@ -361,6 +364,48 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, result.FailureReason);
         Assert.AreEqual("ID Token auth_time claim is not a NumericDate naming a representable instant.", result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0 §2</see>: <c>amr</c>
+    /// is a "JSON array of strings that are identifiers for authentication methods used in the authentication". The issuer's
+    /// deployment contributes the claim to the ID Token it signs; the relying party receives the id_token in the token response
+    /// over the real wire and validates it as received. An <c>amr</c> written as one string - the single-string form RFC 7519
+    /// section 4.1.3 allows the audience alone - is refused as <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>,
+    /// never read as a one-method array; the control, the same method in an array, validates and is surfaced as written.
+    /// </summary>
+    /// <param name="asArray">Whether the contributed <c>amr</c> is an array.</param>
+    /// <returns>A task completing once the ID Token is judged.</returns>
+    [TestMethod]
+    [DataRow(false, DisplayName = "An amr written as one string")]
+    [DataRow(true, DisplayName = "The control, an amr written as an array")]
+    public async Task IdTokenAmrIsReadAsAnArrayOfMethodsOnly(bool asArray)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using var material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await ApplyIdTokenClaimContributorAsync(
+            host, WellKnownJwtClaimNames.Amr, asArray ? new[] { AuthenticationMethod } : AuthenticationMethod).ConfigureAwait(false);
+
+        var (idToken, issuer) = await DriveCodeExchangeOverWireForIdTokenAsync(host, material).ConfigureAwait(false);
+
+        var result = await ValidateAsRelyingPartyAsync(
+            idToken, material, expectedNonce: null, trustedAudiences: null, expectedIssuerOverride: issuer)
+            .ConfigureAwait(false);
+
+        if(asArray)
+        {
+            Assert.IsTrue(result.IsSuccess, $"An amr array validates; got {result.FailureReason}: {result.FailureDescription}");
+            Assert.AreSequenceEqual(new[] { AuthenticationMethod }, result.Claims?.Amr);
+
+            return;
+        }
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, result.FailureReason);
+        Assert.AreEqual("ID Token amr claim is not a non-empty array of non-empty strings.", result.FailureDescription);
     }
 
 

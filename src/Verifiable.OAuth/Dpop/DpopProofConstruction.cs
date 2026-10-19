@@ -42,8 +42,8 @@ public static class DpopProofConstruction
             Jwk = DpopJwkUtilities.ToJwk(key.Material.PublicKey, key.Alg, base64UrlEncoder)
         };
 
-        IReadOnlyDictionary<string, object> headerDict = serializer.SerializeHeader(header);
-        IReadOnlyDictionary<string, object> payloadDict = serializer.SerializePayload(claims);
+        var headerDict = serializer.SerializeHeader(header);
+        var payloadDict = serializer.SerializePayload(claims);
 
         using JwsMessage message = await Jws.SignAsync(
             headerDict,

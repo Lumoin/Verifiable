@@ -53,6 +53,81 @@ namespace Verifiable.JCose
         public static string UseEnc { get; } = Utf8Constants.ToInternedString(UseEncUtf8);
 
 
+        //Values of the "key_ops" (Key Operations) parameter — RFC 7517 §4.3.
+
+        /// <summary>The UTF-8 source literal of <see cref="KeyOpsSign"/>.</summary>
+        public static ReadOnlySpan<byte> KeyOpsSignUtf8 => "sign"u8;
+
+        /// <summary>
+        /// The <c>sign</c> value of the <see cref="WellKnownJwkMemberNames.KeyOps"/> parameter, "compute digital signature or MAC" per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">RFC 7517 §4.3</see>.
+        /// </summary>
+        public static string KeyOpsSign { get; } = Utf8Constants.ToInternedString(KeyOpsSignUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="KeyOpsVerify"/>.</summary>
+        public static ReadOnlySpan<byte> KeyOpsVerifyUtf8 => "verify"u8;
+
+        /// <summary>
+        /// The <c>verify</c> value of the <see cref="WellKnownJwkMemberNames.KeyOps"/> parameter, "verify digital signature or MAC" per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">RFC 7517 §4.3</see>.
+        /// </summary>
+        public static string KeyOpsVerify { get; } = Utf8Constants.ToInternedString(KeyOpsVerifyUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="KeyOpsEncrypt"/>.</summary>
+        public static ReadOnlySpan<byte> KeyOpsEncryptUtf8 => "encrypt"u8;
+
+        /// <summary>
+        /// The <c>encrypt</c> value of the <see cref="WellKnownJwkMemberNames.KeyOps"/> parameter, "encrypt content" per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">RFC 7517 §4.3</see>.
+        /// </summary>
+        public static string KeyOpsEncrypt { get; } = Utf8Constants.ToInternedString(KeyOpsEncryptUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="KeyOpsDecrypt"/>.</summary>
+        public static ReadOnlySpan<byte> KeyOpsDecryptUtf8 => "decrypt"u8;
+
+        /// <summary>
+        /// The <c>decrypt</c> value of the <see cref="WellKnownJwkMemberNames.KeyOps"/> parameter, "decrypt content and validate decryption, if applicable" per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">RFC 7517 §4.3</see>.
+        /// </summary>
+        public static string KeyOpsDecrypt { get; } = Utf8Constants.ToInternedString(KeyOpsDecryptUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="KeyOpsWrapKey"/>.</summary>
+        public static ReadOnlySpan<byte> KeyOpsWrapKeyUtf8 => "wrapKey"u8;
+
+        /// <summary>
+        /// The <c>wrapKey</c> value of the <see cref="WellKnownJwkMemberNames.KeyOps"/> parameter, "encrypt key" per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">RFC 7517 §4.3</see>.
+        /// </summary>
+        public static string KeyOpsWrapKey { get; } = Utf8Constants.ToInternedString(KeyOpsWrapKeyUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="KeyOpsUnwrapKey"/>.</summary>
+        public static ReadOnlySpan<byte> KeyOpsUnwrapKeyUtf8 => "unwrapKey"u8;
+
+        /// <summary>
+        /// The <c>unwrapKey</c> value of the <see cref="WellKnownJwkMemberNames.KeyOps"/> parameter, "decrypt key and validate decryption, if applicable" per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">RFC 7517 §4.3</see>.
+        /// </summary>
+        public static string KeyOpsUnwrapKey { get; } = Utf8Constants.ToInternedString(KeyOpsUnwrapKeyUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="KeyOpsDeriveKey"/>.</summary>
+        public static ReadOnlySpan<byte> KeyOpsDeriveKeyUtf8 => "deriveKey"u8;
+
+        /// <summary>
+        /// The <c>deriveKey</c> value of the <see cref="WellKnownJwkMemberNames.KeyOps"/> parameter, "derive key" per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">RFC 7517 §4.3</see>.
+        /// </summary>
+        public static string KeyOpsDeriveKey { get; } = Utf8Constants.ToInternedString(KeyOpsDeriveKeyUtf8);
+
+        /// <summary>The UTF-8 source literal of <see cref="KeyOpsDeriveBits"/>.</summary>
+        public static ReadOnlySpan<byte> KeyOpsDeriveBitsUtf8 => "deriveBits"u8;
+
+        /// <summary>
+        /// The <c>deriveBits</c> value of the <see cref="WellKnownJwkMemberNames.KeyOps"/> parameter, "derive bits not to be used as a key" per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.3">RFC 7517 §4.3</see>.
+        /// </summary>
+        public static string KeyOpsDeriveBits { get; } = Utf8Constants.ToInternedString(KeyOpsDeriveBitsUtf8);
+
+
         //Values of the "typ" (Type) header parameter — RFC 7519 §5.1.
 
         /// <summary>The UTF-8 source literal of <see cref="TypeJwt"/>.</summary>
@@ -71,6 +146,30 @@ namespace Verifiable.JCose
 
         /// <summary>Whether <paramref name="value"/> is <see cref="UseEnc"/>.</summary>
         public static bool IsUseEnc(string value) => Equals(value, UseEnc);
+
+        /// <summary>Whether <paramref name="value"/> is <see cref="KeyOpsSign"/>.</summary>
+        public static bool IsKeyOpsSign(string value) => Equals(value, KeyOpsSign);
+
+        /// <summary>Whether <paramref name="value"/> is <see cref="KeyOpsVerify"/>.</summary>
+        public static bool IsKeyOpsVerify(string value) => Equals(value, KeyOpsVerify);
+
+        /// <summary>Whether <paramref name="value"/> is <see cref="KeyOpsEncrypt"/>.</summary>
+        public static bool IsKeyOpsEncrypt(string value) => Equals(value, KeyOpsEncrypt);
+
+        /// <summary>Whether <paramref name="value"/> is <see cref="KeyOpsDecrypt"/>.</summary>
+        public static bool IsKeyOpsDecrypt(string value) => Equals(value, KeyOpsDecrypt);
+
+        /// <summary>Whether <paramref name="value"/> is <see cref="KeyOpsWrapKey"/>.</summary>
+        public static bool IsKeyOpsWrapKey(string value) => Equals(value, KeyOpsWrapKey);
+
+        /// <summary>Whether <paramref name="value"/> is <see cref="KeyOpsUnwrapKey"/>.</summary>
+        public static bool IsKeyOpsUnwrapKey(string value) => Equals(value, KeyOpsUnwrapKey);
+
+        /// <summary>Whether <paramref name="value"/> is <see cref="KeyOpsDeriveKey"/>.</summary>
+        public static bool IsKeyOpsDeriveKey(string value) => Equals(value, KeyOpsDeriveKey);
+
+        /// <summary>Whether <paramref name="value"/> is <see cref="KeyOpsDeriveBits"/>.</summary>
+        public static bool IsKeyOpsDeriveBits(string value) => Equals(value, KeyOpsDeriveBits);
 
         /// <summary>
         /// Whether <paramref name="value"/> is <see cref="TypeJwt"/>, comparing as the RFC 7515
@@ -93,6 +192,14 @@ namespace Verifiable.JCose
         {
             _ when IsUseSig(value) => UseSig,
             _ when IsUseEnc(value) => UseEnc,
+            _ when IsKeyOpsSign(value) => KeyOpsSign,
+            _ when IsKeyOpsVerify(value) => KeyOpsVerify,
+            _ when IsKeyOpsEncrypt(value) => KeyOpsEncrypt,
+            _ when IsKeyOpsDecrypt(value) => KeyOpsDecrypt,
+            _ when IsKeyOpsWrapKey(value) => KeyOpsWrapKey,
+            _ when IsKeyOpsUnwrapKey(value) => KeyOpsUnwrapKey,
+            _ when IsKeyOpsDeriveKey(value) => KeyOpsDeriveKey,
+            _ when IsKeyOpsDeriveBits(value) => KeyOpsDeriveBits,
             _ when IsTypeJwt(value) => TypeJwt,
             _ => value
         };

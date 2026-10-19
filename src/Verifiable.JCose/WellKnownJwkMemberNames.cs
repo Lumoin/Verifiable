@@ -258,6 +258,9 @@ public static class WellKnownJwkMemberNames
     /// <summary>Whether <paramref name="name"/> is <see cref="P"/>.</summary>
     public static bool IsP(string name) => Equals(name, P);
 
+    /// <summary>Whether <paramref name="name"/> is <see cref="Pub"/>.</summary>
+    public static bool IsPub(string name) => Equals(name, Pub);
+
     /// <summary>Whether <paramref name="name"/> is <see cref="Q"/>.</summary>
     public static bool IsQ(string name) => Equals(name, Q);
 

@@ -297,8 +297,8 @@ internal sealed class JtiReplayGuardStoreProofTests
     public async Task AClientAssertionsRetentionIsCarriedIntoTheStoredState(bool keptToTheClocksEnd)
     {
         InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
-        using EndpointServer server = BuildServer(store);
-        ExchangeContext context = BuildContext(JtiReplayPolicy.Required);
+        using var server = BuildServer(store);
+        var context = BuildContext(JtiReplayPolicy.Required);
         var keptUntil = TimeProvider.GetUtcNow().AddMinutes(5);
         var retention = keptToTheClocksEnd ? (ReplayRecordRetention)new ReplayRecordKeptToTheClocksEnd() : new ReplayRecordKeptUntil(keptUntil);
 
@@ -311,6 +311,34 @@ internal sealed class JtiReplayGuardStoreProofTests
         Assert.AreEqual(keptToTheClocksEnd ? DateTimeOffset.MaxValue : keptUntil, store.LastSavedState.ExpiresAt);
         Assert.AreEqual(!keptToTheClocksEnd, store.LastSavedState.Retention.IsDueAt(DateTimeOffset.MaxValue),
             "A record kept to the clock's end is never due, its last instant included; one kept until an instant is due at the clock's end.");
+    }
+
+
+    /// <summary>
+    /// A record is kept until an instant or to the clock's end, and no third way: a retention of another kind is refused as an
+    /// argument before the store is consulted, never stored as kept to the clock's end.
+    /// </summary>
+    /// <returns>A task completing once the refusal is observed.</returns>
+    [TestMethod]
+    public async Task ARetentionOfNoKnownKindIsRefusedBeforeTheStoreIsConsulted()
+    {
+        var store = new InMemoryJtiStore(JtiStoreBehavior.ResolvesWhatItSaved);
+        using var server = BuildServer(store);
+        var context = BuildContext(JtiReplayPolicy.Required);
+
+        var refusal = await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await JtiReplayGuard.ConsultClientAssertionAsync(
+            server, context, Tenant, Issuer, Jti, new RetentionOfNoKnownKind(), TestContext.CancellationToken).ConfigureAwait(false));
+
+        Assert.AreEqual("retention", refusal.ParamName);
+        Assert.IsNull(store.LastSavedState, "Nothing is stored for a retention of no known kind.");
+    }
+
+
+    /// <summary>A retention of neither kind a replay record is kept by.</summary>
+    private sealed record RetentionOfNoKnownKind : ReplayRecordRetention
+    {
+        /// <inheritdoc/>
+        public override bool IsDueAt(DateTimeOffset instant) => true;
     }
 
 
@@ -799,13 +827,13 @@ internal sealed class JtiReplayGuardSiopWireProofTests
     /// <summary>Serializes a JWT header to UTF-8 through the project's test serialization options.</summary>
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serializes a JWT payload to UTF-8 through the project's test serialization options.</summary>
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
 

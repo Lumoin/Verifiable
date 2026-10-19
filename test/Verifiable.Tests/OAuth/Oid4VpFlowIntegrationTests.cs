@@ -86,13 +86,13 @@ internal sealed class Oid4VpFlowIntegrationTests
 
     /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
     private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
 
@@ -1553,7 +1553,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 parseX5c: null,
                 resolveTrustedAuthorityEvidence: null,
                 context: new ExchangeContext(),
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
             Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify.");
             Assert.IsNotNull(parsed.Credential.Status?.StatusList, "The verifier must surface the credential's status_list reference.");
@@ -2215,9 +2215,9 @@ internal sealed class Oid4VpFlowIntegrationTests
         using SignedJar signedJar = await requestObject.SignJarAsync(
             correctPrivateKey,
             header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
             payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
             q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
             m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             TestSetup.Base64UrlEncoder,
@@ -2275,9 +2275,9 @@ internal sealed class Oid4VpFlowIntegrationTests
         using SignedJar signedJar = await requestObject.SignJarAsync(
             privateKey,
             header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
             payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
             q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
             m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             TestSetup.Base64UrlEncoder,
@@ -2330,9 +2330,9 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         string compactJar = requestObject.BuildUnsignedJarCompact(
             header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
             payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
             q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
             m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             TestSetup.Base64UrlEncoder);
@@ -2391,9 +2391,9 @@ internal sealed class Oid4VpFlowIntegrationTests
         using SignedJar signedJar = await requestObject.SignJarAsync(
             privateKey,
             header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
             payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
             q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
             m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             TestSetup.Base64UrlEncoder,
@@ -2461,9 +2461,9 @@ internal sealed class Oid4VpFlowIntegrationTests
         using SignedJar signedJar = await requestObject.SignJarAsync(
             privateKey,
             header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
             payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
             q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
             m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             TestSetup.Base64UrlEncoder,
@@ -2476,10 +2476,10 @@ internal sealed class Oid4VpFlowIntegrationTests
             compactJar,
             publicKey,
             TestSetup.Base64UrlDecoder,
-            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                 bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Header JSON parsed to null."),
-            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                 bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Payload JSON parsed to null."),
             json => JsonSerializer.Deserialize<DcqlQuery>(json, TestSetup.DefaultSerializationOptions)!,
@@ -2575,9 +2575,9 @@ internal sealed class Oid4VpFlowIntegrationTests
         using JwsMessage signed = await unsigned.SignAsync(
             privateKey,
             h => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)h, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)h, TestSetup.DefaultSerializationOptions),
             p => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)p, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)p, TestSetup.DefaultSerializationOptions),
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -2588,10 +2588,10 @@ internal sealed class Oid4VpFlowIntegrationTests
             compactJar,
             publicKey,
             TestSetup.Base64UrlDecoder,
-            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                 bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Header JSON parsed to null."),
-            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                 bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Payload JSON parsed to null."),
             json => JsonSerializer.Deserialize<DcqlQuery>(json, TestSetup.DefaultSerializationOptions)!,
@@ -2830,9 +2830,9 @@ internal sealed class Oid4VpFlowIntegrationTests
                 transactionData: transactionData);
 
         ReadOnlySpan<byte> jwtHeaderSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
         ReadOnlySpan<byte> jwtPayloadSerializer(JwtPayload payload) => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
         using SignedJar signedJar = await requestObject.SignJarAsync(
             signingKey: verifierSigningPrivateKey,
@@ -2942,7 +2942,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
         Assert.IsNotNull(parsed.KbJwtTransactionDataHashes,
             "KB-JWT must carry transaction_data_hashes when the JAR carried transaction_data.");
@@ -4371,9 +4371,9 @@ internal sealed class Oid4VpFlowIntegrationTests
         //repository's JSON serializers.
         static ReadOnlySpan<byte> BuildDuplicateEncHeader(JwtHeader header)
         {
-            string alg = (string)header[WellKnownJoseHeaderNames.Alg];
-            string enc = (string)header[WellKnownJoseHeaderNames.Enc];
-            var epk = (Dictionary<string, object>)header[WellKnownJoseHeaderNames.Epk];
+            var alg = Assert.IsInstanceOfType<string>(header[WellKnownJoseHeaderNames.Alg]);
+            var enc = Assert.IsInstanceOfType<string>(header[WellKnownJoseHeaderNames.Enc]);
+            var epk = Assert.IsInstanceOfType<Dictionary<string, object?>>(header[WellKnownJoseHeaderNames.Epk]);
             string headerJson =
                 "{\"alg\":\"" + alg + "\",\"enc\":\"" + enc + "\"," +
                 "\"epk\":{\"kty\":\"" + epk[WellKnownJwkMemberNames.Kty] + "\"," +
@@ -4388,9 +4388,9 @@ internal sealed class Oid4VpFlowIntegrationTests
         //The same header with the duplicate "enc" removed — otherwise byte-identical in content.
         static ReadOnlySpan<byte> BuildSingleEncHeader(JwtHeader header)
         {
-            string alg = (string)header[WellKnownJoseHeaderNames.Alg];
-            string enc = (string)header[WellKnownJoseHeaderNames.Enc];
-            var epk = (Dictionary<string, object>)header[WellKnownJoseHeaderNames.Epk];
+            var alg = Assert.IsInstanceOfType<string>(header[WellKnownJoseHeaderNames.Alg]);
+            var enc = Assert.IsInstanceOfType<string>(header[WellKnownJoseHeaderNames.Enc]);
+            var epk = Assert.IsInstanceOfType<Dictionary<string, object?>>(header[WellKnownJoseHeaderNames.Epk]);
             string headerJson =
                 "{\"alg\":\"" + alg + "\",\"enc\":\"" + enc + "\"," +
                 "\"epk\":{\"kty\":\"" + epk[WellKnownJwkMemberNames.Kty] + "\"," +

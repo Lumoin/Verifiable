@@ -264,11 +264,11 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
     private static ReadOnlySpan<byte> SerializeCredential(VerifiableCredential credential) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
 
-    private static ReadOnlySpan<byte> SerializeCredentialHeader(Dictionary<string, object> header) =>
+    private static ReadOnlySpan<byte> SerializeCredentialHeader(Dictionary<string, object?> header) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(header, CredentialSecuringMaterial.JsonOptions);
 
-    private static Dictionary<string, object>? DeserializeCredentialHeader(ReadOnlySpan<byte> headerBytes) =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
+    private static Dictionary<string, object?>? DeserializeCredentialHeader(ReadOnlySpan<byte> headerBytes) =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
 
     private static VerifiableCredential DeserializeCredential(ReadOnlySpan<byte> credentialBytes) =>
         JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialBytes, CredentialSecuringMaterial.JsonOptions)!;

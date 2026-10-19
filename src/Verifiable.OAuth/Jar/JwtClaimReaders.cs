@@ -13,8 +13,9 @@ namespace Verifiable.OAuth.Jar;
 /// <para>
 /// JWT payload claim values arrive in this library as
 /// <see cref="IReadOnlyDictionary{TKey, TValue}"/> of <see cref="string"/>
-/// to <see cref="object"/>, because the chosen JSON deserializer
-/// determines the runtime type of each value. <see cref="RequireNumericDate"/>
+/// to a nullable <see cref="object"/>, because the chosen JSON deserializer
+/// determines the runtime type of each value and a present JSON <c>null</c>
+/// is held as a member with no value. <see cref="RequireNumericDate"/>
 /// reads a NumericDate by the library's one reading of the type
 /// (<see cref="NumericDate.Of"/>), every digit kept.
 /// </para>
@@ -29,7 +30,7 @@ namespace Verifiable.OAuth.Jar;
 internal static class JwtClaimReaders
 {
     public static string RequireClaim(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string name)
     {
         if(!claims.TryGetValue(name, out object? value) || value is not string str)
@@ -43,7 +44,7 @@ internal static class JwtClaimReaders
 
 
     public static string? OptionalClaim(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string name)
     {
         return claims.TryGetValue(name, out object? value) && value is string str ? str : null;
@@ -59,7 +60,7 @@ internal static class JwtClaimReaders
     /// <returns>The date the claim names.</returns>
     /// <exception cref="FormatException">The claim is absent, or is no NumericDate naming an instant a clock represents.</exception>
     public static NumericDate RequireNumericDate(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string name)
     {
         if(!claims.TryGetValue(name, out object? value) || value is null)
@@ -79,7 +80,7 @@ internal static class JwtClaimReaders
     }
 
 
-    public static bool TryToInt64(object value, out long result)
+    public static bool TryToInt64(object? value, out long result)
     {
         switch(value)
         {

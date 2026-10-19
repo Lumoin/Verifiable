@@ -1620,7 +1620,7 @@ internal sealed class UserInfoEndpointTests
             TestContext.CancellationToken,
             alterHeader: header =>
             {
-                Dictionary<string, object> jwk = new((Dictionary<string, object>)header["jwk"], StringComparer.Ordinal)
+                Dictionary<string, object?> jwk = new(Assert.IsInstanceOfType<Dictionary<string, object?>>(header["jwk"]), StringComparer.Ordinal)
                 {
                     ["kid"] = "client-dpop-key-1",
                     ["alg"] = "ES256"

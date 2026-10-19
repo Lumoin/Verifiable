@@ -313,7 +313,7 @@ internal sealed class TestWallet
             presentationBuilt.Request,
             Encoding.UTF8.GetBytes(responseJwtPayloadJson).AsMemory(),
             header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header,
+                (Dictionary<string, object?>)header,
                 TestSetup.DefaultSerializationOptions),
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
@@ -397,7 +397,7 @@ internal sealed class TestWallet
             selectedEnc,
             Encoding.UTF8.GetBytes(responseJwtPayloadJson).AsMemory(),
             header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header,
+                (Dictionary<string, object?>)header,
                 TestSetup.DefaultSerializationOptions),
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,
@@ -511,9 +511,9 @@ internal sealed class TestWallet
             Time.GetUtcNow(),
             TestSetup.Base64UrlEncoder,
             static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
             static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
             BaseMemoryPool.Shared,
             transactionDataHashes,
             cancellationToken: cancellationToken).ConfigureAwait(false);

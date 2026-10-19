@@ -153,7 +153,7 @@ internal sealed class JwsAccessTokenValidatorTests
             expiresAt: NowInstant + TimeSpan.FromHours(1),
             issuer: DefaultIssuer,
             audience: [DefaultAudience]);
-        string payloadJson = JsonSerializer.Serialize((Dictionary<string, object>)noneAlgPayload);
+        var payloadJson = JsonSerializer.Serialize((Dictionary<string, object?>)noneAlgPayload);
         string token = string.Concat(
             TestSetup.Base64UrlEncoder(System.Text.Encoding.UTF8.GetBytes(headerJson)),
             ".",
@@ -856,11 +856,13 @@ internal sealed class JwsAccessTokenValidatorTests
         var result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"Validation must succeed; got {result.FailureReason}: {result.FailureDescription}");
-        Assert.AreEqual(DefaultSubject, result.Claims!.Subject);
+        Assert.IsNotNull(result.Claims, "A validated token carries its claims.");
+        Assert.AreEqual(DefaultSubject, result.Claims.Subject);
         Assert.AreSequenceEqual(new[] { DefaultAudience, "another-resource" }, result.Claims.Audience);
         Assert.AreEqual(RawIssuedAt, result.Claims.IssuedAt.ToString());
-        Assert.AreEqual("bound-key-thumbprint", result.Claims.Confirmation!.JwkThumbprint);
-        Assert.AreEqual("agent", result.Claims.Act!.Subject);
+        Assert.AreEqual("bound-key-thumbprint", result.Claims.Confirmation?.JwkThumbprint);
+        Assert.IsNotNull(result.Claims.Act, "The token names its actor.");
+        Assert.AreEqual("agent", result.Claims.Act.Subject);
         Assert.AreEqual("earlier-agent", result.Claims.Act.DelegationHistory[0].Subject);
     }
 
@@ -890,7 +892,7 @@ internal sealed class JwsAccessTokenValidatorTests
         JwsAccessTokenValidationFailureReason expected)
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        var header = string.Concat(RawHeaderJson.AsSpan(0, RawHeaderJson.Length - 1), headerMember, "}");
+        var header = RawHeaderJsonWith(headerMember);
         var token = await SignRawAsync(keys.PrivateKey, header, RawPayloadJson(omittedClaim, payloadMember)).ConfigureAwait(false);
 
         var result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
@@ -911,7 +913,7 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorCarriesTheReadingsRefusalWithTheSegmentItConcerns()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        var repeatedAlgHeader = string.Concat(RawHeaderJson.AsSpan(0, RawHeaderJson.Length - 1), ",\"alg\":\"ES256\"}");
+        var repeatedAlgHeader = RawHeaderJsonWith(",\"alg\":\"ES256\"");
 
         var header = await ValidateAsync(await SignRawAsync(keys.PrivateKey, repeatedAlgHeader, RawPayloadJson(string.Empty, string.Empty)).ConfigureAwait(false), keys.PublicKey).ConfigureAwait(false);
         var repeated = await ValidateAsync(await SignRawAsync(keys.PrivateKey, RawHeaderJson, RawPayloadJson(string.Empty, ",\"scope\":\"more\"")).ConfigureAwait(false), keys.PublicKey).ConfigureAwait(false);
@@ -1007,7 +1009,17 @@ internal sealed class JwsAccessTokenValidatorTests
 
 
     /// <summary>The header of a hand-written access token: ES256 under this suite's key identifier, typed <c>at+jwt</c> (RFC 9068 section 2.1).</summary>
-    private static string RawHeaderJson => "{\"alg\":\"ES256\",\"kid\":\"" + DefaultKid + "\",\"typ\":\"at+jwt\"}";
+    private static string RawHeaderJson => RawHeaderJsonWith(string.Empty);
+
+
+    /// <summary>
+    /// The header of a hand-written access token with members appended as written before it is first encoded and signed: ES256
+    /// under this suite's key identifier, typed <c>at+jwt</c> (RFC 9068 section 2.1).
+    /// </summary>
+    /// <param name="appended">JSON text appended after the last member, beginning with its comma, or empty.</param>
+    /// <returns>The header's JSON text.</returns>
+    private static string RawHeaderJsonWith(string appended) =>
+        "{\"alg\":\"ES256\",\"kid\":\"" + DefaultKid + "\",\"typ\":\"at+jwt\"" + appended + "}";
 
     /// <summary>The hand-written token's <c>iat</c>, a NumericDate with a fraction, one minute before the clock.</summary>
     private static string RawIssuedAt => (NowInstant - TimeSpan.FromMinutes(1)).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + ".25";
@@ -1132,12 +1144,12 @@ internal sealed class JwsAccessTokenValidatorTests
 
     private static ReadOnlySpan<byte> HeaderSerializer(JwtHeader header) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
 
     private static ReadOnlySpan<byte> PayloadSerializer(JwtPayload payload) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 }

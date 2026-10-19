@@ -168,10 +168,10 @@ internal sealed class JAdESEtsiUJsonTests
         using JAdESUnsignedHeaders? disposable = result;
         Assert.IsTrue(success);
 
-        IReadOnlyDictionary<string, object>? projected = JAdESEtsiUJson.Encode(result);
+        var projected = JAdESEtsiUJson.Encode(result);
 
         Assert.IsNotNull(projected);
-        var list = (List<object>)projected[WellKnownJAdESHeaderNames.EtsiU];
+        var list = Assert.IsInstanceOfType<List<object>>(projected[WellKnownJAdESHeaderNames.EtsiU]);
         Assert.AreEqual(element1, list[0]);
         Assert.AreEqual(element2, list[1]);
     }
@@ -187,10 +187,10 @@ internal sealed class JAdESEtsiUJsonTests
         var element = new JAdESUnsignedHeaderElementCounterSignature(wireText);
         using var headers = new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.Base64Url, [element]);
 
-        IReadOnlyDictionary<string, object>? projected = JAdESEtsiUJson.Encode(headers);
+        var projected = JAdESEtsiUJson.Encode(headers);
 
         Assert.IsNotNull(projected);
-        var list = (List<object>)projected[WellKnownJAdESHeaderNames.EtsiU];
+        var list = Assert.IsInstanceOfType<List<object>>(projected[WellKnownJAdESHeaderNames.EtsiU]);
         Assert.HasCount(1, list);
         Assert.AreEqual("eyJjU2lnIjp7fX0", list[0]);
     }
@@ -211,10 +211,10 @@ internal sealed class JAdESEtsiUJsonTests
         var element = new JAdESUnsignedHeaderElementCertificateReferences(new JAdESClearUnsignedValue<JAdESCertificateReferenceCollection>(collection));
         using var headers = new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.ClearJson, [element]);
 
-        IReadOnlyDictionary<string, object>? projected = JAdESEtsiUJson.Encode(headers);
+        var projected = JAdESEtsiUJson.Encode(headers);
 
         Assert.IsNotNull(projected);
-        var list = (List<object>)projected[WellKnownJAdESHeaderNames.EtsiU];
+        var list = Assert.IsInstanceOfType<List<object>>(projected[WellKnownJAdESHeaderNames.EtsiU]);
         Assert.HasCount(1, list);
         var entry = (Dictionary<string, object>)list[0];
         Assert.IsTrue(entry.ContainsKey(JAdESUnsignedHeaderElement.CertificateReferencesKind));
@@ -230,7 +230,7 @@ internal sealed class JAdESEtsiUJsonTests
     [TestMethod]
     public void EncodeReturnsNullForNullContainer()
     {
-        IReadOnlyDictionary<string, object>? projected = JAdESEtsiUJson.Encode(null);
+        var projected = JAdESEtsiUJson.Encode(null);
 
         Assert.IsNull(projected);
     }

@@ -241,7 +241,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         Assert.HasCount(3, segments, "signed_metadata MUST be a compact JWS (§12.2.3).");
 
         //JOSE header: typ = openidvci-issuer-metadata+jwt and a non-none, non-symmetric alg.
-        Dictionary<string, object>? header = SecurityEventTestJson.DeserializePart(
+        var header = SecurityEventTestJson.DeserializePart(
             SecurityEventTestJson.DecodeSegment(segments[0], BaseMemoryPool.Shared));
         Assert.IsNotNull(header);
         Assert.AreEqual("openidvci-issuer-metadata+jwt", header!["typ"] as string,
@@ -252,7 +252,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         Assert.IsFalse(WellKnownJwaValues.IsNone(alg), "§12.2.3 alg MUST NOT be none.");
 
         //JWS payload: sub = issuer id, an iat, and the metadata params as top-level claims.
-        Dictionary<string, object>? payload = SecurityEventTestJson.DeserializePart(
+        var payload = SecurityEventTestJson.DeserializePart(
             SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared));
         Assert.IsNotNull(payload);
         Assert.AreEqual(expectedIssuer, payload!["sub"] as string,
@@ -566,13 +566,13 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string[] segments = response.Body.Split('.');
         Assert.HasCount(3, segments, "An application/jwt metadata response is a compact JWS (§12.2.2).");
 
-        Dictionary<string, object>? header = SecurityEventTestJson.DeserializePart(
+        var header = SecurityEventTestJson.DeserializePart(
             SecurityEventTestJson.DecodeSegment(segments[0], BaseMemoryPool.Shared));
         Assert.IsNotNull(header);
         Assert.AreEqual("openidvci-issuer-metadata+jwt", header["typ"] as string,
             "§12.2.3 typ MUST be openidvci-issuer-metadata+jwt.");
 
-        Dictionary<string, object>? payload = SecurityEventTestJson.DeserializePart(
+        var payload = SecurityEventTestJson.DeserializePart(
             SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared));
         Assert.IsNotNull(payload);
         Assert.AreEqual(expectedIssuer, payload["sub"] as string,
@@ -721,7 +721,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     private static JwtPayloadSerializer AppendPayloadSerializer { get; } = static payload => AppendDictionary(payload);
 
 
-    private static byte[] AppendDictionary(IReadOnlyDictionary<string, object> dictionary)
+    private static byte[] AppendDictionary(IReadOnlyDictionary<string, object?> dictionary)
     {
         System.Text.StringBuilder sb = JsonAppender.Rent();
         try

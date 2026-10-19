@@ -29,7 +29,7 @@ internal sealed class RotationFixture : IAsyncDisposable
     //The protected-header serializer the JWE / authcrypt layer hands a Dictionary<string, object> to.
     private static JwtHeaderSerializer JweHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     //A fixed rotation datetime injected as iat — the clock seam, not DateTime.UtcNow.

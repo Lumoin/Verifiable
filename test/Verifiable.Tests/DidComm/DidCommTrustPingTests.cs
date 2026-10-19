@@ -36,7 +36,7 @@ internal sealed class DidCommTrustPingTests
     //The protected-header serializer the JWE layer hands a Dictionary<string, object> to produce UTF-8 JSON.
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private const string Alice = "did:example:alice";

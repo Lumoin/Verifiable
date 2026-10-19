@@ -455,7 +455,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public void JarResourceClaimWithMixedEmptyAndValidEntriesProjectsToAMalformedIndicator()
     {
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = new()
+        Dictionary<string, object?> claims = new()
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
@@ -3190,7 +3190,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [WellKnownJwaValues.Es256],
             TimeProvider.GetUtcNow(),
             ResolveKey,
-            static payload => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            static payload => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                 payload, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Payload JSON parsed to null."),
             TestSetup.Base64UrlDecoder,

@@ -6,7 +6,8 @@ using Verifiable.JCose;
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
 /// <summary>
-/// Raw results from parsing and cryptographically verifying a VP token.
+/// What a VP token carries and the outcome of each of its checks, every one held as the fact it came out as, a failed check
+/// among them: read and assessed, not yet accepted.
 /// Produced by <see cref="SdJwtVpTokenVerification"/>, consumed by the executor
 /// to construct a <see cref="Validation.ValidationContext"/> for library-side
 /// validation.
@@ -17,7 +18,7 @@ public sealed record VpTokenParsed
     /// <summary>The DCQL credential query identifier the presented credential answered.</summary>
     public required CredentialQueryId CredentialQueryId { get; init; }
 
-    /// <summary>The verified credential's claims, disclosures, type, issuer, trust evidence, and status claim.</summary>
+    /// <summary>The presented credential's claims, disclosures, type, issuer, trust evidence, and status claim.</summary>
     public required VpCredentialClaims Credential { get; init; }
 
     /// <summary>

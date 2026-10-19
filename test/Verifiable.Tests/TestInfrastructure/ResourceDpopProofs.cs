@@ -55,7 +55,7 @@ internal static class ResourceDpopProofs
         DateTimeOffset issuedAt,
         CancellationToken cancellationToken,
         string? jti = null,
-        Action<Dictionary<string, object>>? alterHeader = null)
+        Action<Dictionary<string, object?>>? alterHeader = null)
     {
         ArgumentNullException.ThrowIfNull(key);
 
@@ -79,7 +79,7 @@ internal static class ResourceDpopProofs
             {
                 SerializeHeader = header =>
                 {
-                    Dictionary<string, object> altered = new(DpopTestSupport.Serializer.SerializeHeader(header), StringComparer.Ordinal);
+                    Dictionary<string, object?> altered = new(DpopTestSupport.Serializer.SerializeHeader(header), StringComparer.Ordinal);
                     alterHeader(altered);
 
                     return altered;

@@ -27,7 +27,7 @@ internal sealed class GeneralJweTests
 
     private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     //Appendix B static keys (X25519, JWK base64url coordinates).

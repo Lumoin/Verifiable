@@ -161,7 +161,7 @@ public static class JAdESEtsiUJson
             elements.Add(ProjectElement(element, unsignedHeaders.Mode));
         }
 
-        return new Dictionary<string, object> { [WellKnownJAdESHeaderNames.EtsiU] = elements };
+        return new Dictionary<string, object?> { [WellKnownJAdESHeaderNames.EtsiU] = elements };
     };
 
 

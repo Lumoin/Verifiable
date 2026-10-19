@@ -523,7 +523,7 @@ internal sealed class JoseTests
     /// <summary>
     /// Decodes UTF-8 JSON bytes to a dictionary.
     /// </summary>
-    private static Dictionary<string, object> DecodeJwtPart(ReadOnlySpan<byte> bytes)
+    private static Dictionary<string, object?> DecodeJwtPart(ReadOnlySpan<byte> bytes)
     {
         string json = Encoding.UTF8.GetString(bytes);
         return JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, TestSetup.DefaultSerializationOptions)!;

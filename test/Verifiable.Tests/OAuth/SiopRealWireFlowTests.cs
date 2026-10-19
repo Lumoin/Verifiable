@@ -95,14 +95,14 @@ internal sealed class SiopRealWireFlowTests
     /// </summary>
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>
     /// Serializes a JWT payload dictionary to UTF-8 JSON bytes for §9 Request Object and ID Token signing.
     /// </summary>
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
     /// <summary>
     /// Decodes a base64url-decoded JWT part back into a claims dictionary, for reading the header and
@@ -434,7 +434,7 @@ internal sealed class SiopRealWireFlowTests
     /// <see cref="JsonElement"/> shape <see cref="PartDecoder"/> produces. Fails the test with a
     /// descriptive message when <paramref name="claim"/> is absent.
     /// </summary>
-    private static string GetString(Dictionary<string, object> payload, string claim)
+    private static string GetString(Dictionary<string, object?> payload, string claim)
     {
         Assert.IsTrue(payload.TryGetValue(claim, out object? value),
             $"The §9 Request Object payload is missing the '{claim}' claim.");

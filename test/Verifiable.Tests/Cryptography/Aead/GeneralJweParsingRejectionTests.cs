@@ -28,7 +28,7 @@ internal sealed class GeneralJweParsingRejectionTests
 
     private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static byte[] Plaintext { get; } =

@@ -7,7 +7,8 @@ namespace Verifiable.Core.SecurityEvents;
 /// <see cref="SecurityEventToken"/>. Pure dictionary navigation over the values
 /// the JSON layer produces — strings, numbers (narrowed to <see cref="int"/>,
 /// <see cref="long"/>, or <see cref="decimal"/>), nested objects as
-/// <c>Dictionary&lt;string, object&gt;</c>, and arrays as <c>List&lt;object&gt;</c>.
+/// <c>Dictionary&lt;string, object&gt;</c>, arrays as <c>List&lt;object&gt;</c>, and a
+/// present JSON <c>null</c> as a member with no value.
 /// </summary>
 /// <remarks>
 /// Parsing is tolerant: it never throws on shape mismatch, leaving an absent or
@@ -22,7 +23,7 @@ public static class SecurityEventTokenParsing
     /// </summary>
     /// <param name="payload">The verified SET payload (claim name to value).</param>
     /// <returns>The typed token projection.</returns>
-    public static SecurityEventToken Parse(IReadOnlyDictionary<string, object> payload)
+    public static SecurityEventToken Parse(IReadOnlyDictionary<string, object?> payload)
     {
         ArgumentNullException.ThrowIfNull(payload);
 
@@ -40,7 +41,7 @@ public static class SecurityEventTokenParsing
     }
 
 
-    private static string? ReadString(IReadOnlyDictionary<string, object> obj, string name) =>
+    private static string? ReadString(IReadOnlyDictionary<string, object?> obj, string name) =>
         obj.TryGetValue(name, out object? value) && value is string s ? s : null;
 
 
@@ -52,11 +53,11 @@ public static class SecurityEventTokenParsing
     /// <param name="obj">The claims.</param>
     /// <param name="name">The NumericDate claim to read.</param>
     /// <returns>The date, or <see langword="null"/>.</returns>
-    private static NumericDate? ReadNumericDate(IReadOnlyDictionary<string, object> obj, string name) =>
+    private static NumericDate? ReadNumericDate(IReadOnlyDictionary<string, object?> obj, string name) =>
         obj.TryGetValue(name, out var value) ? NumericDate.Of(value) : null;
 
 
-    private static List<string> ReadAudiences(IReadOnlyDictionary<string, object> obj)
+    private static List<string> ReadAudiences(IReadOnlyDictionary<string, object?> obj)
     {
         if(!obj.TryGetValue(WellKnownJwtClaimNames.Aud, out object? value))
         {
@@ -84,13 +85,13 @@ public static class SecurityEventTokenParsing
     }
 
 
-    private static SubjectIdentifier? ReadSubjectId(IReadOnlyDictionary<string, object> obj) =>
+    private static SubjectIdentifier? ReadSubjectId(IReadOnlyDictionary<string, object?> obj) =>
         obj.TryGetValue(SecurityEventTokenClaimNames.SubId, out object? value) && value is IReadOnlyDictionary<string, object> subId
             ? SubjectIdentifier.FromWireObject(subId)
             : null;
 
 
-    private static List<SecurityEvent> ReadEvents(IReadOnlyDictionary<string, object> obj)
+    private static List<SecurityEvent> ReadEvents(IReadOnlyDictionary<string, object?> obj)
     {
         if(!obj.TryGetValue(SecurityEventTokenClaimNames.Events, out object? value) || value is not IReadOnlyDictionary<string, object> events)
         {

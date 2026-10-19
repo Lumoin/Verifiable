@@ -17,14 +17,14 @@ internal static class SecurityEventTestJson
 {
     internal static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     internal static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
 
-    internal static Dictionary<string, object>? DeserializePart(ReadOnlySpan<byte> json)
+    internal static Dictionary<string, object?>? DeserializePart(ReadOnlySpan<byte> json)
     {
         using JsonDocument document = JsonDocument.Parse(json.ToArray());
 
@@ -42,9 +42,9 @@ internal static class SecurityEventTestJson
     }
 
 
-    private static Dictionary<string, object> ConvertObject(JsonElement element)
+    private static Dictionary<string, object?> ConvertObject(JsonElement element)
     {
-        var dictionary = new Dictionary<string, object>(StringComparer.Ordinal);
+        var dictionary = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach(JsonProperty property in element.EnumerateObject())
         {
             object? value = ConvertElement(property.Value);

@@ -48,7 +48,7 @@ internal static class ManualJsonWriter
     /// </summary>
     /// <param name="writer">The writer to write to.</param>
     /// <param name="dictionary">The dictionary to write.</param>
-    internal static void WriteObject(Utf8JsonWriter writer, IDictionary<string, object> dictionary)
+    internal static void WriteObject(Utf8JsonWriter writer, IDictionary<string, object?> dictionary)
     {
         WriteValue(writer, dictionary);
     }

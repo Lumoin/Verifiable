@@ -543,14 +543,14 @@ internal sealed class AuthorizationServerFeatureTests
             Decoder = TestSetup.Base64UrlDecoder,
             ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             JwtHeaderSerializer = static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header,
+                (Dictionary<string, object?>)header,
                 TestSetup.DefaultSerializationOptions),
             JwtPayloadSerializer = static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload,
+                (Dictionary<string, object?>)payload,
                 TestSetup.DefaultSerializationOptions),
             //JwtHeaderDeserializer deliberately omitted.
             JwtPayloadDeserializer = static bytes =>
-                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                     bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Payload JSON parsed to null.")
         };

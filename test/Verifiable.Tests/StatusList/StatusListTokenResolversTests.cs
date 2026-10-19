@@ -662,7 +662,7 @@ internal sealed class StatusListTokenResolversTests
         using StatusListType published = PublishedList();
         var token = new StatusListToken(ListUrl, TestClock.CanonicalEpoch, published);
         JwtPayload payload = StatusListTokenClaims.ToPayload(token, TestSetup.Base64UrlEncoder);
-        var statusListClaim = (Dictionary<string, object>)payload[WellKnownJwtClaimNames.StatusList];
+        var statusListClaim = Assert.IsInstanceOfType<Dictionary<string, object?>>(payload[WellKnownJwtClaimNames.StatusList]);
         statusListClaim[StatusListMemberNames.List] = TestSetup.Base64UrlEncoder([0x00, 0x01, 0x02, 0x03]);
 
         string compactJws = await SignCompactAsync(payload, issuerPrivate, StatusListJwtType, TestContext.CancellationToken).ConfigureAwait(false);
@@ -691,7 +691,7 @@ internal sealed class StatusListTokenResolversTests
         using StatusListType published = PublishedList();
         var token = new StatusListToken(ListUrl, TestClock.CanonicalEpoch, published);
         JwtPayload payload = StatusListTokenClaims.ToPayload(token, TestSetup.Base64UrlEncoder);
-        var statusListClaim = (Dictionary<string, object>)payload[WellKnownJwtClaimNames.StatusList];
+        var statusListClaim = Assert.IsInstanceOfType<Dictionary<string, object?>>(payload[WellKnownJwtClaimNames.StatusList]);
         statusListClaim[StatusListMemberNames.List] = TestSetup.Base64UrlEncoder(CompressedZeros(StatusListType.DefaultMaxDecompressedByteCount + 1024));
 
         string compactJws = await SignCompactAsync(payload, issuerPrivate, StatusListJwtType, TestContext.CancellationToken).ConfigureAwait(false);

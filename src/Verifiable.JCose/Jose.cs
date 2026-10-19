@@ -32,7 +32,7 @@ public delegate TaggedMemory<byte> JwtPartEncoder<in TJwtPart>(TJwtPart part);
 /// </summary>
 /// <param name="partBytes">The decoded bytes of a single JWT part.</param>
 /// <returns>The claim set carried by the part.</returns>
-public delegate IReadOnlyDictionary<string, object> JwtPartDecoder(ReadOnlySpan<byte> partBytes);
+public delegate IReadOnlyDictionary<string, object?> JwtPartDecoder(ReadOnlySpan<byte> partBytes);
 
 
 /// <summary>
@@ -338,7 +338,7 @@ public static class Jws
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
         BaseMemoryPool signaturePool,
-        IReadOnlyDictionary<string, object>? unprotectedHeader,
+        IReadOnlyDictionary<string, object?>? unprotectedHeader,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -1430,19 +1430,19 @@ public static class Jws
     }
 
 
-    private static IReadOnlyDictionary<string, object> BuildProtectedHeaderDictionary<TJwtPart>(TJwtPart header)
+    private static IReadOnlyDictionary<string, object?> BuildProtectedHeaderDictionary<TJwtPart>(TJwtPart header)
     {
-        if(header is IReadOnlyDictionary<string, object> dict)
+        if(header is IReadOnlyDictionary<string, object?> dict)
         {
             return dict;
         }
 
-        if(header is IDictionary<string, object> mutableDict)
+        if(header is IDictionary<string, object?> mutableDict)
         {
-            return new Dictionary<string, object>(mutableDict);
+            return new Dictionary<string, object?>(mutableDict);
         }
 
-        return new Dictionary<string, object>();
+        return new Dictionary<string, object?>();
     }
 
 }

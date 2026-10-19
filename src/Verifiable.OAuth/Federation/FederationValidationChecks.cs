@@ -643,7 +643,7 @@ public static class FederationValidationChecks
     /// understood.
     /// </summary>
     private static bool CritSatisfied(
-        object critValue, UnverifiedJwtPayload payload, IReadOnlySet<string> understood)
+        object? critValue, UnverifiedJwtPayload payload, IReadOnlySet<string> understood)
     {
         if(critValue is not IEnumerable<object> items)
         {

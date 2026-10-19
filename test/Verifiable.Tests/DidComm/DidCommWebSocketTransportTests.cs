@@ -35,7 +35,7 @@ internal sealed class DidCommWebSocketTransportTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private const string MessageId = "ws-1234567890";

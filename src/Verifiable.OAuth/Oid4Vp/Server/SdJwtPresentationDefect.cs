@@ -1,27 +1,5 @@
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
-/// <summary>
-/// The outcome of verifying an SD-JWT VP token (<see cref="SdJwtVpTokenVerification.VerifyAsync"/>): its verified contents
-/// (<see cref="SdJwtVpTokenVerified"/>), or the refusal of a presentation no conformant Wallet produces
-/// (<see cref="SdJwtVpTokenRefused"/>), answered as a typed value rather than raised, so a verifier routes it as the malformed
-/// presentation it is.
-/// </summary>
-public abstract record SdJwtVpTokenVerificationOutcome;
-
-
-/// <summary>
-/// The presentation was read and its signatures and bindings judged: the contents and the outcome of every check, which the
-/// verifier's validation rules then require (<see cref="VpTokenParsed"/>).
-/// </summary>
-/// <param name="Parsed">The verified contents.</param>
-public sealed record SdJwtVpTokenVerified(VpTokenParsed Parsed) : SdJwtVpTokenVerificationOutcome;
-
-
-/// <summary>The presentation is malformed, for the reason named.</summary>
-/// <param name="Defect">Why the presentation is refused.</param>
-public sealed record SdJwtVpTokenRefused(SdJwtPresentationDefect Defect) : SdJwtVpTokenVerificationOutcome;
-
-
 /// <summary>Why an SD-JWT VP token is a malformed presentation.</summary>
 public enum SdJwtPresentationDefect
 {

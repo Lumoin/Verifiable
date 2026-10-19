@@ -934,7 +934,7 @@ internal sealed class JAdESLifecycleFlowTests
             Signature signatureCopy = originalSignature.SignatureBytes.Memory.Span.ToSignature(CryptoTags.AlgorithmAgnosticSignature, BaseMemoryPool.Shared);
 
             using var unsignedHeaders = new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.ClearJson, [cSigElement]);
-            IReadOnlyDictionary<string, object>? unprotectedHeader = JAdESEtsiUJson.Encode(unsignedHeaders);
+            var unprotectedHeader = JAdESEtsiUJson.Encode(unsignedHeaders);
 
             var component = new JwsSignatureComponent(originalSignature.Protected, EmptyProtectedHeaderDictionary, signatureCopy, unprotectedHeader);
             using var newMessage = new JwsMessage(message.Wire.Payload, component, message.Wire.IsDetachedPayload);
@@ -947,7 +947,7 @@ internal sealed class JAdESLifecycleFlowTests
     //Never read by JwsSerialization -- JwsSignatureComponent.Protected is the wire truth for every serialization
     //form (never a re-derived encoding of the decoded model), mirroring JAdESSignatureAugmentation's own
     //identically-purposed private field.
-    private static Dictionary<string, object> EmptyProtectedHeaderDictionary { get; } = [];
+    private static Dictionary<string, object?> EmptyProtectedHeaderDictionary { get; } = [];
 
 
     private static JwtPartEncoder<Dictionary<string, object>> CounterSignerHeaderEncoder { get; } =

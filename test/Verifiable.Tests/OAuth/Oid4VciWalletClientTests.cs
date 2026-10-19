@@ -61,12 +61,12 @@ internal sealed class Oid4VciWalletClientTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
     //Mints the DPoP proof's jti the same way the AuthCode fixtures do — the library default bound

@@ -1201,7 +1201,7 @@ public static class JwkJsonReader
             //A JOSE part's dictionary is declared, as every part the library holds is, to map a name to a value; a present JSON
             //null is held there as a member with no value, as the library's JSON layer holds it, never left out. The nested
             //objects and arrays are declared to hold such a value.
-            values[AdmittedTextAt(json, place.NameStart, place.NameLength)] = AdmittedValueAt(json, place.ValueStart, place.ValueEnd)!;
+            values[AdmittedTextAt(json, place.NameStart, place.NameLength)] = AdmittedValueAt(json, place.ValueStart, place.ValueEnd);
         }
 
         return null;
@@ -1298,21 +1298,38 @@ public static class JwkJsonReader
     /// <summary>
     /// The elements of an array a member's JSON text holds (<see cref="JsonTopLevelMember.ArrayElements"/>), in document order,
     /// each as one typed answer (<see cref="JsonMemberLookup"/>): a string with its decoded text, a number with its spelling, or a
-    /// value of another kind naming which; or none when the text is not exactly one well-formed JSON array, or holds a string
-    /// naming no Unicode text. A reader of a member defined as an array of strings judges each element's kind from this answer,
-    /// by the same reader, never by a scan of its own.
+    /// value of another kind naming which; or none when the text is not exactly one well-formed JSON array, or names no Unicode
+    /// text anywhere in it. The whole array is judged by the one strict judgement of a document (<see cref="IsOneJsonValue"/>) at
+    /// every depth, an object or an array nested in it included: a member name an object in it repeats, and a name or a string
+    /// whose escapes name an unpaired surrogate (RFC 8259 section 8.2), refuse it, as does an unpaired surrogate the caller's own
+    /// text holds, detected before the text is encoded, never replaced by an encoding. A reader of a member defined as an array
+    /// of strings judges each element's kind from this answer, by the same reader, never by a scan of its own.
     /// </summary>
     /// <param name="arrayText">The JSON text of the array.</param>
     /// <returns>The elements, or <see langword="null"/>.</returns>
+    /// <exception cref="InvalidOperationException">A string of an array the judgement admitted decoded to no text: an invariant failure of the reader.</exception>
     internal static IReadOnlyList<JsonMemberLookup>? ReadArrayElements(string arrayText)
     {
         ArgumentNullException.ThrowIfNull(arrayText);
 
-        var json = Encoding.UTF8.GetBytes(arrayText);
+        //A text holding an unpaired surrogate names no Unicode text; the encoding refuses it rather than replacing it.
+        var encoded = new byte[Encoding.UTF8.GetMaxByteCount(arrayText.Length)];
+
+        if(Utf8.FromUtf16(arrayText, encoded, out _, out var written, replaceInvalidSequences: false) is not OperationStatus.Done)
+        {
+            return null;
+        }
+
+        ReadOnlySpan<byte> json = encoded.AsSpan(0, written);
         var pos = 0;
         SkipWhitespace(json, ref pos);
 
-        if(pos >= json.Length || json[pos] != (byte)'[' || !IsWellFormedJsonDocument(json))
+        if(pos >= json.Length
+            || json[pos] != (byte)'['
+            || !IsOneJsonValue(json, out var defects)
+            || defects.RepeatedName is not null
+            || defects.Undecodable is not null
+            || defects.UnownedUndecodable is not null)
         {
             return null;
         }
@@ -1335,17 +1352,12 @@ public static class JwkJsonReader
 
             if(kind is JsonTopLevelValueKind.String)
             {
-                if(!SpellsUnicodeText(json, pos + 1, end - pos - 2) || DecodeContentToString(json, pos + 1, end - pos - 2) is not { } text)
-                {
-                    return null;
-                }
-
-                elements.Add(new JsonMemberString(text));
+                elements.Add(new JsonMemberString(AdmittedTextAt(json, pos + 1, end - pos - 2)));
             }
             else
             {
                 elements.Add(kind is JsonTopLevelValueKind.Number
-                    ? new JsonMemberNumber(Encoding.UTF8.GetString(json, pos, end - pos))
+                    ? new JsonMemberNumber(Encoding.UTF8.GetString(json[pos..end]))
                     : new JsonMemberOfOtherKind(kind));
             }
 
@@ -2188,6 +2200,13 @@ public static class JwkJsonReader
 
         /// <summary>The first string naming no Unicode text, or <see langword="null"/> while none has.</summary>
         public UndecodableString? Undecodable { get; set; }
+
+        /// <summary>
+        /// The position of the first content byte of the first string naming no Unicode text that lies in no object, only in
+        /// arrays from a root array, which no member owns; <see langword="null"/> while none has. A document that is an object
+        /// holds no such string.
+        /// </summary>
+        public int? UnownedUndecodable { get; set; }
     }
 
 
@@ -2294,6 +2313,10 @@ public static class JwkJsonReader
                     frames[owner].MemberNameLength,
                     depth - (top - owner),
                     JsonUndecodableMemberPart.Value);
+            }
+            else
+            {
+                defects.UnownedUndecodable ??= contentStart;
             }
         }
 
@@ -3305,10 +3328,13 @@ public static class JwkJsonReader
     /// <param name="keyId">The <c>kid</c> to match, or <see langword="null"/> to count every element.</param>
     private static JwkSelectionResult ScanKeysArray(ReadOnlySpan<byte> json, string? keyId)
     {
+        //RFC 7517 section 5: the keys member is REQUIRED and its value an array of JWK values, so a set without it, or with
+        //another value under it, is no JWK Set: refused as malformed, never read as a set carrying no key. An empty array is a
+        //JWK Set carrying none, an ordinary miss.
         int cursor = FindKeysArrayContentStart(json);
         if(cursor < 0)
         {
-            return JwkSelectionResult.NoMatch();
+            return JwkSelectionResult.MalformedDocument();
         }
 
         Dictionary<string, string>? selected = null;
@@ -3388,10 +3414,12 @@ public static class JwkJsonReader
     /// <param name="publicKeyUse">The eligible <c>use</c> value.</param>
     private static JwkSelectionResult ScanKeysArrayFiltered(ReadOnlySpan<byte> json, string? keyId, ReadOnlySpan<byte> publicKeyUse)
     {
+        //RFC 7517 section 5: the keys member is REQUIRED and its value an array of JWK values, so a set without it, or with
+        //another value under it, is refused as malformed, never read as a set carrying no key; an empty array is an ordinary miss.
         int cursor = FindKeysArrayContentStartDecoded(json);
         if(cursor < 0)
         {
-            return JwkSelectionResult.NoMatch();
+            return JwkSelectionResult.MalformedDocument();
         }
 
         bool carriesPrivateOrSymmetricMember = false;

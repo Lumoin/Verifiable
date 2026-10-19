@@ -218,8 +218,9 @@ public static class OAuthResponseParsers
     /// names a server controls, and the transport metadata a refusal keeps beside them, are no part of what is held
     /// confidential. An
     /// <see cref="OAuthMalformedResponse"/> carries the whole body as received in <see cref="OAuthMalformedResponse.Body"/>, so it
-    /// can carry credential text: it is answered for an empty body, for a body that is no one well-formed JSON object, for an
-    /// answer carrying no <c>access_token</c> and for one carrying an access token but no <c>token_type</c>. An
+    /// can carry credential text: it is answered for an empty body and for a body that is no one well-formed JSON object. An
+    /// answer carrying no <c>access_token</c>, or one carrying an access token but no <c>token_type</c>, is an
+    /// <see cref="OAuthRequiredMemberAbsent"/>, which names the parameter and copies nothing of the response. An
     /// <see cref="OAuthProtocolError"/> carries the description and the problem detail the server wrote, in its summary too, and
     /// an <see cref="OAuthInvalidLifetime"/> the <c>expires_in</c> member as the answer carries it. An
     /// <see cref="OAuthMemberNotAString"/> carries the name of the parameter it refuses and the kind of its value, and no value.

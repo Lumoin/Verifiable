@@ -18,9 +18,12 @@ public sealed record JsonTopLevelMember(string Name, JsonTopLevelValueKind Kind,
     /// naming which. A reader of a member defined as an array of strings - a JWK's <c>key_ops</c> or <c>x5c</c> (RFC 7517
     /// sections 4.3 and 4.7) - judges each element's kind from this answer, read by the reader that read the member, never by a
     /// scan of its own. <see langword="null"/> when the member is no array, or its text is no one well-formed array of Unicode
-    /// text, as a member the reader answered never is.
+    /// text, as a member the reader answered never is: the whole array is judged, at every depth, so an object or an array
+    /// nested in it repeating a member name, or holding a name or a string whose escapes name an unpaired surrogate, refuses
+    /// it, as does an unpaired surrogate a text composed by a caller holds itself, never replaced by an encoding.
     /// </summary>
     /// <returns>The elements, or <see langword="null"/>.</returns>
+    /// <exception cref="InvalidOperationException">An admitted string decoded to no text: an invariant failure of the reader.</exception>
     public IReadOnlyList<JsonMemberLookup>? ArrayElements() =>
         Kind is JsonTopLevelValueKind.Array ? JwkJsonReader.ReadArrayElements(Text) : null;
 }

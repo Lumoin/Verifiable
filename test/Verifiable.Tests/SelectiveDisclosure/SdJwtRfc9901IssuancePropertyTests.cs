@@ -213,7 +213,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             Assert.HasCount(disclosable.Count, disclosures);
             Assert.IsTrue(mandatory.ContainsKey(parentName), "Parent object must remain in mandatory.");
 
-            var mandatoryNested = (Dictionary<string, object?>)mandatory[parentName];
+            var mandatoryNested = Assert.IsInstanceOfType<Dictionary<string, object?>>(mandatory[parentName]);
             foreach(string key in leaves.Keys)
             {
                 if(!disclosable.Contains(key))

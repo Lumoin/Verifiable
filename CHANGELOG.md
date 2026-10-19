@@ -79,23 +79,50 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   answered with, never a category established for another.
 - `JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod`: a token whose `cnf` binds it by a confirmation method
   the library does not verify possession under.
-- `SdJwtVpTokenVerificationOutcome`, `SdJwtVpTokenVerified`, `SdJwtVpTokenRefused` and `SdJwtPresentationDefect`
-  (`Verifiable.OAuth.Oid4Vp.Server`, public): the outcome of verifying an SD-JWT VP token, its contents or the typed refusal
-  of a presentation no conformant Wallet produces. Awaiting the owner's word.
+- `SdJwtPresentationDefect` (`Verifiable.OAuth.Oid4Vp.Server`, public): why an SD-JWT VP token is a presentation no
+  conformant Wallet produces, answered by `SdJwtVpTokenVerification.VerifyAsync` through the library's existing
+  `Result<VpTokenParsed, SdJwtPresentationDefect>` and carried to the verifier's failed state as
+  `VerifierPresentationRefused.PresentationDefect`, `VerifierFlowFailedState.PresentationDefect`,
+  `SiopFlowFailed.PresentationDefect` and `SiopVerifierFlowFailedState.PresentationDefect`; the Wallet is answered the generic
+  malformed description. Awaiting the owner's word.
+- `JwkCertificateChain.DefectOf` and `JwkCertificateChainDefect` (`Verifiable.JCose`, public): a JWK's `x5c` read as RFC 7517
+  section 4.7 has it - each element base64 (not base64url) text of a DER X.509 certificate (RFC 5280 section 4.1), the first
+  certificate's subject public key the key the JWK's other members represent, for EC P-256/P-384/P-521, RSA, Ed25519 and
+  ML-DSA keys - answering the defect, `NotBase64Text`, `NotACertificate` or `FirstCertificateNotOfTheKey`, or none. The
+  certification of each certificate by the next is a matter of trust in the chain, which it does not judge. Awaiting the
+  owner's word.
+- `DpopProofMemberDefect.RepeatedKeyOperation`, `KeyOperationsInconsistentWithUse` and `CertificateNotOfTheKey`: an embedded
+  `jwk` naming a `key_ops` operation twice, carrying `use` and `key_ops` that do not convey consistent information, or an
+  `x5c` whose first certificate is of another key (RFC 7517 sections 4.3 and 4.7).
+- `WellKnownJwkValues` `key_ops` values (`KeyOpsSign`, `KeyOpsVerify`, `KeyOpsEncrypt`, `KeyOpsDecrypt`, `KeyOpsWrapKey`,
+  `KeyOpsUnwrapKey`, `KeyOpsDeriveKey`, `KeyOpsDeriveBits`, each with its UTF-8 form and recognition) and
+  `WellKnownJwkMemberNames.IsPub`.
 - `OAuthRequestParameterNames.IsRefreshToken`, `IsIdToken` and `IsNonce`: the recognitions of those parameter names beside
   `IsAccessToken`, each an exact ordinal comparison.
 - `JwtHeader.Read` and `JwtPayload.Read` (`Verifiable.JCose`): a signed JWT's decoded header and claims set read through the
   one authority `JwkJsonReader.ReadTopLevelMembers` answers a document by - its strict judgement, then the admitted bytes read
   with the same reader's primitives, one authority and not one physical scan - every member at every depth held as a claims
   set holds it (a number every digit kept, an object as a dictionary, an array as a list, each declared to hold a value that
-  may be none, a present `null` as a member with no value), answering `JwtPartReading<TPart>` (`JwtPartRead<TPart>`,
-  `JwtPartRefused<TPart>` carrying the reader's own refusal), never throwing on the bytes it is handed;
+  may be none, the top-level claims set included, a present `null` as a member with no value), answering
+  `JwtPartReading<TPart>` (`JwtPartRead<TPart>`, `JwtPartRefused<TPart>` carrying the reader's own refusal), never throwing
+  on the bytes it is handed;
   `JwsAccessTokenJsonParser.Default` is the pair, so a receiver of an access token or an ID Token parses no part of it itself.
 - Pending the owner's word before publication, on name, home and visibility: `OAuthMemberNotAString`, `JwtPartReading<TPart>`,
   `JwtPartRead<TPart>` and `JwtPartRefused<TPart>`, and with them this release's `JwsPart`, `JwsPartRefusal`,
   `JwsPartDocumentRefusal`, `DpopProofPartRefused<TPart>`, `DpopProofMemberRefusal`, `DpopProofMember`,
   `KeyAttestationProofUse`, `ReplayRecordRetention` and its two cases, `OAuthRequiredMemberAbsent` and the SD-JWT
-  verification outcome.
+  verification's `SdJwtPresentationDefect` with its carriage onto the failed states, `JwkCertificateChain` and
+  `JwkCertificateChainDefect`, and the changed public signatures this release's nullable propagation brings (below).
+  Recommendations recorded with the review for the owner: approve `JwsPart`, `JwsPartRefusal` and `JwsPartDocumentRefusal` as
+  the common JCose concept, subject to naming; keep `DpopProofMemberRefusal`, `DpopProofMember`, `DpopProofPartRefused<TPart>`
+  and the derived `Place` in OAuth's DPoP area, the mapping exhaustive; the new member-defect values as extensions of the
+  existing enum; `PartRefusal` and `PartRefused` on the four results in place of new result hierarchies; the typed retention
+  only with complete host storage consumption and no timestamp shim; the required `KeyAttestation.IssuedAt`,
+  `ExpiryNotPresented` and the proof-use argument as a signature widening needing the owner's ruling, its general-validation
+  case's name and meaning settled; `OAuthRequiredMemberAbsent` beside the pending `OAuthMemberNotAString` decision;
+  `UnrecognisedRefusal` and `UnsupportedConfirmationMethod` as extensions of existing vocabularies; the presentation's typed
+  refusal through an existing result mechanism rather than new wrapper records; `ArrayElements`, `IsInteger` and the `Ext`
+  members as extensions of existing JCose types; the reading helpers and federation selections kept internal or private.
 
 ### Changed
 
@@ -164,9 +191,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   at any depth, or holds a string naming no Unicode text, is refused through the library's reading; a present `null` claim is
   held as present, so a `null` `exp`, `nbf` or `act` is refused as malformed rather than read as absent. An `aud` array
   holding an element that is no non-empty string, an empty array or an empty string is `Malformed` as a whole, where its
-  other elements were read as the audience; an ID Token's `amr` likewise. A `cnf` that is no object, carries no member or
+  other elements were read as the audience. An ID Token's `amr` is read as OpenID Connect Core 1.0 section 2 defines it, a JSON
+  array of strings, by a reader of its own: a single string, which `aud` admits, is `Malformed` for `amr`, as is an array
+  holding an element that is no non-empty string or an empty array. A `cnf` that is no object, carries no member or
   carries a `jkt` that is no non-empty string is `Malformed`, and one carrying a confirmation method the library does not
-  verify is `UnsupportedConfirmationMethod`, where each was read as an unbound token.
+  verify is `UnsupportedConfirmationMethod`, where each was read as an unbound token. Refusing a confirmation method beside
+  `jkt` is the library's profile policy: RFC 7800 section 3.1 lets a `cnf` carry members of other methods, and this library
+  verifies possession only under the one it implements, so a token bound by another is refused rather than accepted unbound.
 - `CredentialProofValidator` reads the proof's claims set as the one JSON object it is and refuses an `iat` that is no
   NumericDate as `Malformed` where it was answered as `IatOutOfWindow`, an omitted `iat` staying `IatOutOfWindow`; a claims set
   holding a string naming no Unicode text is refused as `Malformed` too.
@@ -174,21 +205,52 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   1.0 section 2 as REQUIRED, or carrying an `exp` or an `iat` that is no NumericDate, as structurally invalid, returned as its
   judgement and never raised; an omitted `exp` is still not unexpired. The token's `iss`, `sub`, `aud`, `nonce` and `sub_jwk`
   are still read by the text scan beside the members reading the dates come from.
-- `SdJwtVpTokenVerification.VerifyAsync` answers a `SdJwtVpTokenVerificationOutcome`: the verified contents, or
-  `SdJwtVpTokenRefused` naming the defect of an issuer-signed payload that is not well-formed or repeats a claim, a `status`
-  claim outside Token Status List sections 6.1 and 6.2, a KB-JWT payload that is not one JSON object, or a KB-JWT `iat` that
-  is no NumericDate, where each was raised as a `FormatException`; an omitted KB-JWT `iat` is carried as absent and refused by
-  the key-binding checks. The HAIP and SIOP verifier executors answer the refusal on their malformed route. The KB-JWT's
-  `nonce`, `aud` and `sd_hash` are still read by the text scan beside the members reading its `iat` comes from.
+- `SdJwtVpTokenVerification.VerifyAsync` answers a `Result<VpTokenParsed, SdJwtPresentationDefect>`: the presentation read and
+  assessed - its signature, `sd_hash` and binding outcomes stated for the caller's checks, not yet accepted - or the defect of
+  an issuer-signed payload that is not well-formed or repeats a claim, a `status` claim outside Token Status List sections 6.1
+  and 6.2, a KB-JWT payload that is not one JSON object, or a KB-JWT `iat` that is no NumericDate, where each was raised as a
+  `FormatException`. An omitted KB-JWT `iat` is carried as absent; the OID4VP verifier's key-binding checks refuse it, and the
+  SIOPv2 section 12 combined response now judges the KB-JWT's `iat` by the same checks (`CheckKbJwtIatNotInFuture`,
+  `CheckKbJwtIatNotTooOld`) among its binding, where it accepted a KB-JWT omitting it or stating any instant. The HAIP and SIOP
+  verifier executors answer the defect on their malformed route and carry it to the failed state. The KB-JWT's `nonce`, `aud`
+  and `sd_hash`, and the Self-Issued ID Token's `iss`, `sub`, `aud`, `nonce` and `sub_jwk`, are still read by the older text
+  scans beside the members reading the dates come from: those extractors are not part of the members-reading migration and
+  remain library work.
+- The JOSE dictionaries hold a value that may be none at the top level as at every depth: `JoseDictionary` (and with it
+  `JwtHeader`, `JwtPayload`, `UnverifiedJwtHeader` and `UnverifiedJwtPayload`) is a `Dictionary<string, object?>`, and every
+  seam that hands one on states the same - the JWT part serializers and deserializers (`JwtHeaderSerializer`,
+  `JwtHeaderDeserializer`, the OAuth `JwtPayloadDeserializer`, `JwtHeaderDeserializer` and `JarDictionaryDeserializer`), the
+  JWS and JAdES header and unprotected-header parameters and delegates, the DIDComm `from_prior` header deserializers, the
+  security event token part deserializer and `SecurityEventTokenParsing.Parse`, `ClientAssertionClaimRules`'s and
+  `ClientAssertionHeaderRules`' readings, `JarVerified.Claims`, `JarmResponseValidationResult.Parameters`,
+  `ValidationContext.TokenClaims` and `JwsCredentialVerificationResult.Header`. `DictionaryEquality` and
+  `JsonAppender.AppendObject` are generic over the value type. A reader of a value no longer receives a non-null claim it must
+  then cast without a check; a `null` member is a member with no value, and the readings that require a value refuse it as
+  they refuse any value of another kind.
+- `JwkJsonReader`'s JWK Set selections answer a set carrying no `keys` member, or one whose `keys` is no array, as
+  `MalformedDocument` (RFC 7517 section 5: the member is REQUIRED and its value an array); an empty `keys` array stays a set
+  with no key the selection matches. `JsonTopLevelMember.ArrayElements` judges the whole array as Unicode text, a literal
+  unpaired surrogate in the text it is read from among what it refuses, before any element is read.
+- An embedded DPoP `jwk` is judged by RFC 7517 sections 4.3 and 4.7 as a whole once its members are read: `key_ops` naming no
+  operation twice, `use` and `key_ops` consistent where both are carried, and `x5c` a chain of DER certificates whose first is
+  of the key. `DpopProofValidator` answers a key it cannot construct, the decoder's or the key material's refusal, as
+  `InvalidJwk`, and lets every other failure surface as the fault it is. `KeyAttestationParser.TryParse` and
+  `KeyAttestationVerifier.VerifyAsync` answer only the decoder's refusal of a segment as no base64url text as a malformed
+  attestation, where any exception of the header's reading was; a proof use of no defined value is refused as an
+  `ArgumentOutOfRangeException`, never read as a use requiring no expiry. `JtiReplayGuard` refuses a retention of neither
+  kind as an `ArgumentException` before the store is consulted, where it stored one as kept to the clock's end; a DPoP member
+  refusal is constructed only for a member the reading knows.
 - The JWK Set admission names the reader's `JsonNotOneObject` as `MalformedDocument` explicitly and throws
   `InvalidOperationException` for any other reading, an invariant failure of the reader rather than a refusal of the set, so
   no refusal the reader comes to answer is folded into `MalformedDocument` unread.
 - `JwkJsonReader`'s readings of an admitted document throw `InvalidOperationException`, an invariant failure and never a
   refusal, where a member read to no text or value, rather than answering the admitted document as `JsonNotOneObject`.
-- `FederationKeyResolver.ResolveInChainKeyAsync` tells a statement whose key set carries no key of the kid, which passes the
-  walk on, from one whose key set is refused or whose selected key builds no key, which ends the walk with no key, where every
-  such statement passed the walk on to the next. `JwtVcIssuerMetadataDocuments.ResolveAsync` refuses an inline `jwks` that is
-  no JWK Set as `InvalidDocument` before reporting the document resolved.
+- `FederationKeyResolver.ResolveInChainKeyAsync` tells a statement whose key set carries no key of the kid - an empty `keys`
+  array among them - which passes the walk on, from one whose key set is refused - no JSON object, no `keys` member, a `keys`
+  that is no array, or a set the selection refuses - or whose selected key builds no key, which ends the walk with no key,
+  where every such statement passed the walk on to the next; a set carrying no `keys` member, or one that is no array, was
+  read as one carrying no key of the kid and passed it on. `JwtVcIssuerMetadataDocuments.ResolveAsync` refuses an inline
+  `jwks` that is no JWK Set as `InvalidDocument` before reporting the document resolved.
 
 ### Removed
 
@@ -199,9 +261,33 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `JwkJsonReader.TryExtractNumericDate`, and its successor `JwkJsonReader.ExtractNumericDate` (published locally as 1023): the
   text-scan reader turned a present malformed date into absence; every reader of a date reads the members of its claims set
   (`JwkJsonReader.ReadTopLevelMembers`, `JsonMemberNumber.ToNumericDate`) and tells the two apart.
-- `ClientAssertionClaimsJudgement.AcceptedToTheClocksEnd` and `ReplayRecordKeptUntil`, and
-  `ClientAssertionClaimRules.ReplayRecordKeptUntil`: the clock-end fact and the instant are one typed retention
-  (`ReplayRecordRetention`), carried through the replay delegates into the stored state.
+- The members `ClientAssertionClaimsJudgement.AcceptedToTheClocksEnd`, `ClientAssertionClaimsJudgement.ReplayRecordKeptUntil`
+  (a `DateTimeOffset?` property) and the method `ClientAssertionClaimRules.ReplayRecordKeptUntil`: the clock-end fact and the
+  instant are one typed retention (`ReplayRecordRetention`), carried through the replay delegates into the stored state. The
+  record `ReplayRecordKeptUntil` added in this release, one of that retention's two cases, is a different thing of the same
+  name and is not removed.
+- `SdJwtVpTokenVerificationOutcome`, `SdJwtVpTokenVerified` and `SdJwtVpTokenRefused`, added earlier in this release: the
+  presentation's outcome is the library's existing `Result<VpTokenParsed, SdJwtPresentationDefect>`.
+
+### Host migration obligations
+
+A host taking this release changes, beyond renamed or widened calls the compiler finds:
+
+- Every replay store: both retention delegates (`ConsultClientAssertionFirstUseDelegate`,
+  `CheckClientAssertionJtiReplayDelegate`), `JtiReplayGuard.ConsultClientAssertionAsync`, the removed judgement members, and
+  every `JtiSeenState` it constructs carry the `ReplayRecordRetention`; its state serialization, expiry cleanup, storage TTL
+  and the correlation and claim record's lifetime keep a record kept to the clock's end through the clock's last tick, which
+  a successful compile does not establish.
+- Both `KeyAttestationVerifier.VerifyAsync` overloads take the `KeyAttestationProofUse`; `KeyAttestation.IssuedAt` is
+  required; every consumer of the SD-JWT VP token verification reads the `Result` and the typed defect.
+- Every host switch over an extended failure enum (`JwsAccessTokenValidationFailureReason`, `DpopProofMemberDefect`,
+  `KeyAttestationVerificationFailureReason`, the `OAuthParseError` cases) names the new cases, and every pending name the
+  owner changes is taken.
+- A host's own JWT part parser delegates are replaced by the library's readings, carrying the `JwtPartRead<TPart>` the host
+  captured input from, and refused parts' `PartRefusal` objects are carried whole into its evidence by their typed member,
+  place, kind and defect, never by logging the carried values, which can hold supplied key material.
+- A host's code reading the JOSE dictionaries states their values as `object?`.
+- The inventory covers every library change since the host's own pin, not this release's last commit alone.
 - `DpopProofPartDocumentRefused<TPart>` and `DpopProofPartMemberRefused<TPart>`: a refused part is
   `DpopProofPartRefused<TPart>`, carrying the `JwsPartRefusal` a validation result carries whole.
 

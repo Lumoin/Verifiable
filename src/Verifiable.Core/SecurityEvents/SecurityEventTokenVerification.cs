@@ -75,7 +75,7 @@ public static class SecurityEventTokenVerification
             return SecurityEventTokenVerificationResult.Failed(SecurityEventTokenValidationError.Malformed);
         }
 
-        Dictionary<string, object>? header;
+        Dictionary<string, object?>? header;
         using(IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], memoryPool))
         {
             header = headerDeserializer(headerBytes.Memory.Span);
@@ -100,7 +100,7 @@ public static class SecurityEventTokenVerification
         }
 
         //Signature holds: only now interpret the payload bytes.
-        Dictionary<string, object>? payloadClaims;
+        Dictionary<string, object?>? payloadClaims;
         using(IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool))
         {
             payloadClaims = payloadDeserializer(payloadBytes.Memory.Span);

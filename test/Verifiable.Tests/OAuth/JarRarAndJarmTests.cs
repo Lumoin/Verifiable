@@ -50,16 +50,16 @@ internal sealed class JarRarAndJarmTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadDeserializer PayloadDeserializer { get; } =
-        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Payload JSON parsed to null.");
 

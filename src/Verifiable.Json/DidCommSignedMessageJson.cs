@@ -38,7 +38,7 @@ public static class DidCommSignedMessageJson
     /// </summary>
     public static JwtPartEncoder<JwtHeader> ProtectedHeaderEncoder { get; } =
         header => new TaggedMemory<byte>(
-            JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object>)header, Options),
+            JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object?>)header, Options),
             JoseBufferTags.JwtHeader);
 
 
@@ -106,7 +106,7 @@ public static class DidCommSignedMessageJson
 
             if(only.UnprotectedHeader is { Count: > 0 })
             {
-                flattened["header"] = new Dictionary<string, object>(only.UnprotectedHeader);
+                flattened["header"] = new Dictionary<string, object?>(only.UnprotectedHeader);
             }
 
             return flattened;
@@ -123,7 +123,7 @@ public static class DidCommSignedMessageJson
 
             if(signature.UnprotectedHeader is { Count: > 0 })
             {
-                signatureObject["header"] = new Dictionary<string, object>(signature.UnprotectedHeader);
+                signatureObject["header"] = new Dictionary<string, object?>(signature.UnprotectedHeader);
             }
 
             signatures.Add(signatureObject);
@@ -139,8 +139,8 @@ public static class DidCommSignedMessageJson
 
     //Adapts the leaf's dictionary deserialization to the JCose JwsParsing header-deserializer Func
     //(a contained boundary adaptation, as in the OAuth JarVerification pattern).
-    private static IReadOnlyDictionary<string, object> HeaderDeserializer(ReadOnlySpan<byte> headerJson) =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerJson, Options)
+    private static IReadOnlyDictionary<string, object?> HeaderDeserializer(ReadOnlySpan<byte> headerJson) =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerJson, Options)
             ?? throw new FormatException("A JWS header MUST NOT be JSON null.");
 
 

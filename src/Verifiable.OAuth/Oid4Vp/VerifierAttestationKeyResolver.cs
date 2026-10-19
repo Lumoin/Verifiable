@@ -68,7 +68,7 @@ public static class VerifierAttestationKeyResolver
         string expectedClientId,
         PublicKeyMemory trustAnchorPublicKey,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> payloadDeserializer,
         BaseMemoryPool pool,
         CancellationToken cancellationToken)

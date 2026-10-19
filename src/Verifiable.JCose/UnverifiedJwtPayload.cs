@@ -63,7 +63,7 @@ public sealed class UnverifiedJwtPayload : JoseDictionary, IEquatable<Unverified
     /// producer of the key-value pairs.
     /// </remarks>
     /// <param name="claims">The key-value pairs to copy.</param>
-    public UnverifiedJwtPayload(IEnumerable<KeyValuePair<string, object>> claims)
+    public UnverifiedJwtPayload(IEnumerable<KeyValuePair<string, object?>> claims)
         : base(claims) { }
 
 

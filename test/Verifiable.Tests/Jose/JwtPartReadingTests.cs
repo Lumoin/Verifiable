@@ -77,24 +77,24 @@ internal sealed class JwtPartReadingTests
 
         Assert.AreEqual(payloadRefusal.GetType(), headerRefusal.GetType(), "Both parts are judged by the one judgement.");
 
-        switch(payloadRefusal)
+        if(payloadRefusal is JsonRepeatedMemberName repeated)
         {
-            case JsonRepeatedMemberName repeated:
-                Assert.AreEqual(expectedName, repeated.Name);
-                Assert.AreEqual(expectedDepth, repeated.ObjectDepth);
+            Assert.AreEqual(expectedName, repeated.Name);
+            Assert.AreEqual(expectedDepth, repeated.ObjectDepth);
 
-                break;
-            case JsonUndecodableMember undecodable:
-                Assert.AreEqual(expectedName, undecodable.Name);
-                Assert.AreEqual(expectedDepth, undecodable.ObjectDepth);
-                Assert.AreEqual(JsonUndecodableMemberPart.Value, undecodable.Part);
-
-                break;
-            default:
-                _ = Assert.IsInstanceOfType<JsonNotOneObject>(payloadRefusal);
-                Assert.IsNull(expectedName);
-
-                break;
+            return;
         }
+
+        if(payloadRefusal is JsonUndecodableMember undecodable)
+        {
+            Assert.AreEqual(expectedName, undecodable.Name);
+            Assert.AreEqual(expectedDepth, undecodable.ObjectDepth);
+            Assert.AreEqual(JsonUndecodableMemberPart.Value, undecodable.Part);
+
+            return;
+        }
+
+        _ = Assert.IsInstanceOfType<JsonNotOneObject>(payloadRefusal);
+        Assert.IsNull(expectedName);
     }
 }

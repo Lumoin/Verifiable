@@ -14,5 +14,5 @@ namespace Verifiable.Core.Model.Credentials;
 /// </param>
 public readonly record struct JwsCredentialVerificationResult(
     bool IsValid,
-    Dictionary<string, object>? Header,
+    Dictionary<string, object?>? Header,
     Verified<VerifiableCredential>? Credential);

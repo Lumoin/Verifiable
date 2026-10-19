@@ -294,7 +294,7 @@ public static class SdJwtClaimRedaction
         EncodeDelegate? encoder,
         string? hashAlgorithm,
         BaseMemoryPool? pool,
-        Dictionary<string, object> mandatoryOutput,
+        Dictionary<string, object?> mandatoryOutput,
         List<SdDisclosure> allDisclosures,
         Dictionary<CredentialPath, List<string>> digestsByParent)
     {
@@ -334,7 +334,7 @@ public static class SdJwtClaimRedaction
                 if(DisclosurePathGrouping.HasDisclosableDescendants(childPath, groupedPaths))
                 {
                     //Recurse into nested object that contains disclosable descendants.
-                    var nestedOutput = new Dictionary<string, object>();
+                    var nestedOutput = new Dictionary<string, object?>();
                     WalkObject(
                         prop.Value,
                         childPath,
@@ -354,13 +354,13 @@ public static class SdJwtClaimRedaction
                 else
                 {
                     //No disclosable descendants — copy entire subtree as-is.
-                    mandatoryOutput[prop.Name] = JsonElementConversion.Convert(prop.Value)!;
+                    mandatoryOutput[prop.Name] = JsonElementConversion.Convert(prop.Value);
                 }
             }
             else
             {
                 //Mandatory scalar or array claim — copy as-is.
-                mandatoryOutput[prop.Name] = JsonElementConversion.Convert(prop.Value)!;
+                mandatoryOutput[prop.Name] = JsonElementConversion.Convert(prop.Value);
             }
         }
     }

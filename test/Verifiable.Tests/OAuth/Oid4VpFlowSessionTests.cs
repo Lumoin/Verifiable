@@ -373,11 +373,11 @@ internal sealed class Oid4VpFlowSessionTests
         using PrivateKeyMemory signingPrivateKey = signingKeys.PrivateKey;
 
         static ReadOnlySpan<byte> headerSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header,
+                (Dictionary<string, object?>)header,
                 TestSetup.DefaultSerializationOptions);
 
         static ReadOnlySpan<byte> payloadSerializer(JwtPayload payload) => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload,
+                (Dictionary<string, object?>)payload,
                 TestSetup.DefaultSerializationOptions);
 
         var header = new JwtHeader
@@ -413,7 +413,7 @@ payloadSerializer,
         CancellationToken cancellationToken)
     {
         static ReadOnlySpan<byte> headerSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header,
+                (Dictionary<string, object?>)header,
                 TestSetup.DefaultSerializationOptions);
 
         byte[] payload = System.Text.Encoding.UTF8.GetBytes(

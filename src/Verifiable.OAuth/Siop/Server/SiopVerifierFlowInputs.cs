@@ -214,4 +214,11 @@ public sealed record SiopFlowFailed : FlowInput
     /// per OID4VP 1.0 §15.9.
     /// </summary>
     public CredentialStatusRefusal? CredentialStatusRefusal { get; init; }
+
+    /// <summary>
+    /// Why the combined response's SD-JWT presentation is malformed when the verification refused it as one. Never rides the
+    /// wire: the Wallet is answered the generic <see cref="VerifierFlowRefusalKind.Malformed"/> description, and this member,
+    /// like <see cref="Reason"/>, is server-side detail. <see langword="null"/> for every other failure.
+    /// </summary>
+    public SdJwtPresentationDefect? PresentationDefect { get; init; }
 }

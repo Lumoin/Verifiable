@@ -114,7 +114,7 @@ public static class JoseTokenClassifier
     public static ValueTask<JoseTokenShape> ClassifyAsync(
         string token,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
@@ -255,7 +255,7 @@ public static class JoseTokenClassifier
     private static ValueTask<JoseTokenShape> ClassifyThreeSegment(
         string token,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         BaseMemoryPool memoryPool)
     {
         UnverifiedJwsMessage? parsed = null;
@@ -300,14 +300,14 @@ public static class JoseTokenClassifier
     private static ValueTask<JoseTokenShape> ClassifyFiveSegment(
         string token,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         BaseMemoryPool memoryPool)
     {
         ReadOnlySpan<char> tokenSpan = token.AsSpan();
         int firstDot = tokenSpan.IndexOf('.');
         ReadOnlySpan<char> headerSegment = tokenSpan[..firstDot];
 
-        IReadOnlyDictionary<string, object> headerDict;
+        IReadOnlyDictionary<string, object?> headerDict;
         try
         {
             using IMemoryOwner<byte> headerBytes = base64UrlDecoder(headerSegment, memoryPool);

@@ -1393,7 +1393,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             {
                 candidateIntegration.Codecs.JwtPayloadDeserializer = bytes =>
                 {
-                    Dictionary<string, object> claims = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    var claims = JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                         bytes, TestSetup.DefaultSerializationOptions)
                         ?? throw new FormatException("Payload JSON parsed to null.");
                     claims[WellKnownJwtClaimNames.Aud] = AsLazySequence(audienceElements);
@@ -1510,7 +1510,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
             var permissiveClaims = app.Server.OAuth().Codecs.JwtPayloadDeserializer!(
                 Encoding.UTF8.GetBytes(repeatedPayloadJson));
-            Assert.AreEqual(registration.ClientId, (string)permissiveClaims[WellKnownJwtClaimNames.Sub],
+            Assert.AreEqual(registration.ClientId, permissiveClaims[WellKnownJwtClaimNames.Sub],
                 "The permissive deserializer must yield the client's own sub, so only the repeated name can refuse the assertion.");
 
             bool isAuthenticated = await validator(
@@ -1537,12 +1537,12 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     /// <param name="payload">The decoded UTF-8 bytes of the payload JSON object.</param>
     /// <param name="isLastMemberKept">Whether the last member under a repeated name wins (otherwise the first).</param>
     /// <returns>The claim dictionary holding one value per claim name.</returns>
-    private static Dictionary<string, object> ReadClaimsKeepingOneRepeatedMember(ReadOnlySpan<byte> payload, bool isLastMemberKept)
+    private static Dictionary<string, object?> ReadClaimsKeepingOneRepeatedMember(ReadOnlySpan<byte> payload, bool isLastMemberKept)
     {
         using JsonDocument document = JsonDocument.Parse(
             payload.ToArray(), new JsonDocumentOptions { AllowDuplicateProperties = true });
 
-        Dictionary<string, object> claims = [];
+        Dictionary<string, object?> claims = [];
         foreach(JsonProperty member in document.RootElement.EnumerateObject())
         {
             object value = member.Value.ValueKind switch

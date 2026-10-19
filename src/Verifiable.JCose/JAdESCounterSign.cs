@@ -75,7 +75,7 @@ public static class JAdESCounterSign
         EncodeDelegate base64UrlEncoder,
         PrivateKeyMemory privateKey,
         BaseMemoryPool signaturePool,
-        IReadOnlyDictionary<string, object>? counterSignerUnprotectedHeader,
+        IReadOnlyDictionary<string, object?>? counterSignerUnprotectedHeader,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
@@ -118,7 +118,7 @@ public static class JAdESCounterSign
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
         BaseMemoryPool signaturePool,
-        IReadOnlyDictionary<string, object>? counterSignerUnprotectedHeader,
+        IReadOnlyDictionary<string, object?>? counterSignerUnprotectedHeader,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {

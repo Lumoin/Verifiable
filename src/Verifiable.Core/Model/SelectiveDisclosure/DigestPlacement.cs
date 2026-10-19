@@ -55,7 +55,7 @@ public static class DigestPlacement
     /// Thrown when a parent path does not resolve to a dictionary in the claims tree.
     /// </exception>
     public static void PlaceDigests(
-        Dictionary<string, object> claims,
+        Dictionary<string, object?> claims,
         IReadOnlyDictionary<CredentialPath, List<string>> digestsByParent,
         string hashAlgorithm)
     {
@@ -72,7 +72,7 @@ public static class DigestPlacement
             digests.Sort(StringComparer.Ordinal);
 
             //Navigate to the parent dictionary in the claims tree.
-            Dictionary<string, object> target = ResolveParent(claims, parentPath);
+            var target = ResolveParent(claims, parentPath);
             target[SdConstants.SdClaimName] = new List<string>(digests);
         }
 
@@ -87,8 +87,8 @@ public static class DigestPlacement
     /// <summary>
     /// Navigates the claims dictionary tree to find the dictionary at the given path.
     /// </summary>
-    private static Dictionary<string, object> ResolveParent(
-        Dictionary<string, object> root,
+    private static Dictionary<string, object?> ResolveParent(
+        Dictionary<string, object?> root,
         CredentialPath path)
     {
         //Root path means the top-level claims dictionary.
@@ -97,7 +97,7 @@ public static class DigestPlacement
             return root;
         }
 
-        Dictionary<string, object> current = root;
+        var current = root;
 
         foreach(JsonPointerSegment segment in path.JsonPointer.Segments)
         {
@@ -111,9 +111,11 @@ public static class DigestPlacement
 
             current = child switch
             {
-                Dictionary<string, object> dict => dict,
+                Dictionary<string, object?> dict => dict,
+                null => throw new InvalidOperationException(
+                    $"Cannot place _sd array: path segment '{key}' resolved to a member with no value, expected a claims object."),
                 _ => throw new InvalidOperationException(
-                    $"Cannot place _sd array: path segment '{key}' resolved to {child.GetType().Name}, expected Dictionary<string, object>.")
+                    $"Cannot place _sd array: path segment '{key}' resolved to {child.GetType().Name}, expected a claims object.")
             };
         }
 

@@ -483,7 +483,7 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
             };
 
             byte[] headerBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
             EncodeDelegate encoder = DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk);
 
             string headerSegment = encoder(headerBytes);
@@ -657,12 +657,12 @@ fetchSubordinate,
 
     /// <summary>Deserializes a compact JWS header segment for <see cref="TrustChainValidation.BuildInlineValidator"/>.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(bytes, TestSetup.DefaultSerializationOptions)
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Header JSON parsed to null.");
 
     /// <summary>Deserializes a compact JWS payload segment for <see cref="TrustChainValidation.BuildInlineValidator"/>.</summary>
     private static JwtPayloadDeserializer PayloadDeserializer { get; } = static bytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(bytes, TestSetup.DefaultSerializationOptions)
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
 
 

@@ -61,7 +61,7 @@ public sealed record JarmResponseValidationResult
     /// <see langword="null"/> unless every check passed (§2.4: parameters MUST NOT be
     /// processed before all checks succeed).
     /// </summary>
-    public IReadOnlyDictionary<string, object>? Parameters { get; init; }
+    public IReadOnlyDictionary<string, object?>? Parameters { get; init; }
 
     /// <summary>The <c>code</c> response parameter, when present in <see cref="Parameters"/>.</summary>
     public string? Code => GetString("code");

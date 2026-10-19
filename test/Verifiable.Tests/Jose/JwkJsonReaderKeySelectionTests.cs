@@ -35,6 +35,30 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-5">RFC 7517 §5</see>: a JWK Set's <c>keys</c> member is REQUIRED
+    /// and "The value of the "keys" member is an array of JWK values". A set carrying no <c>keys</c>, or a <c>keys</c> that is no
+    /// array, is no JWK Set and is refused as malformed by every selection, never answered as a set carrying no key; a set whose
+    /// <c>keys</c> is an empty array is a JWK Set holding no key, an ordinary miss.
+    /// </summary>
+    /// <param name="json">The set's JSON text.</param>
+    /// <param name="expected">The outcome every selection answers.</param>
+    [TestMethod]
+    [DataRow(/*lang=json,strict*/ "{}", JwkSelectionOutcome.MalformedDocument, DisplayName = "A set carrying no keys")]
+    [DataRow(/*lang=json,strict*/ """{"keys":"a"}""", JwkSelectionOutcome.MalformedDocument, DisplayName = "A keys that is a string")]
+    [DataRow(/*lang=json,strict*/ """{"keys":{"kid":"a"}}""", JwkSelectionOutcome.MalformedDocument, DisplayName = "A keys that is an object")]
+    [DataRow(/*lang=json,strict*/ """{"keys":[]}""", JwkSelectionOutcome.NoMatch, DisplayName = "The control, an empty keys array")]
+    public void ASetWithoutAKeysArrayIsMalformedAndAnEmptyOneIsAMiss(string json, JwkSelectionOutcome expected)
+    {
+        var bytes = Utf8(json);
+
+        Assert.AreEqual(expected, JwkJsonReader.SelectKeyByKeyId(bytes, "a").Outcome, "By key identifier.");
+        Assert.AreEqual(expected, JwkJsonReader.SelectKeyByKeyId(bytes, "a", "sig"u8).Outcome, "By key identifier and use.");
+        Assert.AreEqual(expected, JwkJsonReader.SelectSoleKey(bytes).Outcome, "As the sole key.");
+        Assert.AreEqual(expected, JwkJsonReader.SelectSoleKey(bytes, "sig"u8).Outcome, "As the sole key of the use.");
+    }
+
+
+    /// <summary>
     /// A <c>use</c> to filter by whose bytes are no well-formed UTF-8 (RFC 8259 section 8.1) spells no text, so no key's
     /// <c>use</c> equals it: the byte FF is never read as the character U+00FF a key's <c>use</c> spells, by its identifier
     /// or as the sole key.
@@ -305,14 +329,15 @@ internal sealed class JwkJsonReaderKeySelectionTests
     /// <summary>
     /// <see cref="JwkJsonReader.SelectSoleKey(ReadOnlySpan{byte})"/>'s lookup of the <c>keys</c>
     /// member compares raw bytes, so an escaped spelling of <c>keys</c> is not found and the set reads
-    /// as if it carried no <c>keys</c> array.
+    /// as if it carried no <c>keys</c> array: a JWK Set without one (RFC 7517 section 5), refused as a
+    /// malformed document rather than read as a set whose keys miss the selection.
     /// </summary>
     [TestMethod]
-    public void PinSelectSoleKeyReportsNoMatchWhenTheKeysMemberNameIsEscaped()
+    public void PinSelectSoleKeyReportsAMalformedSetWhenTheKeysMemberNameIsEscaped()
     {
-        JwkSelectionResult result = JwkJsonReader.SelectSoleKey(Utf8(DocEscapedKeysMemberName));
+        var result = JwkJsonReader.SelectSoleKey(Utf8(DocEscapedKeysMemberName));
 
-        Assert.AreEqual(JwkSelectionOutcome.NoMatch, result.Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, result.Outcome);
     }
 
 

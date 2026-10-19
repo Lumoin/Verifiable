@@ -45,11 +45,11 @@ internal sealed class KeyAttestationVerifierTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, JoseSerializationOptions);
+            (Dictionary<string, object?>)header, JoseSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, JoseSerializationOptions);
+            (Dictionary<string, object?>)payload, JoseSerializationOptions);
 
 
     /// <summary>
@@ -525,8 +525,10 @@ internal sealed class KeyAttestationVerifierTests
         Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, fractionalExp.FailureReason, "An exp with a fraction is no integer.");
         Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, fractionalIat.FailureReason, "An iat with a fraction is no integer.");
         Assert.IsTrue(integral.IsValid, $"An attestation with integral dates verifies; got {integral.FailureReason}.");
-        Assert.AreEqual(0, integral.Attestation!.IssuedAt.CompareTo(NumericDate.FromUnixTimeSeconds(issuedAt)), "The iat is carried as written.");
-        Assert.AreEqual(0, integral.Attestation.ExpiresAt!.CompareTo(NumericDate.FromUnixTimeSeconds(expiresAt)), "The exp is carried as written.");
+        Assert.IsNotNull(integral.Attestation, "A verified attestation is carried.");
+        Assert.IsNotNull(integral.Attestation.ExpiresAt, "The attestation carries its exp.");
+        Assert.AreEqual(0, integral.Attestation.IssuedAt.CompareTo(NumericDate.FromUnixTimeSeconds(issuedAt)), "The iat is carried as written.");
+        Assert.AreEqual(0, integral.Attestation.ExpiresAt.CompareTo(NumericDate.FromUnixTimeSeconds(expiresAt)), "The exp is carried as written.");
     }
 
 
@@ -569,9 +571,88 @@ internal sealed class KeyAttestationVerifierTests
         var dated = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},\"exp\":{NowInstant.AddHours(1).ToUnixTimeSeconds()},", proofUse).ConfigureAwait(false);
 
         Assert.AreEqual(omittedExpRefused ? KeyAttestationVerificationFailureReason.ExpiryNotPresented : null, undated.FailureReason, proofUse.ToString());
-        Assert.IsTrue(omittedExpRefused || undated.Attestation!.ExpiresAt is null, "An attestation verified without exp carries no expiry of its own.");
+        Assert.IsTrue(omittedExpRefused || undated.Attestation is { ExpiresAt: null }, "An attestation verified without exp carries no expiry of its own.");
         Assert.IsTrue(dated.IsValid, $"The attestation carrying exp verifies for {proofUse}; got {dated.FailureReason}.");
     }
+
+
+    /// <summary>
+    /// A signed attestation one of whose segments is no base64url text (RFC 7515 section 7.1) is no attestation: the structural
+    /// parser answers it as none and the verifier refuses it as <see cref="KeyAttestationVerificationFailureReason.Malformed"/>,
+    /// the decoder's refusal being the one failure read as malformed input.
+    /// </summary>
+    /// <param name="segment">The segment written as no base64url text: 0 the header, 1 the body.</param>
+    /// <returns>A task completing once the attestation is judged.</returns>
+    [TestMethod]
+    [DataRow(0, DisplayName = "The header segment")]
+    [DataRow(1, DisplayName = "The body segment")]
+    public async Task AnAttestationSegmentOfNoBase64UrlTextIsMalformed(int segment)
+    {
+        var dates = $"\"iat\":{NowInstant.ToUnixTimeSeconds()},\"exp\":{NowInstant.AddHours(1).ToUnixTimeSeconds()},";
+
+        string notBase64Url(string attestation)
+        {
+            var segments = attestation.Split('.');
+            segments[segment] = "*no*base64url*";
+
+            return string.Join('.', segments);
+        }
+
+        var result = await VerifyHandBuiltAttestationAsync(dates, KeyAttestationProofUse.JwtProof, notBase64Url, TestSetup.Base64UrlDecoder).ConfigureAwait(false);
+        var control = await VerifyHandBuiltAttestationAsync(dates, KeyAttestationProofUse.JwtProof).ConfigureAwait(false);
+        var parsed = KeyAttestationParser.TryParse(notBase64Url($"{Base64UrlOf("{}")}.{Base64UrlOf("{}")}.c2ln"), TestSetup.Base64UrlDecoder, Pool, out var attestation);
+
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, result.FailureReason);
+        Assert.IsTrue(control.IsValid, $"The same attestation with every segment base64url text verifies; got {control.FailureReason}.");
+        Assert.IsFalse(parsed, "The structural parser answers a segment of no base64url text as no attestation.");
+        Assert.IsNull(attestation);
+    }
+
+
+    /// <summary>
+    /// A failure of the base64url decoder other than its refusal of the text - here one the decoder raises as an invalid operation
+    /// once the structural parser has read both segments, at the verifier's own reading of the header - is a fault of the
+    /// decoder, never read as a malformed attestation: it surfaces to the caller as the exception it is.
+    /// </summary>
+    /// <returns>A task completing once the fault has surfaced.</returns>
+    [TestMethod]
+    public async Task ADecoderFaultSurfacesAndIsNeverReadAsAMalformedAttestation()
+    {
+        var dates = $"\"iat\":{NowInstant.ToUnixTimeSeconds()},\"exp\":{NowInstant.AddHours(1).ToUnixTimeSeconds()},";
+        var decodings = 0;
+
+        IMemoryOwner<byte> faultingDecoder(ReadOnlySpan<char> text, BaseMemoryPool pool) =>
+            ++decodings <= 2 ? TestSetup.Base64UrlDecoder(text, pool) : throw new InvalidOperationException("The decoder's own fault.");
+
+        var fault = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () => await VerifyHandBuiltAttestationAsync(
+            dates, KeyAttestationProofUse.JwtProof, static attestation => attestation, faultingDecoder).ConfigureAwait(false));
+
+        Assert.AreEqual("The decoder's own fault.", fault.Message);
+    }
+
+
+    /// <summary>
+    /// The use an attestation is verified for decides whether its <c>exp</c> is required (OID4VCI 1.0 Appendix D.1): a value of no
+    /// use <see cref="KeyAttestationProofUse"/> defines is refused as an argument out of its range, never read as a use that
+    /// requires no expiry.
+    /// </summary>
+    /// <returns>A task completing once the refusal is observed.</returns>
+    [TestMethod]
+    public async Task AProofUseOfNoDefinedValueIsRefused()
+    {
+        var undefinedUse = (KeyAttestationProofUse)99;
+
+        var refusal = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () => await VerifyHandBuiltAttestationAsync(
+            $"\"iat\":{NowInstant.ToUnixTimeSeconds()},", undefinedUse).ConfigureAwait(false));
+
+        Assert.AreEqual("proofUse", refusal.ParamName);
+    }
+
+
+    /// <summary>The base64url text of a JSON text's UTF-8 bytes.</summary>
+    /// <param name="json">The JSON text.</param>
+    /// <returns>The base64url text.</returns>
+    private static string Base64UrlOf(string json) => TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(json));
 
 
     /// <summary>
@@ -582,7 +663,23 @@ internal sealed class KeyAttestationVerifierTests
     /// <param name="dateMembers">The body's date members as JSON text, each followed by a comma.</param>
     /// <param name="proofUse">The use the attestation is verified for.</param>
     /// <returns>The verification result.</returns>
-    private async Task<KeyAttestationVerificationResult> VerifyHandBuiltAttestationAsync(string dateMembers, KeyAttestationProofUse proofUse)
+    private Task<KeyAttestationVerificationResult> VerifyHandBuiltAttestationAsync(string dateMembers, KeyAttestationProofUse proofUse) =>
+        VerifyHandBuiltAttestationAsync(dateMembers, proofUse, static attestation => attestation, TestSetup.Base64UrlDecoder);
+
+
+    /// <summary>
+    /// Signs, over their exact bytes, a header referencing the Wallet-Provider key by <c>kid</c> and a body carrying the attested
+    /// keys, the date members given and the nonce, has <paramref name="alter"/> rewrite the signed compact attestation, and
+    /// verifies the result through the resolver that dereferences that <c>kid</c>, for the use given, decoding its segments with
+    /// <paramref name="base64UrlDecoder"/>.
+    /// </summary>
+    /// <param name="dateMembers">The body's date members as JSON text, each followed by a comma.</param>
+    /// <param name="proofUse">The use the attestation is verified for.</param>
+    /// <param name="alter">Rewrites the signed compact attestation before it is verified.</param>
+    /// <param name="base64UrlDecoder">The decoder the verifier decodes the segments with.</param>
+    /// <returns>The verification result.</returns>
+    private async Task<KeyAttestationVerificationResult> VerifyHandBuiltAttestationAsync(
+        string dateMembers, KeyAttestationProofUse proofUse, Func<string, string> alter, DecodeDelegate base64UrlDecoder)
     {
         var wp = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using var wpPublic = wp.PublicKey;
@@ -599,7 +696,7 @@ internal sealed class KeyAttestationVerifierTests
             $"\"nonce\":\"{AttestationNonce}\"}}";
 
         var headerJson = "{\"alg\":\"" + algorithm + "\",\"typ\":\"key-attestation+jwt\",\"kid\":\"" + Kid + "\"}";
-        var attestation = await SignRawAsync(wpPrivate, headerJson, payloadJson, TestContext.CancellationToken).ConfigureAwait(false);
+        var attestation = alter(await SignRawAsync(wpPrivate, headerJson, payloadJson, TestContext.CancellationToken).ConfigureAwait(false));
 
         ValueTask<PublicKeyMemory?> resolver(string kid, string algorithm, ExchangeContext context, CancellationToken ct) =>
             string.Equals(kid, Kid, StringComparison.Ordinal)
@@ -615,7 +712,7 @@ internal sealed class KeyAttestationVerifierTests
             resolveWalletProviderKey: resolver,
             x509Verification: null,
             context: [],
-            TestSetup.Base64UrlDecoder,
+            base64UrlDecoder,
             TimeProvider,
             Pool,
             ClockSkew,
@@ -786,7 +883,7 @@ internal sealed class KeyAttestationVerifierTests
             wpPublic.AsReadOnlySpan(),
             TestSetup.Base64UrlEncoder);
 
-        Dictionary<string, object> header = new(StringComparer.Ordinal)
+        Dictionary<string, object?> header = new(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = AttestationProofParameterNames.KeyAttestationJwtType,
@@ -812,7 +909,7 @@ internal sealed class KeyAttestationVerifierTests
         string caBase64 = Convert.ToBase64String(chain.CaDerBytes.AsReadOnlyMemory().ToArray());
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(chain.LeafSigningKey.Tag);
 
-        Dictionary<string, object> header = new(StringComparer.Ordinal)
+        Dictionary<string, object?> header = new(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = AttestationProofParameterNames.KeyAttestationJwtType,
@@ -830,7 +927,7 @@ internal sealed class KeyAttestationVerifierTests
     {
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(wpPrivate.Tag);
 
-        Dictionary<string, object> header = new(StringComparer.Ordinal)
+        Dictionary<string, object?> header = new(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = AttestationProofParameterNames.KeyAttestationJwtType,
@@ -844,9 +941,9 @@ internal sealed class KeyAttestationVerifierTests
     //Signs the supplied header with an Appendix D.1 body (the REQUIRED attested_keys array plus iat,
     //exp, and an optional nonce) and serializes the compact JWS.
     private async Task<string> SignAttestationAsync(
-        PrivateKeyMemory signingKey, Dictionary<string, object> header, DateTimeOffset expiresAt, string? nonce)
+        PrivateKeyMemory signingKey, Dictionary<string, object?> header, DateTimeOffset expiresAt, string? nonce)
     {
-        Dictionary<string, object> payload = new(StringComparer.Ordinal)
+        Dictionary<string, object?> payload = new(StringComparer.Ordinal)
         {
             [AttestationProofParameterNames.AttestedKeys] = new object[]
             {

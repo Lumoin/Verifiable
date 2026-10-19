@@ -53,7 +53,7 @@ internal sealed class DidCommCoordinateMediationTests
 
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
-        static header => JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+        static header => JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
 
     private static DidResolver NestedSignerResolver { get; } = new(DidMethodSelectors.FromResolvers(

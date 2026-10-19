@@ -34,7 +34,7 @@ public delegate VerifiableCredential CredentialFromJsonBytesDelegate(ReadOnlySpa
 /// </summary>
 /// <param name="header">The JWT header.</param>
 /// <returns>UTF-8 JSON bytes of the header.</returns>
-public delegate ReadOnlySpan<byte> JwtHeaderSerializer(Dictionary<string, object> header);
+public delegate ReadOnlySpan<byte> JwtHeaderSerializer(Dictionary<string, object?> header);
 
 
 /// <summary>
@@ -42,4 +42,4 @@ public delegate ReadOnlySpan<byte> JwtHeaderSerializer(Dictionary<string, object
 /// </summary>
 /// <param name="headerBytes">The UTF-8 JSON bytes.</param>
 /// <returns>The deserialized header dictionary.</returns>
-public delegate Dictionary<string, object>? JwtHeaderDeserializer(ReadOnlySpan<byte> headerBytes);
+public delegate Dictionary<string, object?>? JwtHeaderDeserializer(ReadOnlySpan<byte> headerBytes);

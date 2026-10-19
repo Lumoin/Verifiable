@@ -107,7 +107,7 @@ internal sealed class SdJwtClaimRedactionPropertyTests
 
             //The _sd array at root must have exactly disclosableCount digests.
             Assert.IsTrue(payload.ContainsKey(SdConstants.SdClaimName), "Payload must contain _sd.");
-            var sdArray = (List<string>)payload[SdConstants.SdClaimName];
+            var sdArray = Assert.IsInstanceOfType<List<string>>(payload[SdConstants.SdClaimName]);
             Assert.HasCount(disclosableCount, sdArray);
         }, threads: CsCheckSampling.Threads);
     }

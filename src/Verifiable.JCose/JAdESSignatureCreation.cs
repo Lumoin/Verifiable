@@ -414,8 +414,8 @@ public static class JAdESSignatureCreation
                 (eventSink ?? CryptographicKeyEvents.DefaultSink)(signedEvent);
             }
 
-            IReadOnlyDictionary<string, object>? unprotectedHeader = encodeUnprotectedHeader(unsignedHeaders);
-            var protectedHeaderDictionary = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = effectiveHeaders.Algorithm };
+            var unprotectedHeader = encodeUnprotectedHeader(unsignedHeaders);
+            var protectedHeaderDictionary = new Dictionary<string, object?> { [WellKnownJwkMemberNames.Alg] = effectiveHeaders.Algorithm };
 
             var component = new JwsSignatureComponent(protectedSegment, protectedHeaderDictionary, signature, unprotectedHeader);
             var message = new JwsMessage(

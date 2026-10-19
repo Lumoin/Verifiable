@@ -218,7 +218,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void JwsMessageEqualityComparesCorrectly()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object?> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
@@ -240,7 +240,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void CompactSerializationThrowsForMultipleSignatures()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object?> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
@@ -259,7 +259,7 @@ internal sealed class JwsMessageTests
     [TestMethod]
     public void CompactSerializationThrowsForDetachedPayload()
     {
-        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
+        var header = new Dictionary<string, object?> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
         byte[] payload = [1, 2, 3, 4];
         byte[] signatureBytes = [5, 6, 7, 8];
 
@@ -305,8 +305,8 @@ internal sealed class JwsMessageTests
 
     private static ReadOnlySpan<byte> CredentialSerializer(VerifiableCredential credential) => JsonSerializerExtensions.SerializeToUtf8Bytes(credential, JsonOptions);
 
-    private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object> header) => JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
+    private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object?> header) => JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
 
-    private static Dictionary<string, object>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions);
+    private static Dictionary<string, object?>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerBytes, JsonOptions);
     private static VerifiableCredential CredentialDeserializer(ReadOnlySpan<byte> credentialBytes) => JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialBytes, JsonOptions)!;
 }

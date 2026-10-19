@@ -55,7 +55,7 @@ public sealed class JwtPayload : JoseDictionary, IEquatable<JwtPayload>
     /// <see cref="IDictionary{TKey,TValue}"/>.
     /// </summary>
     /// <param name="claims">The key-value pairs to copy.</param>
-    public JwtPayload(IEnumerable<KeyValuePair<string, object>> claims)
+    public JwtPayload(IEnumerable<KeyValuePair<string, object?>> claims)
         : base(claims) { }
 
 

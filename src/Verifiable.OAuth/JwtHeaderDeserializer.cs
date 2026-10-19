@@ -22,5 +22,5 @@ namespace Verifiable.OAuth;
 /// wrong direction. Symmetric with <see cref="Verifiable.Core.Model.Credentials.JwtHeaderSerializer"/>,
 /// which lives at the same namespace level for the same reason.
 /// </remarks>
-public delegate IReadOnlyDictionary<string, object> JwtHeaderDeserializer(
+public delegate IReadOnlyDictionary<string, object?> JwtHeaderDeserializer(
     ReadOnlySpan<byte> headerBytes);

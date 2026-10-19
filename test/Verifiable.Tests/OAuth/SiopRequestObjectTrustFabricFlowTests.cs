@@ -67,11 +67,11 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
     //JarVerification.VerifyAsync materialises the protected header and payload through these
     //deserializers, the same JSON stack the OID4VP wallet flows wire.
@@ -262,7 +262,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
     }
 
 
-    private static string GetString(IReadOnlyDictionary<string, object> claims, string claim)
+    private static string GetString(IReadOnlyDictionary<string, object?> claims, string claim)
     {
         Assert.IsTrue(claims.TryGetValue(claim, out object? value),
             $"The §9 Request Object payload is missing the '{claim}' claim.");

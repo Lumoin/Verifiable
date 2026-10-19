@@ -229,13 +229,16 @@ internal sealed class OpenIdSignInTests
 
         var started = await client.StartOpenIdAsync(
             Registration(), Callback, fields, [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
-        var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
+        Assert.IsNotNull(started.RedirectUri, "The sign-in starts with a redirect.");
+        var query = HttpUtility.ParseQueryString(started.RedirectUri.Query);
         var sent = query.GetValues(OAuthRequestParameterNames.Nonce);
 
         Assert.IsNotNull(sent);
         Assert.HasCount(1, sent, "The redirect carries one nonce.");
         Assert.AreNotEqual(CallersNonce, sent[0], "The caller's field of the flow-owned name is dropped.");
-        Assert.AreEqual(sent[0], Assert.IsInstanceOfType<ParCompletedState>(provider.States[query[OAuthRequestParameterNames.State]!]).Nonce);
+        var state = query[OAuthRequestParameterNames.State];
+        Assert.IsNotNull(state, "The redirect carries the flow's state.");
+        Assert.AreEqual(sent[0], Assert.IsInstanceOfType<ParCompletedState>(provider.States[state]).Nonce);
     }
 
 

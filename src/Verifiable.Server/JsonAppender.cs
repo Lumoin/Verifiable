@@ -163,16 +163,20 @@ public static class JsonAppender
     /// <paramref name="sb"/>. Property values are dispatched through
     /// <see cref="AppendValue"/>. The dictionary's enumeration order is
     /// preserved on the wire; callers that need deterministic ordering
-    /// must pass an ordered dictionary.
+    /// must pass an ordered dictionary. A member held with no value, as a JOSE part holds a present JSON <c>null</c>, is written
+    /// as <c>null</c>.
     /// </summary>
-    public static void AppendObject(StringBuilder sb, IReadOnlyDictionary<string, object> dict)
+    /// <typeparam name="TValue">The dictionary's value type: <see cref="object"/>, or a nullable one where a member may hold no value.</typeparam>
+    /// <param name="sb">The builder the object is appended to.</param>
+    /// <param name="dict">The object's members.</param>
+    public static void AppendObject<TValue>(StringBuilder sb, IReadOnlyDictionary<string, TValue> dict)
     {
         ArgumentNullException.ThrowIfNull(sb);
         ArgumentNullException.ThrowIfNull(dict);
 
         _ = sb.Append('{');
         bool first = true;
-        foreach(KeyValuePair<string, object> entry in dict)
+        foreach(KeyValuePair<string, TValue> entry in dict)
         {
             if(!first)
             {

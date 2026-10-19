@@ -47,12 +47,12 @@ internal sealed class ClientSecretAssertionVerificationTests
     /// <summary>Serializes a protected header.</summary>
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serializes a claims set.</summary>
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
 
     /// <summary>
@@ -473,7 +473,7 @@ internal sealed class ClientSecretAssertionVerificationTests
 
     /// <summary>Reads a protected header.</summary>
     private static JwtHeaderDeserializer HeaderDeserializer { get; } =
-        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(bytes, TestSetup.DefaultSerializationOptions)
+        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("The header parsed to null.");
 
 

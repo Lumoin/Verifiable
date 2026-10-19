@@ -784,7 +784,7 @@ public static class DidCommEncryptedExtensions
         AeadDecryptDelegate aeadDecryptDelegate,
         BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer = null,
         DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
         CancellationToken cancellationToken = default)
     {
@@ -978,7 +978,7 @@ public static class DidCommEncryptedExtensions
         EncodeDelegate base64UrlEncoder,
         BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer = null,
         DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
         CancellationToken cancellationToken = default)
     {
@@ -1092,7 +1092,7 @@ public static class DidCommEncryptedExtensions
         AeadDecryptDelegate aeadDecryptDelegate,
         BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer = null,
         DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
         CancellationToken cancellationToken = default)
     {
@@ -1310,7 +1310,7 @@ public static class DidCommEncryptedExtensions
         EncodeDelegate base64UrlEncoder,
         BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer = null,
         DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
         CancellationToken cancellationToken = default)
     {
@@ -1385,7 +1385,7 @@ public static class DidCommEncryptedExtensions
         AeadDecryptDelegate aeadDecryptDelegate,
         BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer,
         CancellationToken cancellationToken)
     {
         DecryptedContent decrypted;
@@ -1992,7 +1992,7 @@ public static class DidCommEncryptedExtensions
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer,
         BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
@@ -2128,7 +2128,7 @@ public static class DidCommEncryptedExtensions
         DidResolver didResolver,
         ExchangeContext exchangeContext,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         BaseMemoryPool memoryPool,

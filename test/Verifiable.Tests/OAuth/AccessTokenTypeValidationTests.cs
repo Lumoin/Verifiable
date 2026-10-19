@@ -97,7 +97,7 @@ internal sealed class AccessTokenTypeValidationTests
             expiresAt: TimeProvider.GetUtcNow() + TimeSpan.FromHours(1),
             issuer: StandaloneIssuer,
             audience: [StandaloneAudience]);
-        string payloadJson = JsonSerializer.Serialize((Dictionary<string, object>)payload);
+        var payloadJson = JsonSerializer.Serialize((Dictionary<string, object?>)payload);
         string token = string.Concat(
             TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson)),
             ".",
@@ -356,13 +356,13 @@ resolver,
 
     private static ReadOnlySpan<byte> HeaderSerializer(JwtHeader header) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
 
     private static ReadOnlySpan<byte> PayloadSerializer(JwtPayload payload) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
 

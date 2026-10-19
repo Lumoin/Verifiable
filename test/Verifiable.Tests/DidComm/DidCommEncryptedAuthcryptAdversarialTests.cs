@@ -39,7 +39,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
     //Dictionary<string, object> the JWE layer hands to this delegate to produce the UTF-8 JSON bytes.
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private const string MessageId = "1234567890";

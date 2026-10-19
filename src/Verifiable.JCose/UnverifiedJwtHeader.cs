@@ -60,7 +60,7 @@ public sealed class UnverifiedJwtHeader : JoseDictionary, IEquatable<UnverifiedJ
     /// producer of the key-value pairs.
     /// </remarks>
     /// <param name="parameters">The key-value pairs to copy.</param>
-    public UnverifiedJwtHeader(IEnumerable<KeyValuePair<string, object>> parameters)
+    public UnverifiedJwtHeader(IEnumerable<KeyValuePair<string, object?>> parameters)
         : base(parameters) { }
 
 

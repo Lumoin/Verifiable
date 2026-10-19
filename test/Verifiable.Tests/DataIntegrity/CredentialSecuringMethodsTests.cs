@@ -898,11 +898,11 @@ internal sealed class CredentialSecuringMethodsTests
     private static ReadOnlySpan<byte> CredentialSerializer(VerifiableCredential credential) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(credential, JsonOptions);
 
-    private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object> header) =>
+    private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object?> header) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
 
-    private static Dictionary<string, object>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions);
+    private static Dictionary<string, object?>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerBytes, JsonOptions);
 
     private static VerifiableCredential CredentialDeserializer(ReadOnlySpan<byte> credentialBytes) =>
         JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialBytes, JsonOptions)!;

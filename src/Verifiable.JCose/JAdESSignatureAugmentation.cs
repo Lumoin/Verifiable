@@ -1783,9 +1783,18 @@ public static class JAdESSignatureAugmentation
         JAdESUnsignedHeaderElement probeElement = constructElement(new JAdESClearUnsignedValue<TValue>(probeValue));
         var probeContainer = new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.ClearJson, [probeElement]);
 
-        IReadOnlyDictionary<string, object>? projected = encodeUnprotectedHeader(probeContainer);
-        var etsiUArray = (IReadOnlyList<object>)projected![WellKnownJAdESHeaderNames.EtsiU];
-        var elementDict = (Dictionary<string, object>)etsiUArray[0];
+        //The encoder projects the one-element container it is given as an etsiU array holding one member object; any
+        //other projection is the encoder's own fault, not a property of the signature being augmented.
+        var projected = encodeUnprotectedHeader(probeContainer);
+        if(projected is null
+            || !projected.TryGetValue(WellKnownJAdESHeaderNames.EtsiU, out object? etsiUValue)
+            || etsiUValue is not IReadOnlyList<object> etsiUArray
+            || etsiUArray.Count != 1
+            || etsiUArray[0] is not Dictionary<string, object> elementDict)
+        {
+            throw new InvalidOperationException("The unprotected-header encoder did not project a one-element etsiU container as an etsiU array holding one member object.");
+        }
+
         if(elementDict[probeElement.Kind] is Dictionary<string, object> innerDict)
         {
             _ = innerDict.Remove(JAdESWireNames.TimestampContainerCanonAlg);
@@ -2253,7 +2262,7 @@ public static class JAdESSignatureAugmentation
         UnverifiedJwsSignature originalSignature = message.Wire.Signatures[0];
         Signature signatureCopy = originalSignature.SignatureBytes.Memory.Span.ToSignature(CryptoTags.AlgorithmAgnosticSignature, pool);
 
-        IReadOnlyDictionary<string, object>? unprotectedHeader = encodeUnprotectedHeader(finalUnsignedHeaders);
+        var unprotectedHeader = encodeUnprotectedHeader(finalUnsignedHeaders);
         var component = new JwsSignatureComponent(originalSignature.Protected, EmptyProtectedHeaderDictionary, signatureCopy, unprotectedHeader);
         using var newMessage = new JwsMessage(message.Wire.Payload, component, message.Wire.IsDetachedPayload);
 
@@ -2267,7 +2276,7 @@ public static class JAdESSignatureAugmentation
 
     //Never read by JwsSerialization -- JwsSignatureComponent.Protected is the wire truth for every serialization
     //form (never a re-derived encoding of the decoded model). Shared, never mutated.
-    private static Dictionary<string, object> EmptyProtectedHeaderDictionary { get; } = [];
+    private static Dictionary<string, object?> EmptyProtectedHeaderDictionary { get; } = [];
 
 
     /// <summary>Throws a typed <see cref="JAdESAugmentationException"/> naming <paramref name="failureKind"/> when <paramref name="isOfKind"/> is <see langword="false"/>.</summary>

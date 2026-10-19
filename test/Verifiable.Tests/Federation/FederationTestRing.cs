@@ -102,7 +102,7 @@ internal static class FederationTestRing
     {
         ArgumentNullException.ThrowIfNull(node);
 
-        Dictionary<string, object> payload = BuildPayloadCore(
+        var payload = BuildPayloadCore(
             issuer: node.Identifier.Value,
             subject: node.Identifier.Value,
             issuedAt: issuedAt,
@@ -128,7 +128,7 @@ internal static class FederationTestRing
         ArgumentNullException.ThrowIfNull(issuer);
         ArgumentNullException.ThrowIfNull(subject);
 
-        Dictionary<string, object> payload = BuildPayloadCore(
+        var payload = BuildPayloadCore(
             issuer: issuer.Identifier.Value,
             subject: subject.Identifier.Value,
             issuedAt: issuedAt,
@@ -334,7 +334,7 @@ verificationDelegate,
         ArgumentNullException.ThrowIfNull(subject);
         ArgumentException.ThrowIfNullOrEmpty(markId);
 
-        Dictionary<string, object> headerDict = new(StringComparer.Ordinal)
+        Dictionary<string, object?> headerDict = new(StringComparer.Ordinal)
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkJwt,
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
@@ -353,7 +353,7 @@ verificationDelegate,
             headerDict[WellKnownJwkMemberNames.Kid] = issuer.Kid;
         }
 
-        Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
+        Dictionary<string, object?> payloadDict = new(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = issuer.Identifier.Value,
             [WellKnownJwtClaimNames.Sub] = subject.Identifier.Value,
@@ -395,14 +395,14 @@ verificationDelegate,
         ArgumentNullException.ThrowIfNull(issuer);
         ArgumentException.ThrowIfNullOrEmpty(markId);
 
-        Dictionary<string, object> headerDict = new(StringComparer.Ordinal)
+        Dictionary<string, object?> headerDict = new(StringComparer.Ordinal)
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkDelegationJwt,
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
             [WellKnownJwkMemberNames.Kid] = owner.Kid,
         };
 
-        Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
+        Dictionary<string, object?> payloadDict = new(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = owner.Identifier.Value,
             [WellKnownJwtClaimNames.Sub] = issuer.Identifier.Value,
@@ -430,8 +430,8 @@ verificationDelegate,
 
     private static async ValueTask<(UnverifiedJwtHeader Header, UnverifiedJwtPayload Payload, string CompactJws)> SignAsync(
         FederationTestRingNode signer,
-        Dictionary<string, object> headerDict,
-        Dictionary<string, object> payloadDict,
+        Dictionary<string, object?> headerDict,
+        Dictionary<string, object?> payloadDict,
         CancellationToken cancellationToken)
     {
         ECParameters parameters = signer.SigningKey.ExportParameters(includePrivateParameters: true);
@@ -461,10 +461,10 @@ verificationDelegate,
 
     private static async ValueTask<MintedStatement> MintInternalAsync(
         FederationTestRingNode signer,
-        Dictionary<string, object> payloadDict,
+        Dictionary<string, object?> payloadDict,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, object> headerDict = new(StringComparer.Ordinal)
+        Dictionary<string, object?> headerDict = new(StringComparer.Ordinal)
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt,
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
@@ -504,13 +504,13 @@ verificationDelegate,
     }
 
 
-    private static Dictionary<string, object> BuildPayloadCore(
+    private static Dictionary<string, object?> BuildPayloadCore(
         string issuer,
         string subject,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt)
     {
-        return new Dictionary<string, object>(StringComparer.Ordinal)
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = issuer,
             [WellKnownJwtClaimNames.Sub] = subject,
@@ -521,7 +521,7 @@ verificationDelegate,
 
 
     private static void MergeExtras(
-        Dictionary<string, object> target,
+        Dictionary<string, object?> target,
         IReadOnlyDictionary<string, object>? extras)
     {
         if(extras is null)

@@ -35,12 +35,12 @@ public static class JwtPartJson
     //JSON-null result) into FormatException so no System.Text.Json type escapes this leaf into the
     //serialization-agnostic Verifiable.JCose verify path — the same firewall JwtClaimsJson.
     //DeserializeObject applies for the from_prior JWT, generalized to any JWT part.
-    private static IReadOnlyDictionary<string, object> Decode(ReadOnlySpan<byte> partBytes)
+    private static IReadOnlyDictionary<string, object?> Decode(ReadOnlySpan<byte> partBytes)
     {
-        Dictionary<string, object>? value;
+        Dictionary<string, object?>? value;
         try
         {
-            value = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(partBytes, JwtClaimsJson.Options);
+            value = JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(partBytes, JwtClaimsJson.Options);
         }
         catch(JsonException exception)
         {

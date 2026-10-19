@@ -322,12 +322,12 @@ internal sealed class TestResourceServerShell : IAsyncDisposable
                 Decoder = TestSetup.Base64UrlDecoder,
                 ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
                 JwtHeaderSerializer = static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                    (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                    (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
                 JwtPayloadSerializer = static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                    (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
-                JwtHeaderDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
+                JwtHeaderDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                     bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Header JSON parsed to null."),
-                JwtPayloadDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                JwtPayloadDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                     bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Payload JSON parsed to null.")
             },
             MemoryPool = BaseMemoryPool.Shared

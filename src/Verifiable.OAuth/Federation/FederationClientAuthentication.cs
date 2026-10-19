@@ -193,7 +193,7 @@ public static class FederationClientAuthentication
     /// otherwise <see langword="null"/> (a multi-element or malformed audience is
     /// not accepted).
     /// </summary>
-    private static string? ExtractSingleAudience(object audienceRaw)
+    private static string? ExtractSingleAudience(object? audienceRaw)
     {
         if(audienceRaw is string single)
         {

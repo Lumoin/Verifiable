@@ -19,5 +19,5 @@ namespace Verifiable.OAuth;
 /// <c>Verifiable.OAuth.Jar</c> because <see cref="Verifiable.OAuth.Server.AuthorizationServerCodecs"/>
 /// references this type. Symmetric with <see cref="Verifiable.JCose.JwtPayloadSerializer"/>.
 /// </remarks>
-public delegate IReadOnlyDictionary<string, object> JwtPayloadDeserializer(
+public delegate IReadOnlyDictionary<string, object?> JwtPayloadDeserializer(
     ReadOnlySpan<byte> payloadBytes);

@@ -36,7 +36,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
     //this delegate to produce the UTF-8 JSON bytes (mirrors the other encrypted round-trip tests).
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private const string ExampleDidPrefix = "did:example";

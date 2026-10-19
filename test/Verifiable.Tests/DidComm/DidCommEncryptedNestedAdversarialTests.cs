@@ -35,7 +35,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private const string ExampleDidPrefix = "did:example";

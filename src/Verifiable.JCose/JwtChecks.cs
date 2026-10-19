@@ -251,7 +251,7 @@ public static class JwtChecks
 
     //Private core implementations — shared by all four extension blocks.
 
-    private static bool IsAlgNoneCore(IReadOnlyDictionary<string, object> header)
+    private static bool IsAlgNoneCore(IReadOnlyDictionary<string, object?> header)
     {
         if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? value) || value is not string alg)
         {
@@ -261,7 +261,7 @@ public static class JwtChecks
         return WellKnownJwaValues.IsNone(alg);
     }
 
-    private static bool HasValidAlgCore(IReadOnlyDictionary<string, object> header)
+    private static bool HasValidAlgCore(IReadOnlyDictionary<string, object?> header)
     {
         return header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? value)
             && value is string alg
@@ -269,14 +269,14 @@ public static class JwtChecks
             && !WellKnownJwaValues.IsNone(alg);
     }
 
-    private static bool HasKtyCore(IReadOnlyDictionary<string, object> header)
+    private static bool HasKtyCore(IReadOnlyDictionary<string, object?> header)
     {
         return header.TryGetValue(WellKnownJwkMemberNames.Kty, out object? value)
             && value is string kty
             && !string.IsNullOrEmpty(kty);
     }
 
-    private static bool HasRequiredEcFieldsCore(IReadOnlyDictionary<string, object> header)
+    private static bool HasRequiredEcFieldsCore(IReadOnlyDictionary<string, object?> header)
     {
         return header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crv)
             && crv is string crvStr && !string.IsNullOrEmpty(crvStr)
@@ -286,7 +286,7 @@ public static class JwtChecks
             && y is string yStr && !string.IsNullOrEmpty(yStr);
     }
 
-    private static bool IsValidEcAlgCrvCombinationCore(IReadOnlyDictionary<string, object> header)
+    private static bool IsValidEcAlgCrvCombinationCore(IReadOnlyDictionary<string, object?> header)
     {
         if(!header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) || crvValue is not string crv)
         {
@@ -306,14 +306,14 @@ public static class JwtChecks
             || (WellKnownJwaValues.IsEs256K(alg) && WellKnownCurveValues.IsSecp256k1(crv));
     }
 
-    private static bool HasRequiredOkpFieldsCore(IReadOnlyDictionary<string, object> header)
+    private static bool HasRequiredOkpFieldsCore(IReadOnlyDictionary<string, object?> header)
     {
         return header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crv)
             && crv is string crvStr
             && !string.IsNullOrEmpty(crvStr);
     }
 
-    private static bool IsValidOkpAlgCrvCombinationCore(IReadOnlyDictionary<string, object> header)
+    private static bool IsValidOkpAlgCrvCombinationCore(IReadOnlyDictionary<string, object?> header)
     {
         if(!header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) || crvValue is not string crv)
         {
@@ -337,7 +337,7 @@ public static class JwtChecks
         return false;
     }
 
-    private static bool HasValidRsaFieldsCore(IReadOnlyDictionary<string, object> header)
+    private static bool HasValidRsaFieldsCore(IReadOnlyDictionary<string, object?> header)
     {
         //RSA-2048: 256 bytes → Base64Url length ≈ 342 characters.
         //RSA-4096: 512 bytes → Base64Url length ≈ 683 characters.
@@ -371,7 +371,7 @@ public static class JwtChecks
     /// <param name="clockSkew">The tolerance the expiry is extended by.</param>
     /// <returns><see langword="true"/> when the claims set has expired or its <c>exp</c> is present as no NumericDate.</returns>
     private static bool IsExpiredCore(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
@@ -392,7 +392,7 @@ public static class JwtChecks
     /// <param name="clockSkew">The tolerance the not-before date is reduced by.</param>
     /// <returns><see langword="true"/> when the claims set is not yet valid or its <c>nbf</c> is present as no NumericDate.</returns>
     private static bool IsNotYetValidCore(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
@@ -410,7 +410,7 @@ public static class JwtChecks
     /// <param name="clockSkew">The tolerance the present is extended by.</param>
     /// <returns><see langword="true"/> when the claims set was issued in the future or its <c>iat</c> is present as no NumericDate.</returns>
     private static bool IsIssuedInFutureCore(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
@@ -430,7 +430,7 @@ public static class JwtChecks
     /// <param name="maximum">The longest window admitted.</param>
     /// <returns><see langword="true"/> when the window exceeds the maximum or a date bounding it is present as no NumericDate.</returns>
     private static bool LifetimeExceedsCore(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         TimeSpan maximum)
     {
         var expiryReading = ReadDate(claims, WellKnownJwtClaimNames.Exp, out var expiry);
@@ -461,7 +461,7 @@ public static class JwtChecks
     /// <summary>Whether <c>exp</c> lies at or before <c>nbf</c>, a window that never opens, judged exactly.</summary>
     /// <param name="claims">The claims set.</param>
     /// <returns><see langword="true"/> when the window never opens or either date is present as no NumericDate.</returns>
-    private static bool IsExpBeforeNbfCore(IReadOnlyDictionary<string, object> claims)
+    private static bool IsExpBeforeNbfCore(IReadOnlyDictionary<string, object?> claims)
     {
         var expiryReading = ReadDate(claims, WellKnownJwtClaimNames.Exp, out var expiry);
         var notBeforeReading = ReadDate(claims, WellKnownJwtClaimNames.Nbf, out var notBefore);
@@ -485,7 +485,7 @@ public static class JwtChecks
     /// <param name="date">The date the claim names when it is <see cref="ClaimDateReading.Read"/>.</param>
     /// <returns>Whether the claim is absent, names a date, or is present as no NumericDate.</returns>
     private static ClaimDateReading ReadDate(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string key,
         out NumericDate? date)
     {

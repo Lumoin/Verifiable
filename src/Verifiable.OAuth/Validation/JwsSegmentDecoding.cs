@@ -38,7 +38,7 @@ internal static class JwsSegmentDecoding
     /// <param name="base64UrlDecoder">The decoder.</param>
     /// <param name="memoryPool">The pool the bytes are rented from.</param>
     /// <returns>The bytes, which the caller disposes, or <see langword="null"/>.</returns>
-    private static IMemoryOwner<byte>? DecodedOrNone(string segment, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool)
+    internal static IMemoryOwner<byte>? DecodedOrNone(string segment, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool)
     {
         try
         {

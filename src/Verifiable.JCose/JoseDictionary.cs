@@ -62,7 +62,7 @@ namespace Verifiable.JCose;
 /// across types is harmless) but leaves typed equality to the leaves.
 /// </para>
 /// </remarks>
-public abstract class JoseDictionary : Dictionary<string, object>
+public abstract class JoseDictionary : Dictionary<string, object?>
 {
     /// <summary>
     /// Creates an empty JOSE dictionary.
@@ -82,7 +82,7 @@ public abstract class JoseDictionary : Dictionary<string, object>
     /// <see cref="IDictionary{TKey,TValue}"/>.
     /// </summary>
     /// <param name="entries">The key-value pairs to copy.</param>
-    protected JoseDictionary(IEnumerable<KeyValuePair<string, object>> entries) : base(entries) { }
+    protected JoseDictionary(IEnumerable<KeyValuePair<string, object?>> entries) : base(entries) { }
 
 
     /// <summary>

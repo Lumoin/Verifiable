@@ -1808,13 +1808,13 @@ internal sealed class JwtBearerGrantTests
     /// <summary>Serializes an assertion's protected header to UTF-8 JSON bytes for signing.</summary>
     private static JwtHeaderSerializer AssertionHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
 
     /// <summary>Serializes an assertion's claims to UTF-8 JSON bytes for signing.</summary>
     private static JwtPayloadSerializer AssertionPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
 
     /// <summary>

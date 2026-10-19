@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Validation;
@@ -29,7 +28,9 @@ public static class KeyAttestationParser
     /// with a fraction, where Appendix D.1 has each an integer: a present date that is malformed is a
     /// malformed attestation, never one read as carrying no date, and a fraction is refused as written,
     /// never truncated. The <c>exp</c> Appendix D.1 requires where the attestation is used with a JWT
-    /// proof is judged by <see cref="KeyAttestationVerifier"/>, which is told the attestation's use.
+    /// proof is judged by <see cref="KeyAttestationVerifier"/>, which is told the attestation's use. A segment the decoder refuses
+    /// as no base64url text is answered as no attestation; this method answers every malformed input by its return value, while
+    /// a fault of the decoder or of the allocator beyond that refusal surfaces as the exception it is.
     /// </summary>
     /// <param name="compactAttestation">The compact JWS key attestation.</param>
     /// <param name="base64UrlDecoder">Base64url decoder for the header and body segments.</param>
@@ -57,10 +58,17 @@ public static class KeyAttestationParser
             return false;
         }
 
-        using IMemoryOwner<byte> headerOwner = base64UrlDecoder(segments[0], pool);
-        ReadOnlySpan<byte> header = headerOwner.Memory.Span;
+        //The segments are client-supplied wire input: one the decoder refuses as no base64url text is no attestation, answered as
+        //such; any other failure of the decoder is a fault and surfaces as one.
+        using var headerOwner = JwsSegmentDecoding.DecodedOrNone(segments[0], base64UrlDecoder, pool);
+        using var bodyOwner = JwsSegmentDecoding.DecodedOrNone(segments[1], base64UrlDecoder, pool);
 
-        using IMemoryOwner<byte> bodyOwner = base64UrlDecoder(segments[1], pool);
+        if(headerOwner is null || bodyOwner is null)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> header = headerOwner.Memory.Span;
         ReadOnlySpan<byte> body = bodyOwner.Memory.Span;
 
         //RFC 7515 §4 / RFC 7519 §4: gate both the header and the body for well-formedness — a repeated

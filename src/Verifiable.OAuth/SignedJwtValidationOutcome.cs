@@ -16,8 +16,9 @@ namespace Verifiable.OAuth;
 /// for the OIDC Core §3.1.3.7 ID Token profile), reading any profile-specific optional claims
 /// (<c>client_id</c>/<c>scope</c>/<c>jti</c> for the access-token profile; <c>nonce</c>/<c>auth_time</c>/
 /// <c>acr</c>/<c>amr</c>/<c>sid</c> for the ID Token profile) from <see cref="Payload"/>. On success every
-/// member except <see cref="NotBefore"/> is populated; on failure only <see cref="FailureReason"/> and
-/// <see cref="FailureDescription"/> are.
+/// member except <see cref="NotBefore"/> is populated; on failure only <see cref="FailureReason"/>,
+/// <see cref="FailureDescription"/> and, where the reading of the header or the payload refused it, <see cref="PartRefusal"/>
+/// are.
 /// </remarks>
 [DebuggerDisplay("SignedJwtValidationOutcome Success={IsSuccess} Reason={FailureReason}")]
 internal sealed record SignedJwtValidationOutcome

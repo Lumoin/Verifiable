@@ -15,18 +15,18 @@ public sealed record DpopJwsPartSerializer
     /// property-dictionary shape <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, Lumoin.Base.BaseMemoryPool, CancellationToken)"/> consumes via
     /// its generic <c>TJwtPart</c> parameter.
     /// </summary>
-    public required Func<DpopProofHeader, IReadOnlyDictionary<string, object>> SerializeHeader { get; init; }
+    public required Func<DpopProofHeader, IReadOnlyDictionary<string, object?>> SerializeHeader { get; init; }
 
     /// <summary>
     /// Serialises a <see cref="DpopProofClaims"/> to the property-dictionary
     /// shape <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, Lumoin.Base.BaseMemoryPool, CancellationToken)"/> consumes.
     /// </summary>
-    public required Func<DpopProofClaims, IReadOnlyDictionary<string, object>> SerializePayload { get; init; }
+    public required Func<DpopProofClaims, IReadOnlyDictionary<string, object?>> SerializePayload { get; init; }
 
     /// <summary>
     /// The <see cref="JwtPartEncoder{TJwtPart}"/> bridge between a typed
     /// dictionary and the bytes <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, Lumoin.Base.BaseMemoryPool, CancellationToken)"/> base64url-encodes
     /// into the JWS header / payload segments.
     /// </summary>
-    public required JwtPartEncoder<IReadOnlyDictionary<string, object>> EncodePart { get; init; }
+    public required JwtPartEncoder<IReadOnlyDictionary<string, object?>> EncodePart { get; init; }
 }

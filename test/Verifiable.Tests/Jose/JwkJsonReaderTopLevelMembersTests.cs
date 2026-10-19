@@ -439,6 +439,45 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     }
 
 
+    /// <summary>
+    /// A member's array elements (<see cref="JsonTopLevelMember.ArrayElements"/>) are answered only for text the strict judgement
+    /// admits as one well-formed array of Unicode text, judged whole, at every depth: an object or an array nested in it holding a
+    /// string whose escape names an unpaired surrogate (RFC 8259 section 8.2), and a text a caller composed holding an unpaired
+    /// surrogate itself, directly or nested, are refused, never answered with an element encoded over the defect; the controls,
+    /// the same shapes naming Unicode text, are answered element for element.
+    /// </summary>
+    /// <param name="textCase">The name of the array's text.</param>
+    /// <param name="admitted">Whether the elements are answered.</param>
+    [TestMethod]
+    [DataRow("escaped-surrogate-in-a-nested-object", false)]
+    [DataRow("escaped-surrogate-in-a-nested-array", false)]
+    [DataRow("literal-surrogate-in-an-element", false)]
+    [DataRow("literal-surrogate-in-a-nested-array", false)]
+    [DataRow("escaped-pair-in-a-nested-object", true)]
+    [DataRow("text-in-a-nested-array", true)]
+    public void ArrayElementsJudgeTheWholeArrayAsUnicodeText(string textCase, bool admitted)
+    {
+        var text = textCase switch
+        {
+            "escaped-surrogate-in-a-nested-object" => /*lang=json*/ """[{"v":"\uD800"}]""",
+            "escaped-surrogate-in-a-nested-array" => /*lang=json*/ """[["\uD800"]]""",
+            "literal-surrogate-in-an-element" => "[\"\uD800\"]",
+            "literal-surrogate-in-a-nested-array" => "[[\"a\uDC00\"]]",
+            "escaped-pair-in-a-nested-object" => /*lang=json,strict*/ """[{"v":"\uD83D\uDE00"}]""",
+            "text-in-a-nested-array" => /*lang=json,strict*/ """[["ok"],"x"]""",
+            _ => throw new ArgumentOutOfRangeException(nameof(textCase), textCase, "No array text is named so.")
+        };
+
+        var elements = new JsonTopLevelMember("m", JsonTopLevelValueKind.Array, text).ArrayElements();
+
+        Assert.AreEqual(admitted, elements is not null, textCase);
+
+        if(admitted)
+        {
+            Assert.AreEqual(new JsonMemberOfOtherKind(textCase is "text-in-a-nested-array" ? JsonTopLevelValueKind.Array : JsonTopLevelValueKind.Object), elements?[0]);
+        }
+    }
+
     /// <summary>The reader's kind of a value of the oracle's kind.</summary>
     /// <param name="kind">The oracle's kind.</param>
     /// <returns>The reader's kind.</returns>

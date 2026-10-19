@@ -1557,21 +1557,21 @@ internal sealed class HostedAuthorizationServer : IClientRegistrationStore
             //TestHostShell supplies the two JSON serialization delegates; tests
             //that need non-standard signing assign their own producers per test.
             JwtHeaderSerializer = static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header,
+                (Dictionary<string, object?>)header,
                 TestSetup.DefaultSerializationOptions),
             JwtPayloadSerializer = static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload,
+                (Dictionary<string, object?>)payload,
                 TestSetup.DefaultSerializationOptions),
 
             //Deserializers required by JAR-bearing matchers (AuthCode JAR-PAR
             //and AuthCode JAR-by-value direct Authorize). Other in-dispatch
             //consumers may follow; the slots are wired here once.
             JwtHeaderDeserializer = static bytes =>
-                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                     bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Header JSON parsed to null."),
             JwtPayloadDeserializer = static bytes =>
-                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
                     bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Payload JSON parsed to null."),
 
@@ -1591,10 +1591,10 @@ internal sealed class HostedAuthorizationServer : IClientRegistrationStore
         //onto the SAME instance, so a single registry serves both flows.
         OAuthActionExecutor executor = HaipOid4VpVerifierExecutor.Create(
             headerSerializer: header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header,
+                (Dictionary<string, object?>)header,
                 TestSetup.DefaultSerializationOptions),
             payloadSerializer: payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload,
+                (Dictionary<string, object?>)payload,
                 TestSetup.DefaultSerializationOptions),
             dcqlQuerySerializer: q =>
                 JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
@@ -1704,10 +1704,10 @@ internal sealed class HostedAuthorizationServer : IClientRegistrationStore
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             headerSerializer: header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header,
+                (Dictionary<string, object?>)header,
                 TestSetup.DefaultSerializationOptions),
             payloadSerializer: payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload,
+                (Dictionary<string, object?>)payload,
                 TestSetup.DefaultSerializationOptions),
             pool: BaseMemoryPool.Shared,
             timeProvider: timeProvider,

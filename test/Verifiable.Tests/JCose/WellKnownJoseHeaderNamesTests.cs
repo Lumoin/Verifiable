@@ -33,13 +33,13 @@ internal sealed class WellKnownJoseHeaderNamesTests
     /// <summary>Serializes a JOSE header the way the library's own JSON leaf does.</summary>
     private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serializes a JWT payload the way the library's own JSON leaf does.</summary>
     private static JwtPayloadSerializer JwtPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
 
@@ -368,8 +368,8 @@ internal sealed class WellKnownJoseHeaderNamesTests
     /// <summary>Deserializes one decoded compact segment the way the authorization server wires it.</summary>
     /// <param name="jsonBytes">The decoded JSON bytes of one compact segment.</param>
     /// <returns>The segment's members.</returns>
-    private static IReadOnlyDictionary<string, object> DeserializeJarSegment(ReadOnlySpan<byte> jsonBytes) =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(jsonBytes, TestSetup.DefaultSerializationOptions)
+    private static IReadOnlyDictionary<string, object?> DeserializeJarSegment(ReadOnlySpan<byte> jsonBytes) =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(jsonBytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("JAR segment JSON parsed to null.");
 
 

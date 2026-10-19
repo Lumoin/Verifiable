@@ -1710,9 +1710,9 @@ internal sealed class TestHostShell : IAsyncDisposable
             WalletCapabilities = Oid4VpWalletCapabilities.HaipDefault,
             Base64UrlDecoder = TestSetup.Base64UrlDecoder,
             JwtHeaderSerializer = header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
             JwtPayloadSerializer = payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
             JarHeaderDeserializer = bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                 bytes, TestSetup.DefaultSerializationOptions)!,
             JarPayloadDeserializer = bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
@@ -1761,7 +1761,28 @@ internal sealed class TestHostShell : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(storedSdJwt);
         ArgumentNullException.ThrowIfNull(holderKey);
 
-        return BuildSdJwtProduceDelegateCore(_ => storedSdJwt, holderKey);
+        return BuildSdJwtProduceDelegateCore(_ => storedSdJwt, holderKey, minimalDisclosure: true, IssueLibraryKeyBindingJwtAsync);
+    }
+
+
+    /// <summary>
+    /// The SD-JWT VC presentation drop-out whose Key Binding JWT the caller writes: the stored credential presented for every
+    /// credential query with the minimal disclosure set, bound by the KB-JWT <paramref name="issueKeyBinding"/> writes and signs
+    /// once from the presentation's own hash input, nonce and audience, so a row giving the KB-JWT the claims it intends - one
+    /// omitting a claim among them - has them in the first and only bytes signed.
+    /// </summary>
+    /// <param name="storedSdJwt">The stored credential.</param>
+    /// <param name="holderKey">The holder's key.</param>
+    /// <param name="issueKeyBinding">Writes and signs the presentation's KB-JWT.</param>
+    /// <returns>The presentation drop-out.</returns>
+    internal static ProduceVpTokenPresentationsDelegate BuildSdJwtProduceDelegate(
+        string storedSdJwt, PrivateKeyMemory holderKey, IssueKeyBindingJwtDelegate issueKeyBinding)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storedSdJwt);
+        ArgumentNullException.ThrowIfNull(holderKey);
+        ArgumentNullException.ThrowIfNull(issueKeyBinding);
+
+        return BuildSdJwtProduceDelegateCore(_ => storedSdJwt, holderKey, minimalDisclosure: true, issueKeyBinding);
     }
 
 
@@ -1780,7 +1801,9 @@ internal sealed class TestHostShell : IAsyncDisposable
                 ? stored
                 : throw new InvalidOperationException(
                     $"No stored SD-JWT VC for credential query '{queryId}'."),
-            holderKey);
+            holderKey,
+            minimalDisclosure: true,
+            IssueLibraryKeyBindingJwtAsync);
     }
 
 
@@ -1795,24 +1818,24 @@ internal sealed class TestHostShell : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(storedSdJwt);
         ArgumentNullException.ThrowIfNull(holderKey);
 
-        return BuildSdJwtProduceDelegateCore(_ => storedSdJwt, holderKey, minimalDisclosure: false);
+        return BuildSdJwtProduceDelegateCore(_ => storedSdJwt, holderKey, minimalDisclosure: false, IssueLibraryKeyBindingJwtAsync);
     }
 
 
     /// <summary>
     /// Shared implementation behind the <c>BuildSdJwtProduceDelegate*</c> overloads: parses the stored
     /// SD-JWT resolved by <paramref name="resolveStoredSdJwt"/>, computes the disclosure set (minimal
-    /// unless <paramref name="minimalDisclosure"/> is <see langword="false"/>), and builds the bound
-    /// KB-JWT presentation.
+    /// unless <paramref name="minimalDisclosure"/> is <see langword="false"/>), and builds the
+    /// presentation bound by the KB-JWT <paramref name="issueKeyBinding"/> writes and signs.
     /// </summary>
+    /// <param name="resolveStoredSdJwt">Resolves the stored credential of a credential query.</param>
+    /// <param name="holderKey">The holder's key.</param>
+    /// <param name="minimalDisclosure">Whether the minimal disclosure set is presented rather than every disclosure.</param>
+    /// <param name="issueKeyBinding">Writes and signs the presentation's KB-JWT.</param>
+    /// <returns>The presentation drop-out.</returns>
     private static ProduceVpTokenPresentationsDelegate BuildSdJwtProduceDelegateCore(
-        Func<string, string> resolveStoredSdJwt, PrivateKeyMemory holderKey, bool minimalDisclosure = true)
+        Func<string, string> resolveStoredSdJwt, PrivateKeyMemory holderKey, bool minimalDisclosure, IssueKeyBindingJwtDelegate issueKeyBinding)
     {
-        ReadOnlySpan<byte> headerSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
-        ReadOnlySpan<byte> payloadSerializer(JwtPayload payload) => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
-
         return async (context, cancellationToken) =>
         {
             Dictionary<string, string> presentations = new(StringComparer.Ordinal);
@@ -1853,18 +1876,7 @@ internal sealed class TestHostShell : IAsyncDisposable
                 int hashInputLength = Encoding.UTF8.GetBytes(sdJwtForHashing, hashInputOwner.Memory.Span);
                 ReadOnlyMemory<byte> hashInputBytes = hashInputOwner.Memory[..hashInputLength];
 
-                IReadOnlyList<string>? transactionDataHashes = null;
-                if(context.Request.TransactionData is { Count: > 0 } transactionData)
-                {
-                    transactionDataHashes = await TransactionDataHasher.ComputeSha256Async(
-                        transactionData, context.Base64UrlEncoder, context.MemoryPool, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-
-                string compactKbJwt = await KbJwtIssuance.IssueAsync(
-                    hashInputBytes, holderKey, context.Request.Nonce, context.Request.ClientId, context.Now,
-                    context.Base64UrlEncoder, headerSerializer, payloadSerializer, context.MemoryPool,
-                    transactionDataHashes, cancellationToken: cancellationToken).ConfigureAwait(false);
+                var compactKbJwt = await issueKeyBinding(hashInputBytes, holderKey, context, cancellationToken).ConfigureAwait(false);
 
                 using SdToken<string> tokenWithKb = selected.WithKeyBinding(compactKbJwt, MemoryPool);
                 presentations[queryId] = SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
@@ -1872,6 +1884,41 @@ internal sealed class TestHostShell : IAsyncDisposable
 
             return new Oid4VpPresentationSet { PresentationsByQueryId = presentations };
         };
+    }
+
+
+    /// <summary>
+    /// Writes and signs a presentation's Key Binding JWT through the library's own issuance (RFC 9901 section 4.3): the
+    /// <c>sd_hash</c> over the presentation's hash input, the request's <c>nonce</c> and Client ID as <c>aud</c>, the instant the
+    /// presentation is made as <c>iat</c>, and the <c>transaction_data_hashes</c> of a request carrying transaction data (OID4VP
+    /// 1.0 section 8.4).
+    /// </summary>
+    /// <param name="sdJwtForHashing">The presentation's <c>sd_hash</c> input, as UTF-8.</param>
+    /// <param name="holderKey">The holder's key.</param>
+    /// <param name="context">The presentation's request context.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The compact KB-JWT.</returns>
+    private static async ValueTask<string> IssueLibraryKeyBindingJwtAsync(
+        ReadOnlyMemory<byte> sdJwtForHashing, PrivateKeyMemory holderKey, Oid4VpPresentationContext context, CancellationToken cancellationToken)
+    {
+        ReadOnlySpan<byte> headerSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
+        ReadOnlySpan<byte> payloadSerializer(JwtPayload payload) => JsonSerializerExtensions.SerializeToUtf8Bytes(
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
+
+        IReadOnlyList<string>? transactionDataHashes = null;
+
+        if(context.Request.TransactionData is { Count: > 0 } transactionData)
+        {
+            transactionDataHashes = await TransactionDataHasher.ComputeSha256Async(
+                transactionData, context.Base64UrlEncoder, context.MemoryPool, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return await KbJwtIssuance.IssueAsync(
+            sdJwtForHashing, holderKey, context.Request.Nonce, context.Request.ClientId, context.Now,
+            context.Base64UrlEncoder, headerSerializer, payloadSerializer, context.MemoryPool,
+            transactionDataHashes, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 

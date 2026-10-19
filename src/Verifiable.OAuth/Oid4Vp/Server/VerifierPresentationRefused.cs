@@ -21,4 +21,12 @@ public sealed record VerifierPresentationRefused(VerifierFlowRefusal Refusal, st
     /// for every other refusal kind.
     /// </summary>
     public Verifiable.Core.StatusLists.CredentialStatusRefusal? CredentialStatusRefusal { get; init; }
+
+    /// <summary>
+    /// Why an SD-JWT presentation is malformed when the verification refused it as one — carried onto
+    /// <see cref="VerifierFlowFailedState.PresentationDefect"/> by the transition, so the caller reads the typed defect rather
+    /// than the log text. Never on the wire: the Wallet is answered the generic <see cref="VerifierFlowRefusalKind.Malformed"/>
+    /// description. <see langword="null"/> for every other refusal.
+    /// </summary>
+    public SdJwtPresentationDefect? PresentationDefect { get; init; }
 }

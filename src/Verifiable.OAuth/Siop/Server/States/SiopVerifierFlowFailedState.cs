@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core.StatusLists;
+using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;
@@ -30,4 +31,10 @@ public sealed record SiopVerifierFlowFailedState : FlowState
     /// <see cref="Refusal"/> carries <see cref="VerifierFlowRefusalKind.PolicyRefused"/>.
     /// </summary>
     public CredentialStatusRefusal? CredentialStatusRefusal { get; init; }
+
+    /// <summary>
+    /// Why the combined response's SD-JWT presentation is malformed, carried through from
+    /// <see cref="SiopFlowFailed.PresentationDefect"/>. <see langword="null"/> for every other failure.
+    /// </summary>
+    public SdJwtPresentationDefect? PresentationDefect { get; init; }
 }

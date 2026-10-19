@@ -60,7 +60,7 @@ internal sealed class JwsPresentationFlowTests
         JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
 
     private static JwtHeaderDeserializer HeaderDeserializer => headerBytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions);
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerBytes, JsonOptions);
 
 
     /// <summary>

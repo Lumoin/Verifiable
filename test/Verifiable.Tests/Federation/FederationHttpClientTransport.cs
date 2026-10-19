@@ -128,8 +128,8 @@ internal static class FederationHttpClientTransport
             return null;
         }
 
-        Dictionary<string, object> headerDict;
-        Dictionary<string, object> payloadDict;
+        Dictionary<string, object?> headerDict;
+        Dictionary<string, object?> payloadDict;
         try
         {
             using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(
@@ -155,11 +155,11 @@ internal static class FederationHttpClientTransport
     }
 
 
-    private static Dictionary<string, object> DecodeJsonObject(ReadOnlySpan<byte> bytes)
+    private static Dictionary<string, object?> DecodeJsonObject(ReadOnlySpan<byte> bytes)
     {
         string json = Encoding.UTF8.GetString(bytes);
         using JsonDocument document = JsonDocument.Parse(json);
-        Dictionary<string, object> result = new(StringComparer.Ordinal);
+        Dictionary<string, object?> result = new(StringComparer.Ordinal);
         foreach(JsonProperty property in document.RootElement.EnumerateObject())
         {
             object? value = ConvertJsonElement(property.Value);
@@ -202,9 +202,9 @@ internal static class FederationHttpClientTransport
     }
 
 
-    private static Dictionary<string, object> ConvertObject(JsonElement element)
+    private static Dictionary<string, object?> ConvertObject(JsonElement element)
     {
-        Dictionary<string, object> dict = new(StringComparer.Ordinal);
+        Dictionary<string, object?> dict = new(StringComparer.Ordinal);
         foreach(JsonProperty property in element.EnumerateObject())
         {
             object? value = ConvertJsonElement(property.Value);

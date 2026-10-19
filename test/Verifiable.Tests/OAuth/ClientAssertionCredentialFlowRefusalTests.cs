@@ -62,12 +62,12 @@ internal sealed class ClientAssertionCredentialFlowRefusalTests
     /// <summary>Serialises the client assertion's protected header.</summary>
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serialises the client assertion's claims.</summary>
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
     /// <summary>The test context, carrying the token that cancels a test that outruns its run.</summary>
     public TestContext TestContext { get; set; } = null!;

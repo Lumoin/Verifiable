@@ -198,7 +198,7 @@ public static class ClientAssertionClaimRules
     /// <param name="payloadDeserializer">Reads the object's members.</param>
     /// <param name="pool">The pool the decoded payload is rented from.</param>
     /// <returns>The claims, or <see langword="null"/>.</returns>
-    public static IReadOnlyDictionary<string, object>? ReadClaimsSet(
+    public static IReadOnlyDictionary<string, object?>? ReadClaimsSet(
         string compactJws, DecodeDelegate base64UrlDecoder, JwtPayloadDeserializer payloadDeserializer, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(compactJws);
@@ -241,7 +241,7 @@ public static class ClientAssertionClaimRules
     /// <param name="clockSkewTolerance">The tolerance the dates are judged under.</param>
     /// <returns>The judgement.</returns>
     public static ClientAssertionClaimsJudgement Judge(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string clientId,
         IReadOnlyCollection<string> acceptedAudiences,
         DateTimeOffset now,
@@ -343,7 +343,7 @@ public static class ClientAssertionClaimRules
     /// <param name="cancellationToken">Cancels the consultation.</param>
     /// <returns>The judgement.</returns>
     public static async ValueTask<ClientAssertionClaimsJudgement> JudgeAsync(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         string clientId,
         IReadOnlyCollection<string> acceptedAudiences,
         DateTimeOffset now,
@@ -461,7 +461,7 @@ public static class ClientAssertionClaimRules
     /// <param name="claims">The claims set.</param>
     /// <param name="claimName">The claim.</param>
     /// <returns>The string, or <see langword="null"/>.</returns>
-    private static string? StringClaimOf(IReadOnlyDictionary<string, object> claims, string claimName) =>
+    private static string? StringClaimOf(IReadOnlyDictionary<string, object?> claims, string claimName) =>
         claims.TryGetValue(claimName, out var value) ? StringOf(value) : null;
 
 

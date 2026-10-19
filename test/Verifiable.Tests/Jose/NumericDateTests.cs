@@ -122,7 +122,8 @@ internal sealed class NumericDateTests
 
         var fromToken = NumericDate.FromJsonNumber(Encoding.UTF8.GetBytes(PastADecimal))!;
         var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes($"{{\"iat\":{PastADecimal}}}")));
-        var fromSpan = Assert.IsInstanceOfType<JsonMemberNumber>(members.Find(WellKnownJwtClaimNames.Iat)).ToNumericDate()!;
+        var fromSpan = Assert.IsInstanceOfType<JsonMemberNumber>(members.Find(WellKnownJwtClaimNames.Iat)).ToNumericDate()
+            ?? throw new AssertFailedException("The member names a NumericDate.");
         var claims = JsonSerializer.Deserialize<Dictionary<string, object>>($"{{\"iat\":{PastADecimal}}}", JsonOptions)!;
         var fromDictionary = NumericDate.Of(claims[WellKnownJwtClaimNames.Iat])!;
 

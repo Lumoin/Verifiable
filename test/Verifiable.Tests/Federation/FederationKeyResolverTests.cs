@@ -56,7 +56,7 @@ internal sealed class FederationKeyResolverTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Construct a synthetic "issuer" with empty payload (no jwks).
-        Dictionary<string, object> emptyPayloadDict = new(StringComparer.Ordinal)
+        Dictionary<string, object?> emptyPayloadDict = new(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = anchor.Identifier.Value,
             [WellKnownJwtClaimNames.Sub] = anchor.Identifier.Value,
@@ -204,7 +204,7 @@ internal sealed class FederationKeyResolverTests
             }
         };
 
-        Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
+        Dictionary<string, object?> payloadDict = new(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = issuer.Value,
             [WellKnownJwtClaimNames.Sub] = issuer.Value,
@@ -272,7 +272,7 @@ internal sealed class FederationKeyResolverTests
             [WellKnownJwkMemberNames.Keys] = new List<object> { firstJwk, secondJwk }
         };
 
-        Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
+        Dictionary<string, object?> payloadDict = new(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = issuer.Value,
             [WellKnownJwtClaimNames.Sub] = issuer.Value,
@@ -303,16 +303,21 @@ internal sealed class FederationKeyResolverTests
 
     /// <summary>
     /// The walk over a chain tells an ordinary miss from the refusal of a key set: a first statement about the issuer whose key
-    /// set carries no key of the kid passes the walk on, and the second statement's key resolves; a first statement whose
-    /// <c>jwks</c> is no JSON object, whose set names the kid on two keys, or whose selected key builds no key ends the walk with
-    /// no key, the second statement's valid key never standing in for the key set the chain refused.
+    /// set carries no key of the kid - an empty <c>keys</c> array among them, a JWK Set holding no key (RFC 7517 section 5) -
+    /// passes the walk on, and the second statement's key resolves; a first statement whose <c>jwks</c> is no JSON object, is
+    /// one carrying no <c>keys</c> member or a <c>keys</c> that is no array (RFC 7517 section 5: the member is REQUIRED, an array
+    /// of JWK values), whose set names the kid on two keys, or whose selected key builds no key ends the walk with no key, the
+    /// second statement's valid key never standing in for the key set the chain refused.
     /// </summary>
     /// <param name="firstStatementCase">The name of the first statement's key set.</param>
     /// <param name="resolves">Whether the walk resolves the second statement's key.</param>
     /// <returns>A task completing once the key is resolved.</returns>
     [TestMethod]
     [DataRow("no-key-of-the-kid", true)]
+    [DataRow("keys-empty", true)]
     [DataRow("jwks-not-an-object", false)]
+    [DataRow("keys-absent", false)]
+    [DataRow("keys-not-an-array", false)]
     [DataRow("kid-on-two-keys", false)]
     [DataRow("selected-key-builds-none", false)]
     public async Task AKeySetTheChainRefusesEndsTheWalkAndAMissPassesItOn(string firstStatementCase, bool resolves)
@@ -332,7 +337,10 @@ internal sealed class FederationKeyResolverTests
         object firstJwks = firstStatementCase switch
         {
             "no-key-of-the-kid" => KeySet(otherJwk),
+            "keys-empty" => KeySet(),
             "jwks-not-an-object" => "not-a-key-set",
+            "keys-absent" => new Dictionary<string, object>(StringComparer.Ordinal),
+            "keys-not-an-array" => new Dictionary<string, object>(StringComparer.Ordinal) { [WellKnownJwkMemberNames.Keys] = "not-an-array" },
             "kid-on-two-keys" => KeySet(otherJwk, currentJwk),
             "selected-key-builds-none" => KeySet(keyless),
             _ => throw new ArgumentOutOfRangeException(nameof(firstStatementCase), firstStatementCase, "No key set is named so.")
@@ -365,7 +373,7 @@ internal sealed class FederationKeyResolverTests
         Subject = entity,
         IssuedAt = now,
         ExpiresAt = now.AddHours(1),
-        Payload = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        Payload = new(new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = entity.Value,
             [WellKnownJwtClaimNames.Sub] = entity.Value,

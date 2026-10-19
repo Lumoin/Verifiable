@@ -35,12 +35,12 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
 
@@ -694,7 +694,7 @@ unresolvable,
         var noExpResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, ComposeRawPayload(sub, subJwk, expJson: null, writtenIat)).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.IsTrue(bothResult.IsValid);
-        Assert.AreEqual(writtenExp, bothResult.ExpiresAt!.ToString());
+        Assert.AreEqual(writtenExp, bothResult.ExpiresAt?.ToString());
         Assert.IsFalse(noIatResult.IsStructurallyValid, "SIOPv2 section 11 with OpenID Connect Core 1.0 section 2: an omitted iat is a missing required claim.");
         Assert.IsFalse(noIatResult.IsValid, "A token omitting iat does not validate.");
         Assert.IsTrue(noExpResult.IsStructurallyValid, "An omitted exp is no malformed one.");

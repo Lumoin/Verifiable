@@ -118,13 +118,13 @@ internal sealed class JwsCredentialSecuringTests
         string[] parts = jws.Split('.');
 
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
-        Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
+        var header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual(WellKnownJwaValues.EdDsa, header[WellKnownJwkMemberNames.Alg].ToString());
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[WellKnownJoseHeaderNames.Typ].ToString());
-        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[WellKnownJwkMemberNames.Kid].ToString());
-        Assert.AreEqual(WellKnownMediaTypes.Application.Vc, header[WellKnownJoseHeaderNames.Cty].ToString());
+        Assert.AreEqual(WellKnownJwaValues.EdDsa, header[WellKnownJwkMemberNames.Alg]?.ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcJwt, header[WellKnownJoseHeaderNames.Typ]?.ToString());
+        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, header[WellKnownJwkMemberNames.Kid]?.ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Application.Vc, header[WellKnownJoseHeaderNames.Cty]?.ToString());
     }
 
 
@@ -241,10 +241,10 @@ internal sealed class JwsCredentialSecuringTests
         string[] parts = jws.Split('.');
 
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
-        Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
+        var header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcLdJwt, header[WellKnownJoseHeaderNames.Typ].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Jwt.VcLdJwt, header[WellKnownJoseHeaderNames.Typ]?.ToString());
     }
 
 
@@ -269,21 +269,21 @@ internal sealed class JwsCredentialSecuringTests
         string[] parts = jws.Split('.');
 
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
-        Dictionary<string, object>? header = HeaderDeserializer(headerBytes.Memory.Span);
+        var header = HeaderDeserializer(headerBytes.Memory.Span);
 
         Assert.IsNotNull(header);
-        Assert.AreEqual(WellKnownMediaTypes.Application.Vp, header[WellKnownJoseHeaderNames.Cty].ToString());
+        Assert.AreEqual(WellKnownMediaTypes.Application.Vp, header[WellKnownJoseHeaderNames.Cty]?.ToString());
     }
 
 
     private static ReadOnlySpan<byte> CredentialSerializer(VerifiableCredential credential) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
 
-    private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object> header) =>
+    private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object?> header) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(header, CredentialSecuringMaterial.JsonOptions);
 
-    private static Dictionary<string, object>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
+    private static Dictionary<string, object?>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
 
     private static VerifiableCredential CredentialDeserializer(ReadOnlySpan<byte> credentialBytes) =>
         JsonSerializerExtensions.Deserialize<VerifiableCredential>(credentialBytes, CredentialSecuringMaterial.JsonOptions)!;

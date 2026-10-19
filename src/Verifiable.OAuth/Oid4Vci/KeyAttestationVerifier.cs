@@ -75,6 +75,7 @@ public static class KeyAttestationVerifier
     /// <param name="clockSkew">The leniency added to <c>exp</c> before treating the attestation as expired.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result carrying the verified attestation on success.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="proofUse"/> is no use <see cref="KeyAttestationProofUse"/> defines.</exception>
     public static ValueTask<KeyAttestationVerificationResult> VerifyAsync(
         string compactAttestation,
         KeyAttestationProofUse proofUse,
@@ -125,6 +126,7 @@ public static class KeyAttestationVerifier
     /// <param name="clockSkew">The leniency added to <c>exp</c> before treating the attestation as expired.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result carrying the verified attestation on success.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="proofUse"/> is no use <see cref="KeyAttestationProofUse"/> defines.</exception>
     public static ValueTask<KeyAttestationVerificationResult> VerifyAsync(
         string compactAttestation,
         KeyAttestationProofUse proofUse,
@@ -203,6 +205,8 @@ public static class KeyAttestationVerifier
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
+        var expiryRequired = IsExpiryRequiredFor(proofUse);
+
         cancellationToken.ThrowIfCancellationRequested();
 
         //Appendix D.1: a verifiable attestation MUST be a signed three-part JWS. The structural parser
@@ -227,10 +231,18 @@ public static class KeyAttestationVerifier
         string? kid;
         List<string>? x5cValues;
         Dictionary<string, object>? jwkMembers;
-        try
+
+        //The attestation header is client-supplied wire input, structurally unverified at this point: a segment the decoder
+        //refuses as no base64url text is a malformed attestation, and the scans below never throw on a header the gate admitted.
+        //Any other failure - of the decoder beyond its refusal, of the allocator, of the implementation - is a fault and surfaces
+        //as one, cancellation among them.
+        using(var headerOwner = JwsSegmentDecoding.DecodedOrNone(compactAttestation.Split('.')[0], base64UrlDecoder, memoryPool))
         {
-            string[] segments = compactAttestation.Split('.');
-            using IMemoryOwner<byte> headerOwner = base64UrlDecoder(segments[0], memoryPool);
+            if(headerOwner is null)
+            {
+                return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Malformed);
+            }
+
             ReadOnlySpan<byte> header = headerOwner.Memory.Span;
 
             //RFC 7515 §4: gate the header for well-formedness — a repeated "alg"/"kid"/"jwk"/"x5c" at any
@@ -250,12 +262,6 @@ public static class KeyAttestationVerifier
             jwkMembers = hasJwk
                 ? JwkJsonReader.ExtractObjectProperties(header, WellKnownJoseHeaderNames.JwkUtf8)
                 : null;
-        }
-        catch
-        {
-            //The attestation header is client-supplied wire input, structurally unverified at this point;
-            //any decode/read failure is a malformed attestation rather than an internal fault.
-            return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Malformed);
         }
 
         //The attestation MUST be signed with a registered asymmetric signature algorithm the
@@ -321,7 +327,7 @@ public static class KeyAttestationVerifier
         //Appendix D.1: exp is OPTIONAL, but "MUST be present if the attestation is used with the JWT proof type". The parser
         //refused an exp that is no integral NumericDate, so an attestation without one omitted it, which is refused where the
         //caller states the JWT-proof use and valid otherwise.
-        if(attestation.ExpiresAt is null && proofUse is KeyAttestationProofUse.JwtProof)
+        if(attestation.ExpiresAt is null && expiryRequired)
         {
             return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.ExpiryNotPresented);
         }
@@ -534,6 +540,22 @@ public static class KeyAttestationVerifier
     /// <returns>The adapted delegate, or <see langword="null"/> when <paramref name="resolve"/> is <see langword="null"/>.</returns>
     private static Oid4VciHeaderKeyResolution.ResolveKidKeyDelegate? Adapt(ResolveWalletProviderKeyDelegate? resolve) =>
         resolve is null ? null : new Oid4VciHeaderKeyResolution.ResolveKidKeyDelegate(resolve.Invoke);
+
+
+    /// <summary>
+    /// Whether an attestation verified for a use must carry an <c>exp</c> (Appendix D.1: "MUST be present if the attestation is
+    /// used with the JWT proof type"): required for the JWT-proof use, not for the attestation-proof use nor where the caller does
+    /// not state the use. A value of no use the type defines is refused, never read as one that requires none.
+    /// </summary>
+    /// <param name="proofUse">The use the attestation is verified for.</param>
+    /// <returns><see langword="true"/> when the <c>exp</c> is required.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="proofUse"/> is no use the type defines.</exception>
+    private static bool IsExpiryRequiredFor(KeyAttestationProofUse proofUse) => proofUse switch
+    {
+        KeyAttestationProofUse.JwtProof => true,
+        KeyAttestationProofUse.AttestationProof or KeyAttestationProofUse.NotStated => false,
+        _ => throw new ArgumentOutOfRangeException(nameof(proofUse), proofUse, "The proof use is none a key attestation is verified for.")
+    };
 
 
     /// <summary>Maps the shared header-key resolver's neutral status to the attestation verification failure reason.</summary>

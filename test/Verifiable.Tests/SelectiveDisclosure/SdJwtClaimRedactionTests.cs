@@ -68,7 +68,7 @@ internal sealed class SdJwtClaimRedactionTests
         Assert.HasCount(1, disclosures);
         Assert.IsFalse(payload.ContainsKey(SdConstants.SdClaimName), "Root must not have _sd when no root claims are disclosable.");
 
-        var credSubject = (Dictionary<string, object>)payload["credentialSubject"];
+        var credSubject = Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["credentialSubject"]);
         Assert.IsTrue(credSubject.ContainsKey(SdConstants.SdClaimName), "CredentialSubject must have _sd array.");
         Assert.AreEqual("did:example:123", credSubject["id"]);
         Assert.IsFalse(credSubject.ContainsKey("degree"), "Disclosable claim must not be in credentialSubject.");
@@ -101,13 +101,13 @@ internal sealed class SdJwtClaimRedactionTests
 
         Assert.HasCount(1, disclosures);
 
-        var level1 = (Dictionary<string, object>)payload["level1"];
+        var level1 = Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["level1"]);
         Assert.IsFalse(level1.ContainsKey(SdConstants.SdClaimName), "Level1 must not have _sd.");
 
-        var level2 = (Dictionary<string, object>)level1["level2"];
+        var level2 = Assert.IsInstanceOfType<Dictionary<string, object?>>(level1["level2"]);
         Assert.IsFalse(level2.ContainsKey(SdConstants.SdClaimName), "Level2 must not have _sd.");
 
-        var level3 = (Dictionary<string, object>)level2["level3"];
+        var level3 = Assert.IsInstanceOfType<Dictionary<string, object?>>(level2["level3"]);
         Assert.IsTrue(level3.ContainsKey(SdConstants.SdClaimName), "Level3 must have _sd.");
         Assert.AreEqual("shown", level3["visible"]);
         Assert.IsFalse(level3.ContainsKey("secret"), "Disclosable claim must not be in level3.");
@@ -139,7 +139,7 @@ internal sealed class SdJwtClaimRedactionTests
         Assert.HasCount(2, disclosures);
         Assert.IsTrue(payload.ContainsKey(SdConstants.SdClaimName), "Root must have _sd for given_name.");
 
-        var address = (Dictionary<string, object>)payload["address"];
+        var address = Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["address"]);
         Assert.IsTrue(address.ContainsKey(SdConstants.SdClaimName), "Address must have _sd for street.");
         Assert.AreEqual("Köln", address["city"]);
     }
@@ -285,8 +285,8 @@ internal sealed class SdJwtClaimRedactionTests
 
         Assert.HasCount(2, disclosures, "One disclosure per disclosable path.");
 
-        var rootSd = (List<string>)payload[SdConstants.SdClaimName];
-        var addressSd = (List<string>)((Dictionary<string, object>)payload["address"])[SdConstants.SdClaimName];
+        var rootSd = Assert.IsInstanceOfType<List<string>>(payload[SdConstants.SdClaimName]);
+        var addressSd = Assert.IsInstanceOfType<List<string>>(Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["address"])[SdConstants.SdClaimName]);
 
         Assert.HasCount(4, rootSd, "Root _sd must hold 1 real digest + 3 decoys.");
         Assert.HasCount(4, addressSd, "Address _sd must hold 1 real digest + 3 decoys (count is drawn per location).");
@@ -319,8 +319,8 @@ internal sealed class SdJwtClaimRedactionTests
 
         var (payload, _) = RedactWithDecoys(json, disclosablePaths, DecoyDigestPolicy.PadToBucket(5));
 
-        var rootSd = (List<string>)payload[SdConstants.SdClaimName];
-        var addressSd = (List<string>)((Dictionary<string, object>)payload["address"])[SdConstants.SdClaimName];
+        var rootSd = Assert.IsInstanceOfType<List<string>>(payload[SdConstants.SdClaimName]);
+        var addressSd = Assert.IsInstanceOfType<List<string>>(Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["address"])[SdConstants.SdClaimName]);
 
         Assert.HasCount(5, rootSd, "Root (2 real) must be padded with 3 decoys to the bucket size.");
         Assert.HasCount(5, addressSd, "Address (1 real) must be padded with 4 decoys to the same bucket size.");
@@ -388,8 +388,8 @@ internal sealed class SdJwtClaimRedactionTests
         var (defaultPayload, _) = RedactWithDigests(json, disclosablePaths);
         var (nonePayload, _) = RedactWithDecoys(json, disclosablePaths, DecoyDigestPolicy.None);
 
-        Assert.HasCount(2, (List<string>)defaultPayload[SdConstants.SdClaimName], "Default (no policy) must add no decoys.");
-        Assert.HasCount(2, (List<string>)nonePayload[SdConstants.SdClaimName], "DecoyDigestPolicy.None must add no decoys.");
+        Assert.HasCount(2, Assert.IsInstanceOfType<List<string>>(defaultPayload[SdConstants.SdClaimName]), "Default (no policy) must add no decoys.");
+        Assert.HasCount(2, Assert.IsInstanceOfType<List<string>>(nonePayload[SdConstants.SdClaimName]), "DecoyDigestPolicy.None must add no decoys.");
     }
 
 
@@ -412,7 +412,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         var (payload, disclosures) = RedactWithDecoys(json, disclosablePaths, DecoyDigestPolicy.Fixed(4));
 
-        var sdArray = (List<string>)payload[SdConstants.SdClaimName];
+        var sdArray = Assert.IsInstanceOfType<List<string>>(payload[SdConstants.SdClaimName]);
 
         //The real disclosures' digests must all be present in the _sd array.
         var realDigests = disclosures

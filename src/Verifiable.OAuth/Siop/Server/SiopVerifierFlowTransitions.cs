@@ -55,7 +55,8 @@ public static class SiopVerifierFlowTransitions
                                 Reason = fail.Reason,
                                 FailedAt = fail.FailedAt,
                                 Refusal = fail.Refusal,
-                                CredentialStatusRefusal = fail.CredentialStatusRefusal
+                                CredentialStatusRefusal = fail.CredentialStatusRefusal,
+                                PresentationDefect = fail.PresentationDefect
                             },
                             StackAction<SiopVerifierStackSymbol>.None,
                             "SiopVerifierFlowFailed"),

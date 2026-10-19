@@ -47,12 +47,12 @@ internal sealed class SiopRequestUriFlowTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
     //The §9 Request Object payload is read back as a generic claim dictionary so the test asserts on
@@ -167,7 +167,7 @@ internal sealed class SiopRequestUriFlowTests
     }
 
 
-    private static string GetString(Dictionary<string, object> payload, string claim)
+    private static string GetString(Dictionary<string, object?> payload, string claim)
     {
         Assert.IsTrue(payload.TryGetValue(claim, out object? value),
             $"The §9 Request Object payload is missing the '{claim}' claim.");

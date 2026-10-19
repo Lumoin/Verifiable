@@ -381,7 +381,7 @@ public static class Rfc7523AssertionValidation
     /// or an empty value all yield <see langword="null"/> (no element is filtered out, so an extra
     /// non-string element cannot collapse the array to a single accepted entry).
     /// </summary>
-    private static string? ExtractSingleAudience(object audRaw) => audRaw switch
+    private static string? ExtractSingleAudience(object? audRaw) => audRaw switch
     {
         string s => string.IsNullOrEmpty(s) ? null : s,
         IEnumerable<string> typed => SingleAudienceOrNull([.. typed]),

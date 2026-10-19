@@ -122,11 +122,11 @@ public static class JwsAccessTokenValidator
             JwtTypeEnforcement.RequireAtJwt,
             cancellationToken).ConfigureAwait(false);
 
-        if(!outcome.IsSuccess)
+        if(outcome.FailureReason is { } failureReason)
         {
             return outcome.PartRefusal is { } partRefusal
-                ? JwsAccessTokenValidationResult.PartRefused(outcome.FailureReason!.Value, outcome.FailureDescription, partRefusal)
-                : JwsAccessTokenValidationResult.Failure(outcome.FailureReason!.Value, outcome.FailureDescription);
+                ? JwsAccessTokenValidationResult.PartRefused(failureReason, outcome.FailureDescription, partRefusal)
+                : JwsAccessTokenValidationResult.Failure(failureReason, outcome.FailureDescription);
         }
 
         //Optional access-token-specific claims, read from the shared core's verified payload.
@@ -138,9 +138,9 @@ public static class JwsAccessTokenValidator
         //validator does not verify, refuses the token before success, never read as an unbound token.
         var confirmationRead = ReadConfirmation(outcome.Payload!, out var confirmation);
 
-        if(ConfirmationRefusalOf(confirmationRead, "Access token") is { } confirmationRefusal)
+        if(ConfirmationRefusalOf(confirmationRead, "Access token") is { FailureReason: { } confirmationFailure } confirmationRefusal)
         {
-            return JwsAccessTokenValidationResult.Failure(confirmationRefusal.FailureReason!.Value, confirmationRefusal.FailureDescription);
+            return JwsAccessTokenValidationResult.Failure(confirmationFailure, confirmationRefusal.FailureDescription);
         }
 
         //RFC 8693 §4.1/§4.4: act and may_act are nested JSON objects whose members identify a party.
@@ -442,7 +442,7 @@ public static class JwsAccessTokenValidator
 
         //RFC 7519 section 4.1.3: aud is one StringOrURI or an array of them. A present aud of another shape - an array holding
         //an element that is no non-empty string among them - is refused whole, never filtered into the audiences it does name.
-        var audienceRead = ReadStringList(payload, WellKnownJwtClaimNames.Aud, out var audience);
+        var audienceRead = ReadStringOrStringArray(payload, WellKnownJwtClaimNames.Aud, out var audience);
         if(audienceRead != ClaimReadResult.Value)
         {
             return audienceRead == ClaimReadResult.Absent
@@ -595,20 +595,21 @@ public static class JwsAccessTokenValidator
 
 
     /// <summary>
-    /// Reads a claim whose JSON value is either a single string or an array of strings — the RFC 7519 §4.1.3 <c>aud</c> shape,
-    /// also the OIDC Core §2 <c>amr</c> claim's — normalising both wire shapes into a list; a single string becomes a one-element
-    /// list. An absent claim is <see cref="ClaimReadResult.Absent"/>; a present one that is neither a non-empty string nor a
-    /// non-empty array every element of which is a non-empty string - an array holding a number, a <c>null</c>, a nested value
-    /// or an empty string among them - is <see cref="ClaimReadResult.Malformed"/> as a whole, never filtered into the strings it
-    /// does hold (<see cref="JwtPayload"/> satisfies <see cref="IReadOnlyDictionary{TKey, TValue}"/>, so any verified claim
-    /// dictionary reads through the same call).
+    /// Reads a claim whose JSON value is either a single string or an array of strings, the RFC 7519 section 4.1.3 <c>aud</c>
+    /// shape: "In the general case, the "aud" value is an array of case-sensitive strings ... In the special case when the JWT has
+    /// one audience, the "aud" value MAY be a single case-sensitive string". Both wire shapes normalise into a list, a single
+    /// string becoming a one-element list. An absent claim is <see cref="ClaimReadResult.Absent"/>; a present one that is neither
+    /// a non-empty string nor a non-empty array every element of which is a non-empty string - an array holding a number, a
+    /// <c>null</c>, a nested value or an empty string among them - is <see cref="ClaimReadResult.Malformed"/> as a whole, never
+    /// filtered into the strings it does hold. A claim whose only form is the array reads through
+    /// <see cref="ReadStringArray"/>, which admits no single string.
     /// </summary>
     /// <param name="claims">The verified claims.</param>
     /// <param name="claimName">The claim.</param>
     /// <param name="list">The values when the result is <see cref="ClaimReadResult.Value"/>; otherwise empty.</param>
     /// <returns>Whether the claim is absent, a list of strings, or malformed.</returns>
-    internal static ClaimReadResult ReadStringList(
-        IReadOnlyDictionary<string, object> claims, string claimName, out IReadOnlyList<string> list)
+    internal static ClaimReadResult ReadStringOrStringArray(
+        IReadOnlyDictionary<string, object?> claims, string claimName, out IReadOnlyList<string> list)
     {
         list = [];
 
@@ -620,6 +621,46 @@ public static class JwsAccessTokenValidator
         var values = raw switch
         {
             string { Length: > 0 } single => new List<string> { single },
+            IEnumerable<object?> elements => NonEmptyStringsOf(elements),
+            _ => null
+        };
+
+        if(values is null)
+        {
+            return ClaimReadResult.Malformed;
+        }
+
+        list = values;
+
+        return ClaimReadResult.Value;
+    }
+
+
+    /// <summary>
+    /// Reads a claim whose JSON value is an array of strings and nothing else, the OpenID Connect Core section 2 <c>amr</c>
+    /// shape: "JSON array of strings that are identifiers for authentication methods used in the authentication". An absent claim
+    /// is <see cref="ClaimReadResult.Absent"/>; a present one that is not a non-empty array every element of which is a non-empty
+    /// string - a single string, a number, an object, or an array holding a <c>null</c>, a nested value or an empty string among
+    /// them - is <see cref="ClaimReadResult.Malformed"/> as a whole: the single-string alternative is the audience's own
+    /// (<see cref="ReadStringOrStringArray"/>), never this claim's.
+    /// </summary>
+    /// <param name="claims">The verified claims.</param>
+    /// <param name="claimName">The claim.</param>
+    /// <param name="list">The values when the result is <see cref="ClaimReadResult.Value"/>; otherwise empty.</param>
+    /// <returns>Whether the claim is absent, an array of strings, or malformed.</returns>
+    internal static ClaimReadResult ReadStringArray(
+        IReadOnlyDictionary<string, object?> claims, string claimName, out IReadOnlyList<string> list)
+    {
+        list = [];
+
+        if(!claims.TryGetValue(claimName, out var raw))
+        {
+            return ClaimReadResult.Absent;
+        }
+
+        var values = raw switch
+        {
+            string => null,
             IEnumerable<object?> elements => NonEmptyStringsOf(elements),
             _ => null
         };

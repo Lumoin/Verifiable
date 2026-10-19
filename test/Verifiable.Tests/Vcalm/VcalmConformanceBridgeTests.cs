@@ -1824,15 +1824,15 @@ internal sealed class VcalmConformanceBridgeTests
     /// <param name="mutate">The change applied to the decoded claims.</param>
     /// <param name="material">The authorization server's signing material.</param>
     /// <returns>The re-signed token.</returns>
-    private async Task<string> ReSignAsync(string token, Action<Dictionary<string, object>> mutate, VerifierKeyMaterial material)
+    private async Task<string> ReSignAsync(string token, Action<Dictionary<string, object?>> mutate, VerifierKeyMaterial material)
     {
         string encodedPayload = token.Split('.')[1];
-        Dictionary<string, object> claims;
+        Dictionary<string, object?> claims;
         using(IMemoryOwner<byte> payloadOwner = Pool.Rent(Base64Url.GetMaxDecodedLength(encodedPayload.Length)))
         {
             int payloadLength = Base64Url.DecodeFromChars(encodedPayload, payloadOwner.Memory.Span);
-            claims = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
-                payloadOwner.Memory.Span[..payloadLength], JsonOptions)!;
+            claims = JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
+                payloadOwner.Memory.Span[..payloadLength], JsonOptions) ?? throw new AssertFailedException("The token's claims set is one JSON object.");
         }
 
         mutate(claims);
@@ -1856,14 +1856,14 @@ internal sealed class VcalmConformanceBridgeTests
     /// <param name="header">The header.</param>
     /// <returns>The header's UTF-8 JSON.</returns>
     private static ReadOnlySpan<byte> ReSignHeaderSerializer(JwtHeader header) =>
-        JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object>)header, JsonOptions);
+        JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object?>)header, JsonOptions);
 
 
     /// <summary>The JWS payload serializer <see cref="ReSignAsync"/> signs with.</summary>
     /// <param name="payload">The payload.</param>
     /// <returns>The payload's UTF-8 JSON.</returns>
     private static ReadOnlySpan<byte> ReSignPayloadSerializer(JwtPayload payload) =>
-        JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object>)payload, JsonOptions);
+        JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object?>)payload, JsonOptions);
 
 
     /// <summary>

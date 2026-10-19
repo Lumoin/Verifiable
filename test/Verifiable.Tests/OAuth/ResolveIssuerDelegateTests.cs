@@ -453,10 +453,10 @@ internal sealed class ResolveIssuerDelegateTests
         using JwsMessage jws = await unsigned.SignAsync(
             privateKey: signingKey,
             headerSerializer: static headerDict => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)headerDict,
+                (Dictionary<string, object?>)headerDict,
                 TestSetup.DefaultSerializationOptions),
             payloadSerializer: static payloadDict => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payloadDict,
+                (Dictionary<string, object?>)payloadDict,
                 TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: encoder,
             memoryPool: BaseMemoryPool.Shared,
@@ -519,10 +519,10 @@ internal sealed class ResolveIssuerDelegateTests
         using JwsMessage jws = await unsigned.SignAsync(
             privateKey: signingKey,
             headerSerializer: static headerDict => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)headerDict,
+                (Dictionary<string, object?>)headerDict,
                 TestSetup.DefaultSerializationOptions),
             payloadSerializer: static payloadDict => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payloadDict,
+                (Dictionary<string, object?>)payloadDict,
                 TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: encoder,
             memoryPool: BaseMemoryPool.Shared,

@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
@@ -125,26 +124,25 @@ public static class FederationKeyResolver
                 continue;
             }
 
-            //A statement whose key set carries no key of the kid is an ordinary miss, and the walk moves on to the next statement
-            //about the entity. A statement whose key set is refused - no key set where it carries one, a set that is no JWK Set,
-            //one naming the kid twice or publishing private material - or whose selected key builds no key, ends the walk with
-            //no key: a later statement never stands in for a key set of the entity the chain refused.
-            switch(SelectInChainKey(statement, kid, memoryPool))
+            //A statement whose key set carries no key of the kid, an empty keys array among them, is an ordinary miss, and the walk
+            //moves on to the next statement about the entity. A statement whose key set is refused - no key set where it carries
+            //one, a set that is no JWK Set, a keys member absent or no array (RFC 7517 section 5), one naming the kid twice or
+            //publishing private material - or whose selected key builds no key, ends the walk with no key: a later statement never
+            //stands in for a key set of the entity the chain refused.
+            var selection = SelectInChainKey(statement, kid, memoryPool);
+
+            if(selection is InChainKeyMissed)
             {
-                case InChainKeyMissed:
-                {
-                    continue;
-                }
-                case InChainKeySelected { Jwk: var matchedJwk }:
-                {
-                    //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
-                    return ValueTask.FromResult(KeyOf(matchedJwk, base64UrlDecoder, memoryPool));
-                }
-                default:
-                {
-                    return ValueTask.FromResult<PublicKeyMemory?>(null);
-                }
+                continue;
             }
+
+            //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
+            return selection switch
+            {
+                InChainKeySelected { Jwk: var matchedJwk } => ValueTask.FromResult(KeyOf(matchedJwk, base64UrlDecoder, memoryPool)),
+                InChainKeySetRefused => ValueTask.FromResult<PublicKeyMemory?>(null),
+                _ => throw new InvalidOperationException("The in-chain key selection answered a selection it never answers.")
+            };
         }
 
         return ValueTask.FromResult<PublicKeyMemory?>(null);
@@ -164,7 +162,7 @@ public static class FederationKeyResolver
     {
         try
         {
-            (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
+            var (algorithm, purpose, scheme, keyMaterial) =
                 CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, memoryPool, base64UrlDecoder);
 
             return new PublicKeyMemory(keyMaterial, Tag.Create(algorithm).With(purpose).With(scheme));
@@ -260,11 +258,20 @@ public static class FederationKeyResolver
 
             var result = JwkJsonReader.SelectKeyByKeyId(destination[..written], targetKid, WellKnownJwkValues.UseSigUtf8);
 
-            return result.Outcome switch
+            return result switch
             {
-                JwkSelectionOutcome.Selected => new InChainKeySelected(CopyJwk(result.Members!)),
-                JwkSelectionOutcome.NoMatch => new InChainKeyMissed(),
-                var refused => new InChainKeySetRefused(refused)
+                { Outcome: JwkSelectionOutcome.Selected, Members: { } members } => new InChainKeySelected(CopyJwk(members)),
+                { Outcome: JwkSelectionOutcome.NoMatch } => new InChainKeyMissed(),
+                {
+                    Outcome: (JwkSelectionOutcome.MultipleKeysMatched
+                        or JwkSelectionOutcome.KeyIdRequired
+                        or JwkSelectionOutcome.MalformedDocument
+                        or JwkSelectionOutcome.PrivateOrSymmetricMemberPresent
+                        or JwkSelectionOutcome.RepeatedMemberName
+                        or JwkSelectionOutcome.UndecodableMember) and var refused
+                } => new InChainKeySetRefused(refused),
+                _ => throw new InvalidOperationException(
+                    $"The key selection answered {result.Outcome} without the members a selection carries, or an outcome it never answers.")
             };
         }
         finally

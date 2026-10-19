@@ -644,9 +644,11 @@ public static class PrivateKeyJwtClientAuthentication
                         //here that is exp plus the clock-skew tolerance Validate just accepted the
                         //assertion's timing under, not the bare exp, and to the clock's end where that
                         //window reaches past it.
+                        var expiration = result.Expiration
+                            ?? throw new InvalidOperationException("A client assertion the validation accepted carries the exp it was judged by.");
                         JtiReplayOutcome outcome = await checkJtiReplayAsync(
                             server, context, registration.TenantId, result.ClientId!, result.Jti!,
-                            ClientAssertionClaimRules.ReplayRecordRetentionOf(result.Expiration!, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
+                            ClientAssertionClaimRules.ReplayRecordRetentionOf(expiration, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
 
                         //Any outcome other than FirstUse refuses the assertion: Replayed is the
                         //defense doing its job, StoreUnavailable is a policy that cannot prove
@@ -690,7 +692,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// scheme is a different value and is refused; a differently cased host follows from the same
     /// ordinal comparison, which sees only code units and folds no case.
     /// </remarks>
-    private static bool IsIssuerIdentifierOnlyAudience(object audienceRaw, string issuerIdentifier)
+    private static bool IsIssuerIdentifierOnlyAudience(object? audienceRaw, string issuerIdentifier)
     {
         return audienceRaw switch
         {

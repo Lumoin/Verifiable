@@ -46,7 +46,7 @@ public sealed record ClientAssertionHeaderReading
     /// <param name="header">The header's members, or <see langword="null"/> where no header object was read.</param>
     /// <param name="algorithm">The algorithm the header names, or <see langword="null"/> for a refusal.</param>
     /// <param name="refusal">The rule refused, or <see langword="null"/> for a header read.</param>
-    private ClientAssertionHeaderReading(IReadOnlyDictionary<string, object>? header, string? algorithm, ClientAssertionHeaderRefusal? refusal)
+    private ClientAssertionHeaderReading(IReadOnlyDictionary<string, object?>? header, string? algorithm, ClientAssertionHeaderRefusal? refusal)
     {
         Header = header;
         Algorithm = algorithm;
@@ -59,7 +59,7 @@ public sealed record ClientAssertionHeaderReading
     /// JSON object, whatever rule then refused it, so a caller may record what a refused header named; <see langword="null"/> where
     /// the assertion is no compact JWS or its header no object.
     /// </summary>
-    public IReadOnlyDictionary<string, object>? Header { get; }
+    public IReadOnlyDictionary<string, object?>? Header { get; }
 
     /// <summary>The signature algorithm the header names, as it spells it; <see langword="null"/> for a refusal.</summary>
     public string? Algorithm { get; }
@@ -72,7 +72,7 @@ public sealed record ClientAssertionHeaderReading
     /// <param name="header">The header's members.</param>
     /// <param name="algorithm">The algorithm it names.</param>
     /// <returns>The reading.</returns>
-    public static ClientAssertionHeaderReading Read(IReadOnlyDictionary<string, object> header, string algorithm)
+    public static ClientAssertionHeaderReading Read(IReadOnlyDictionary<string, object?> header, string algorithm)
     {
         ArgumentNullException.ThrowIfNull(header);
         ArgumentException.ThrowIfNullOrEmpty(algorithm);
@@ -85,7 +85,7 @@ public sealed record ClientAssertionHeaderReading
     /// <param name="refusal">The rule.</param>
     /// <param name="header">The header's members where it was read as one JSON object before the rule refused it, or <see langword="null"/>.</param>
     /// <returns>The reading.</returns>
-    public static ClientAssertionHeaderReading Refused(ClientAssertionHeaderRefusal refusal, IReadOnlyDictionary<string, object>? header) =>
+    public static ClientAssertionHeaderReading Refused(ClientAssertionHeaderRefusal refusal, IReadOnlyDictionary<string, object?>? header) =>
         new(header, algorithm: null, refusal);
 }
 
@@ -218,7 +218,7 @@ public static class ClientAssertionHeaderRules
     /// </summary>
     /// <param name="header">The protected header's members.</param>
     /// <returns>The algorithm's name as the header spells it, or <see langword="null"/>.</returns>
-    private static string? SignatureAlgorithmNamedBy(IReadOnlyDictionary<string, object> header) =>
+    private static string? SignatureAlgorithmNamedBy(IReadOnlyDictionary<string, object?> header) =>
         header.TryGetValue(WellKnownJoseHeaderNames.Alg, out var value)
         && value is string { Length: > 0 } algorithm
         && !WellKnownJwaValues.IsNoneInAnyLetterCase(algorithm)
@@ -235,7 +235,7 @@ public static class ClientAssertionHeaderRules
     /// <param name="headerDeserializer">Reads the object's members.</param>
     /// <param name="pool">The pool the decoded segment is rented from.</param>
     /// <returns>The members, or <see langword="null"/>.</returns>
-    private static IReadOnlyDictionary<string, object>? ReadHeader(
+    private static IReadOnlyDictionary<string, object?>? ReadHeader(
         ReadOnlySpan<char> segment, DecodeDelegate base64UrlDecoder, JwtHeaderDeserializer headerDeserializer, BaseMemoryPool pool)
     {
         using var decoded = DecodedOrNull(segment, base64UrlDecoder, pool);

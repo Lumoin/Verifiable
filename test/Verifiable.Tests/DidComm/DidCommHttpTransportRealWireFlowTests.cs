@@ -72,7 +72,7 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
     /// <summary>Serializes a JWT header dictionary to UTF-8 JSON bytes for the anoncrypt envelope's protected header.</summary>
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
 

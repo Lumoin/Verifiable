@@ -55,11 +55,11 @@ internal sealed class CredentialProofKeyReferenceTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, JoseSerializationOptions);
+            (Dictionary<string, object?>)header, JoseSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, JoseSerializationOptions);
+            (Dictionary<string, object?>)payload, JoseSerializationOptions);
 
 
     /// <summary>
@@ -245,7 +245,7 @@ internal sealed class CredentialProofKeyReferenceTests
 
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(chain.LeafSigningKey.Tag);
 
-        Dictionary<string, object> header = new(StringComparer.Ordinal)
+        Dictionary<string, object?> header = new(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = Oid4VciProofIssuance.ProofJwtType,
@@ -262,7 +262,7 @@ internal sealed class CredentialProofKeyReferenceTests
     {
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivate.Tag);
 
-        Dictionary<string, object> header = new(StringComparer.Ordinal)
+        Dictionary<string, object?> header = new(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = Oid4VciProofIssuance.ProofJwtType,
@@ -274,9 +274,9 @@ internal sealed class CredentialProofKeyReferenceTests
 
 
     //Signs the supplied header with the §F.1 aud/nonce/iat payload and serializes the compact JWS.
-    private async Task<string> SignProofAsync(PrivateKeyMemory signingKey, Dictionary<string, object> header)
+    private async Task<string> SignProofAsync(PrivateKeyMemory signingKey, Dictionary<string, object?> header)
     {
-        Dictionary<string, object> payload = new(StringComparer.Ordinal)
+        Dictionary<string, object?> payload = new(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Aud] = Audience,
             [WellKnownJwtClaimNames.Nonce] = CredentialNonce,

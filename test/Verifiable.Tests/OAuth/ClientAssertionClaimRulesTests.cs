@@ -45,7 +45,7 @@ internal sealed class ClientAssertionClaimRulesTests
 
     /// <summary>Claims every rule accepts: the client as issuer and subject, the issuer as audience, a minute's lifetime and a jti.</summary>
     /// <returns>The claims, fresh for each row to change.</returns>
-    private static Dictionary<string, object> ValidClaims() => new(StringComparer.Ordinal)
+    private static Dictionary<string, object?> ValidClaims() => new(StringComparer.Ordinal)
     {
         [WellKnownJwtClaimNames.Iss] = ClientId,
         [WellKnownJwtClaimNames.Sub] = ClientId,
@@ -67,7 +67,8 @@ internal sealed class ClientAssertionClaimRulesTests
 
         Assert.IsTrue(judged.IsAccepted, judged.Refusal?.ToString());
         Assert.AreEqual("assertion-jti", judged.Jti);
-        Assert.AreEqual(0, judged.Expiry!.CompareTo(Now.AddMinutes(1)), "The exp is carried as written.");
+        Assert.IsNotNull(judged.Expiry, "An accepted assertion carries its exp.");
+        Assert.AreEqual(0, judged.Expiry.CompareTo(Now.AddMinutes(1)), "The exp is carried as written.");
         Assert.AreEqual(new ReplayRecordKeptUntil(Now.AddMinutes(1) + Skew), judged.Retention, "A minute's window ends within the clock.");
     }
 
@@ -455,14 +456,14 @@ internal sealed class ClientAssertionClaimRulesTests
     /// <summary>Reads the claims set of a compact value whose payload segment is the base64url of the JSON text given.</summary>
     /// <param name="payload">The payload's JSON text.</param>
     /// <returns>The claims, or <see langword="null"/>.</returns>
-    private static IReadOnlyDictionary<string, object>? ReadClaimsSet(string payload) =>
+    private static IReadOnlyDictionary<string, object?>? ReadClaimsSet(string payload) =>
         ClientAssertionClaimRules.ReadClaimsSet(
             $"eyJhbGciOiJIUzI1NiJ9.{TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payload))}.c2ln", TestSetup.Base64UrlDecoder, PayloadDeserializer, BaseMemoryPool.Shared);
 
 
     /// <summary>Reads a claims set.</summary>
     private static JwtPayloadDeserializer PayloadDeserializer { get; } =
-        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(bytes, TestSetup.DefaultSerializationOptions)
+        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("The payload parsed to null.");
 
     /// <summary>The value a row writes into a claim.</summary>

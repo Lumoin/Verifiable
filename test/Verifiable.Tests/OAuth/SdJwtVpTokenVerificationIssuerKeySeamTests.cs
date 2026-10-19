@@ -178,7 +178,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
         Assert.IsTrue(parsed.CredentialSignatureValid, "A chain reaching a configured trust anchor must resolve the issuer key and verify the credential signature.");
     }
@@ -233,7 +233,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
         Assert.IsFalse(parsed.CredentialSignatureValid, "A chain reaching no configured trust anchor must leave the credential signature unverified.");
     }
@@ -325,7 +325,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
         Assert.IsFalse(parsed.CredentialSignatureValid,
             "A JWK Set that publishes private material alongside the matching key must resolve no verification key.");
@@ -372,7 +372,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
         Assert.IsTrue(parsed.CredentialSignatureValid,
             "A JWK Set carrying only the clean, matching key must resolve it and verify the credential's signature.");
@@ -425,7 +425,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
         Assert.IsFalse(parsed.CredentialSignatureValid,
             "An unrelated element carrying private material must refuse the whole set, even though the requested kid matches only the clean key.");
@@ -700,7 +700,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
         Assert.AreEqual(expectAccepted, parsed.CredentialSignatureValid, context);
     }
@@ -852,7 +852,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             }
 
             byte[] headerBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
             EncodeDelegate encoder = DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk);
 
             string headerSegment = encoder(headerBytes);

@@ -83,7 +83,7 @@ internal sealed class StatusListTokenClaimsTests
         _ = Assert.IsInstanceOfType<long>(payload["exp"], "'exp' must be a whole number, not text.");
         _ = Assert.IsInstanceOfType<long>(payload["ttl"], "'ttl' must be a number, not text.");
 
-        var statusListClaim = (IReadOnlyDictionary<string, object>)payload["status_list"];
+        var statusListClaim = Assert.IsInstanceOfType<IReadOnlyDictionary<string, object?>>(payload["status_list"]);
         Assert.AreEqual(2L, statusListClaim["bits"], "'bits' must carry the number of bits per Referenced Token.");
         _ = Assert.IsInstanceOfType<long>(statusListClaim["bits"], "'bits' is a JSON Integer, not text.");
         Assert.AreEqual(Base64Url.EncodeToString(list.Compress()), statusListClaim["lst"], "'lst' MUST be the base64url-encoded compressed byte array.");
@@ -129,8 +129,8 @@ internal sealed class StatusListTokenClaimsTests
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
 
         JwtPayload payload = StatusListTokenClaims.ToPayload(token, TestSetup.Base64UrlEncoder);
-        var statusListClaim = (IReadOnlyDictionary<string, object>)payload["status_list"];
-        byte[] compressed = Base64Url.DecodeFromChars((string)statusListClaim["lst"]);
+        var statusListClaim = Assert.IsInstanceOfType<IReadOnlyDictionary<string, object?>>(payload["status_list"]);
+        var compressed = Base64Url.DecodeFromChars(Assert.IsInstanceOfType<string>(statusListClaim["lst"]));
         byte[] decompressed = Decompressed(compressed);
 
         Assert.AreEqual(0x01, decompressed[0], "Index 0 must occupy bit 0 (the least significant bit) of the first byte.");
@@ -174,7 +174,7 @@ internal sealed class StatusListTokenClaimsTests
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
 
         JwtPayload payload = StatusListTokenClaims.ToPayload(token, TestSetup.Base64UrlEncoder);
-        var statusListClaim = (IReadOnlyDictionary<string, object>)payload["status_list"];
+        var statusListClaim = Assert.IsInstanceOfType<IReadOnlyDictionary<string, object?>>(payload["status_list"]);
 
         Assert.AreEqual(StatusListTestConstants.ExampleAggregationUri, statusListClaim["aggregation_uri"], "An aggregation URI must be written inside the Status List object.");
         Assert.HasCount(3, statusListClaim, "The Status List object carries 'bits', 'lst' and the optional 'aggregation_uri'.");
@@ -242,7 +242,7 @@ internal sealed class StatusListTokenClaimsTests
         payload["iat"] = Boxed(SmallIssuedAtSeconds, family);
         payload["exp"] = Boxed(SmallExpirationSeconds, family);
         payload["ttl"] = Boxed(SmallTimeToLiveSeconds, family);
-        ((Dictionary<string, object>)payload["status_list"])["bits"] = Boxed(1L, family);
+        Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["status_list"])["bits"] = Boxed(1L, family);
 
         bool isRead = StatusListTokenClaims.TryFromPayload(payload, TestSetup.Base64UrlDecoder, Pool, out StatusListToken? decoded, out string? reason, out _);
 
@@ -319,7 +319,7 @@ internal sealed class StatusListTokenClaimsTests
     public void TryFromPayloadRefusesAFractionalBitsMember()
     {
         JwtPayload payload = HandBuiltClaimsSet();
-        ((Dictionary<string, object>)payload["status_list"])["bits"] = 1.5m;
+        Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["status_list"])["bits"] = 1.5m;
 
         bool isRead = StatusListTokenClaims.TryFromPayload(payload, TestSetup.Base64UrlDecoder, Pool, out StatusListToken? decoded, out string? reason, out _);
 
@@ -354,8 +354,8 @@ internal sealed class StatusListTokenClaimsTests
     public void TryFromPayloadRefusesAMissingOrWronglyTypedRequiredClaim(string claimName, string shape)
     {
         JwtPayload payload = HandBuiltClaimsSet();
-        IDictionary<string, object> claims = claimName is "bits" or "lst"
-            ? (Dictionary<string, object>)payload["status_list"]
+        IDictionary<string, object?> claims = claimName is "bits" or "lst"
+            ? Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["status_list"])
             : payload;
 
         _ = shape switch
@@ -419,7 +419,7 @@ internal sealed class StatusListTokenClaimsTests
     public void TryFromPayloadRefusesABitsValueOutsideTheAllowedSet(long bits)
     {
         JwtPayload payload = HandBuiltClaimsSet();
-        ((Dictionary<string, object>)payload["status_list"])["bits"] = bits;
+        Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["status_list"])["bits"] = bits;
 
         bool isRead = StatusListTokenClaims.TryFromPayload(payload, TestSetup.Base64UrlDecoder, Pool, out StatusListToken? decoded, out string? reason, out _);
 
@@ -576,7 +576,7 @@ internal sealed class StatusListTokenClaimsTests
     public void TryFromPayloadRefusesAListThatInflatesPastTheDefaultCeiling()
     {
         JwtPayload payload = HandBuiltClaimsSet();
-        ((Dictionary<string, object>)payload["status_list"])["lst"] = Base64Url.EncodeToString(CompressedZeros(StatusListType.DefaultMaxDecompressedByteCount + 1024));
+        Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["status_list"])["lst"] = Base64Url.EncodeToString(CompressedZeros(StatusListType.DefaultMaxDecompressedByteCount + 1024));
 
         bool isRead = StatusListTokenClaims.TryFromPayload(payload, TestSetup.Base64UrlDecoder, Pool, out StatusListToken? decoded, out string? reason, out _);
 
@@ -670,14 +670,14 @@ internal sealed class StatusListTokenClaimsTests
         }
 
         JwtPayload payload = HandBuiltClaimsSet();
-        var statusListClaim = (Dictionary<string, object>)payload["status_list"];
+        var statusListClaim = Assert.IsInstanceOfType<Dictionary<string, object?>>(payload["status_list"]);
 
         _ = shape switch
         {
             "subject-is-a-number" => Replaced(payload, "sub", 42L),
             "issued-at-is-text" => Replaced(payload, "iat", "1686920170"),
             "status-list-is-text" => Replaced(payload, "status_list", "eNrbuRgAAhcBXQ"),
-            "status-list-is-empty" => Replaced(payload, "status_list", new Dictionary<string, object>()),
+            "status-list-is-empty" => Replaced(payload, "status_list", new Dictionary<string, object?>()),
             "expiry-is-text" => Replaced(payload, "exp", "2291720170"),
             "time-to-live-is-text" => Replaced(payload, "ttl", "43200"),
             "list-is-empty" => Replaced(statusListClaim, "lst", string.Empty),
@@ -720,7 +720,7 @@ internal sealed class StatusListTokenClaimsTests
     /// <param name="name">The member to replace.</param>
     /// <param name="value">The replacement value.</param>
     /// <returns>Always <see langword="true"/>.</returns>
-    private static bool Replaced(IDictionary<string, object> claims, string name, object value)
+    private static bool Replaced(IDictionary<string, object?> claims, string name, object? value)
     {
         claims[name] = value;
 

@@ -15,4 +15,4 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </remarks>
 /// <param name="jsonBytes">The UTF-8 JSON bytes to deserialise.</param>
 /// <returns>The parsed property dictionary.</returns>
-public delegate IReadOnlyDictionary<string, object> JarDictionaryDeserializer(ReadOnlySpan<byte> jsonBytes);
+public delegate IReadOnlyDictionary<string, object?> JarDictionaryDeserializer(ReadOnlySpan<byte> jsonBytes);

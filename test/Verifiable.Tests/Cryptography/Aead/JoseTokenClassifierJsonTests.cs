@@ -26,10 +26,10 @@ internal sealed class JoseTokenClassifierJsonTests
     public TestContext TestContext { get; set; } = null!;
 
 
-    private static Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> HeaderDeserializer
+    private static Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> HeaderDeserializer
     {
         get;
-    } = static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(
+    } = static bytes => JsonSerializer.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Header JSON parsed to null.");
 

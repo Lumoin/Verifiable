@@ -57,11 +57,11 @@ internal sealed class CredentialProofValidatorTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, JoseSerializationOptions);
+            (Dictionary<string, object?>)header, JoseSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, JoseSerializationOptions);
+            (Dictionary<string, object?>)payload, JoseSerializationOptions);
 
 
     /// <summary>
@@ -240,8 +240,8 @@ internal sealed class CredentialProofValidatorTests
         string proof = await MintTamperedAsync(holderPrivate, holderPublic,
             tamperHeader: h =>
             {
-                var jwk = new Dictionary<string, object>(
-                    (Dictionary<string, object>)h[Oid4VciCredentialParameterNames.Jwk], StringComparer.Ordinal)
+                var jwk = new Dictionary<string, object?>(
+                    Assert.IsInstanceOfType<Dictionary<string, object?>>(h[Oid4VciCredentialParameterNames.Jwk]), StringComparer.Ordinal)
                 {
                     [WellKnownJwkMemberNames.D] = "cHJpdmF0ZS1zY2FsYXI"
                 };
@@ -529,8 +529,8 @@ internal sealed class CredentialProofValidatorTests
     public async Task AProofWhoseIatIsNoNumericDateIsRefusedAsMalformed(string iat)
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        using PublicKeyMemory holderPublic = keys.PublicKey;
-        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+        using var holderPublic = keys.PublicKey;
+        using var holderPrivate = keys.PrivateKey;
 
         var proof = await SignRawAsync(
             holderPrivate,
@@ -553,8 +553,8 @@ internal sealed class CredentialProofValidatorTests
     public async Task AProofOmittingItsIatIsOutOfWindowAndOneCarryingANumericDateValidates()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        using PublicKeyMemory holderPublic = keys.PublicKey;
-        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+        using var holderPublic = keys.PublicKey;
+        using var holderPrivate = keys.PrivateKey;
         var header = RawProofHeaderJson(holderPrivate, holderPublic);
         var writtenIat = NowInstant.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + ".25";
 
@@ -575,7 +575,7 @@ internal sealed class CredentialProofValidatorTests
 
         Assert.AreEqual(CredentialProofValidationFailureReason.IatOutOfWindow, omittedResult.FailureReason);
         Assert.IsTrue(carriedResult.IsValid, $"A NumericDate iat within the window validates; got {carriedResult.FailureReason}.");
-        Assert.AreEqual(writtenIat, carriedResult.IssuedAt!.ToString());
+        Assert.AreEqual(writtenIat, carriedResult.IssuedAt?.ToString());
     }
 
 
@@ -639,8 +639,8 @@ internal sealed class CredentialProofValidatorTests
     private async Task<string> MintTamperedAsync(
         PrivateKeyMemory holderPrivate,
         PublicKeyMemory holderPublic,
-        Action<Dictionary<string, object>>? tamperHeader = null,
-        Action<Dictionary<string, object>>? tamperPayload = null)
+        Action<Dictionary<string, object?>>? tamperHeader = null,
+        Action<Dictionary<string, object?>>? tamperPayload = null)
     {
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivate.Tag);
         JsonWebKey jwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
@@ -649,7 +649,7 @@ internal sealed class CredentialProofValidatorTests
             holderPublic.AsReadOnlySpan(),
             TestSetup.Base64UrlEncoder);
 
-        Dictionary<string, object> header = new(StringComparer.Ordinal)
+        Dictionary<string, object?> header = new(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = Oid4VciProofIssuance.ProofJwtType,
@@ -662,7 +662,7 @@ internal sealed class CredentialProofValidatorTests
             }
         };
 
-        Dictionary<string, object> payload = new(StringComparer.Ordinal)
+        Dictionary<string, object?> payload = new(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Aud] = Audience,
             [WellKnownJwtClaimNames.Nonce] = CredentialNonce,

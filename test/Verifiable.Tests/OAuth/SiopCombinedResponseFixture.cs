@@ -43,13 +43,13 @@ internal static class SiopCombinedResponseFixture
     /// <summary>Serializes a JWT header for the Self-Issued ID Token and the key-binding JWT.</summary>
     public static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serializes a JWT payload for the Self-Issued ID Token and the key-binding JWT.</summary>
     public static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
 
@@ -130,6 +130,68 @@ internal static class SiopCombinedResponseFixture
         string keyBindingAudience,
         TimeProvider timeProvider,
         BaseMemoryPool pool,
+        CancellationToken cancellationToken) =>
+        await PostCombinedResponseOfAsync(
+            host,
+            nonce,
+            presentationCancellation => PresentWithKeyBindingAsync(
+                serializedSdJwt, holderPrivateKey, nonce, keyBindingAudience, timeProvider, pool, presentationCancellation),
+            timeProvider,
+            pool,
+            cancellationToken).ConfigureAwait(false);
+
+
+    /// <summary>
+    /// The combined response of <see cref="PostCombinedResponseAsync"/> whose presentation's Key Binding JWT the Wallet writes by
+    /// hand and signs once, bound to the request's <c>nonce</c> and the relying party's Client ID, its <c>iat</c> the one
+    /// <paramref name="keyBindingIssuedAt"/> states or none, through <see cref="SdJwtVpFixture.PresentWithWrittenKeyBindingAsync"/>.
+    /// </summary>
+    /// <param name="host">The hosted relying party.</param>
+    /// <param name="serializedSdJwt">The stored credential the wallet presents.</param>
+    /// <param name="holderPrivateKey">The holder key the credential's <c>cnf</c> binds to.</param>
+    /// <param name="nonce">The nonce the relying party provides and both artifacts are bound to.</param>
+    /// <param name="keyBindingIssuedAt">The KB-JWT's <c>iat</c>, or <see langword="null"/> for a KB-JWT that omits the claim.</param>
+    /// <param name="timeProvider">The clock the ID Token reads its timestamps from.</param>
+    /// <param name="pool">The pool the transaction rents transient buffers from.</param>
+    /// <param name="cancellationToken">Cancels the transaction.</param>
+    /// <returns>The endpoint's response and the relying party's terminal flow state.</returns>
+    public static async Task<(ServerHttpResponse Response, FlowState State)> PostCombinedResponseWithKeyBindingIssuedAtAsync(
+        TestHostShell host,
+        string serializedSdJwt,
+        PrivateKeyMemory holderPrivateKey,
+        string nonce,
+        DateTimeOffset? keyBindingIssuedAt,
+        TimeProvider timeProvider,
+        BaseMemoryPool pool,
+        CancellationToken cancellationToken) =>
+        await PostCombinedResponseOfAsync(
+            host,
+            nonce,
+            presentationCancellation => SdJwtVpFixture.PresentWithWrittenKeyBindingAsync(
+                serializedSdJwt, holderPrivateKey, nonce, RelyingPartyClientId, keyBindingIssuedAt, pool, presentationCancellation),
+            timeProvider,
+            pool,
+            cancellationToken).ConfigureAwait(false);
+
+
+    /// <summary>
+    /// Registers the relying party, prepares the transaction, mints the ID Token, has <paramref name="present"/> write the
+    /// key-bound presentation, POSTs both plus <c>state</c> to the response endpoint and answers the endpoint's response with the
+    /// verifier's terminal flow state.
+    /// </summary>
+    /// <param name="host">The hosted relying party.</param>
+    /// <param name="nonce">The nonce the relying party provides and both artifacts are bound to.</param>
+    /// <param name="present">Writes the key-bound presentation the <c>vp_token</c> carries.</param>
+    /// <param name="timeProvider">The clock the ID Token reads its timestamps from.</param>
+    /// <param name="pool">The pool the transaction rents transient buffers from.</param>
+    /// <param name="cancellationToken">Cancels the transaction.</param>
+    /// <returns>The endpoint's response and the relying party's terminal flow state.</returns>
+    private static async Task<(ServerHttpResponse Response, FlowState State)> PostCombinedResponseOfAsync(
+        TestHostShell host,
+        string nonce,
+        Func<CancellationToken, ValueTask<string>> present,
+        TimeProvider timeProvider,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
@@ -142,9 +204,7 @@ internal static class SiopCombinedResponseFixture
 
         string idToken = await IssueSelfIssuedIdTokenAsync(
             nonce, timeProvider, pool, cancellationToken).ConfigureAwait(false);
-        string vpToken = await PresentWithKeyBindingAsync(
-            serializedSdJwt, holderPrivateKey, nonce, keyBindingAudience,
-            timeProvider, pool, cancellationToken).ConfigureAwait(false);
+        var vpToken = await present(cancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             tenant,

@@ -63,7 +63,7 @@ internal sealed class DidCommSocketSessionTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static DidResolver NestedSignerResolver { get; } = new(DidMethodSelectors.FromResolvers(

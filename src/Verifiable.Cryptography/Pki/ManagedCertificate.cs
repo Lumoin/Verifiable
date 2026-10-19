@@ -31,6 +31,26 @@ internal sealed class ManagedCertificate
     private const string SubjectKeyIdentifierOid = WellKnownOids.SubjectKeyIdentifierExtension;
 
 
+    /// <summary>Creates the parse of a certificate from the fields <see cref="Parse"/> read.</summary>
+    /// <param name="encoded">The full DER encoding.</param>
+    /// <param name="tbsCertificateDer">The raw DER encoding of the <c>tbsCertificate</c>.</param>
+    /// <param name="issuerDer">The issuer name as raw DER.</param>
+    /// <param name="serialNumber">The serial number's INTEGER content bytes.</param>
+    /// <param name="subjectDer">The subject name as raw DER.</param>
+    /// <param name="notBefore">The <c>notBefore</c> instant.</param>
+    /// <param name="notAfter">The <c>notAfter</c> instant.</param>
+    /// <param name="subjectPublicKeyAlgorithmOid">The subject public key's algorithm identifier.</param>
+    /// <param name="ellipticCurve">The elliptic curve of the subject public key, or none.</param>
+    /// <param name="publicPoint">The uncompressed point of an elliptic-curve key, or empty.</param>
+    /// <param name="rsaModulus">The modulus of an RSA key, or empty.</param>
+    /// <param name="rsaExponent">The public exponent of an RSA key, or empty.</param>
+    /// <param name="mlDsaAlgorithmOid">The ML-DSA parameter-set identifier, or the empty string.</param>
+    /// <param name="mlDsaPublicKey">The raw ML-DSA public key, or empty.</param>
+    /// <param name="subjectPublicKeyBitStringContent">The <c>subjectPublicKey</c> BIT STRING content bytes.</param>
+    /// <param name="subjectKeyIdentifier">The subject key identifier, or empty.</param>
+    /// <param name="extendedKeyUsageOids">The ExtendedKeyUsage key purpose identifiers.</param>
+    /// <param name="signatureAlgorithmOid">The certificate's own signature algorithm identifier.</param>
+    /// <param name="signatureValue">The certificate's own signature value.</param>
     private ManagedCertificate(
         ReadOnlyMemory<byte> encoded,
         ReadOnlyMemory<byte> tbsCertificateDer,
@@ -39,6 +59,7 @@ internal sealed class ManagedCertificate
         ReadOnlyMemory<byte> subjectDer,
         DateTimeOffset notBefore,
         DateTimeOffset notAfter,
+        string subjectPublicKeyAlgorithmOid,
         EllipticCurveTypes ellipticCurve,
         ReadOnlyMemory<byte> publicPoint,
         ReadOnlyMemory<byte> rsaModulus,
@@ -58,6 +79,7 @@ internal sealed class ManagedCertificate
         SubjectDer = subjectDer;
         NotBefore = notBefore;
         NotAfter = notAfter;
+        SubjectPublicKeyAlgorithmOid = subjectPublicKeyAlgorithmOid;
         EllipticCurve = ellipticCurve;
         PublicPoint = publicPoint;
         RsaModulus = rsaModulus;
@@ -92,6 +114,12 @@ internal sealed class ManagedCertificate
 
     /// <summary>Gets the <c>notAfter</c> validity instant (RFC 5280 §4.1.2.5).</summary>
     public DateTimeOffset NotAfter { get; }
+
+    /// <summary>
+    /// Gets the object identifier of the subject public key's algorithm (RFC 5280 §4.1.2.7, the <c>SubjectPublicKeyInfo</c>'s
+    /// <c>AlgorithmIdentifier</c>), whatever the key algorithm, recognised by this parse or not.
+    /// </summary>
+    public string SubjectPublicKeyAlgorithmOid { get; }
 
     /// <summary>Gets the elliptic curve of the subject public key, or <see cref="EllipticCurveTypes.None"/> when the key is not a recognised elliptic-curve key.</summary>
     public EllipticCurveTypes EllipticCurve { get; }
@@ -224,7 +252,7 @@ internal sealed class ManagedCertificate
 
         return new ManagedCertificate(
             encoded, tbsCertificateDer, issuer, serialNumber, subject, notBefore, notAfter,
-            publicKey.Curve, publicKey.Point, publicKey.RsaModulus, publicKey.RsaExponent,
+            publicKey.AlgorithmOid, publicKey.Curve, publicKey.Point, publicKey.RsaModulus, publicKey.RsaExponent,
             publicKey.MlDsaAlgorithmOid, publicKey.MlDsaPublicKey, publicKey.RawBitStringContent,
             subjectKeyIdentifier, extendedKeyUsageOids, signatureAlgorithmOid, signatureValue);
     }
@@ -317,7 +345,7 @@ internal sealed class ManagedCertificate
             string curveOid = algorithm.ReadObjectIdentifier();
             byte[] point = subjectPublicKeyInfo.ReadBitString(out _);
 
-            return new ParsedPublicKey(CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, point);
+            return new ParsedPublicKey(algorithmOid, CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, point);
         }
 
         if(string.Equals(algorithmOid, RsaEncryptionOid, StringComparison.Ordinal))
@@ -326,7 +354,7 @@ internal sealed class ManagedCertificate
             byte[] rsaPublicKey = subjectPublicKeyInfo.ReadBitString(out _);
             (byte[] modulus, byte[] exponent) = RsaPublicKeyEncoding.Decode(rsaPublicKey);
 
-            return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent, string.Empty, ReadOnlyMemory<byte>.Empty, rsaPublicKey);
+            return new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent, string.Empty, ReadOnlyMemory<byte>.Empty, rsaPublicKey);
         }
 
         if(IsMlDsaOid(algorithmOid))
@@ -335,12 +363,12 @@ internal sealed class ManagedCertificate
             //with absent AlgorithmIdentifier parameters; the identifier itself pins the parameter set.
             byte[] mlDsaPublicKey = subjectPublicKeyInfo.ReadBitString(out _);
 
-            return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, algorithmOid, mlDsaPublicKey, mlDsaPublicKey);
+            return new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, algorithmOid, mlDsaPublicKey, mlDsaPublicKey);
         }
 
         byte[] unrecognisedKeyBits = subjectPublicKeyInfo.ReadBitString(out _);
 
-        return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, unrecognisedKeyBits);
+        return new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, unrecognisedKeyBits);
     }
 
 
@@ -435,8 +463,17 @@ internal sealed class ManagedCertificate
     };
 
 
-    /// <summary>A parsed subject public key: an elliptic-curve point, RSA modulus and exponent, or an ML-DSA parameter-set identifier and raw key, plus the raw BIT STRING content.</summary>
+    /// <summary>A parsed subject public key: its algorithm identifier, an elliptic-curve point, RSA modulus and exponent, or an ML-DSA parameter-set identifier and raw key, plus the raw BIT STRING content.</summary>
+    /// <param name="AlgorithmOid">The key's algorithm identifier.</param>
+    /// <param name="Curve">The elliptic curve, or none.</param>
+    /// <param name="Point">The uncompressed point, or empty.</param>
+    /// <param name="RsaModulus">The RSA modulus, or empty.</param>
+    /// <param name="RsaExponent">The RSA public exponent, or empty.</param>
+    /// <param name="MlDsaAlgorithmOid">The ML-DSA parameter-set identifier, or the empty string.</param>
+    /// <param name="MlDsaPublicKey">The raw ML-DSA public key, or empty.</param>
+    /// <param name="RawBitStringContent">The BIT STRING content bytes.</param>
     private readonly record struct ParsedPublicKey(
+        string AlgorithmOid,
         EllipticCurveTypes Curve,
         ReadOnlyMemory<byte> Point,
         ReadOnlyMemory<byte> RsaModulus,

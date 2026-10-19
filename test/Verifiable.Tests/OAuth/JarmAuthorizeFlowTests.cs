@@ -47,7 +47,7 @@ internal sealed class JarmAuthorizeFlowTests
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization);
 
     private static JwtPayloadDeserializer PayloadDeserializer { get; } =
-        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(
             bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("Payload JSON parsed to null.");
 

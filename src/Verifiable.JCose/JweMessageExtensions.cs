@@ -106,6 +106,14 @@ public static class JweMessageExtensions
         ArgumentNullException.ThrowIfNull(aeadEncryptDelegate);
         ArgumentNullException.ThrowIfNull(pool);
 
+        //RFC 7516 section 4.1.2: the content encryption algorithm is a string header parameter; a header member held
+        //with no value or with another kind names no algorithm to encrypt with.
+        if(!unencryptedJwe.Header.TryGetValue(WellKnownJoseHeaderNames.Enc, out object? encryptionAlgorithmValue)
+            || encryptionAlgorithmValue is not string encryptionAlgorithm)
+        {
+            throw new ArgumentException("The header must carry the enc parameter as a string.", nameof(unencryptedJwe));
+        }
+
         //Step 1: ECDH key agreement — may be a remote TPM/HSM call.
         using EphemeralKeyAgreementResult agreement = await agreementDelegate(
             recipientPublicKey, pool, cancellationToken).ConfigureAwait(false);
@@ -163,7 +171,6 @@ public static class JweMessageExtensions
         using AdditionalData aad = new(aadRawOwner, CryptoTags.AesGcmAad);
 
         //Step 3: Key derivation — pure software math, synchronous.
-        string encryptionAlgorithm = (string)unencryptedJwe.Header[WellKnownJoseHeaderNames.Enc];
         int keydataLenBits = WellKnownJweEncryptionAlgorithms.IsA128Gcm(encryptionAlgorithm) ? 128 : 256;
 
         using ContentEncryptionKey cek = keyDerivationDelegate(

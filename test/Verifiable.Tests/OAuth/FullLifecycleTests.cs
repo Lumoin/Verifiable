@@ -72,12 +72,12 @@ internal sealed class FullLifecycleTests
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer PayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 
 
@@ -266,7 +266,7 @@ internal sealed class FullLifecycleTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectRead();
 
         Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify at the verifier.");
         Assert.IsTrue(parsed.KbJwtSignatureValid, "The KB-JWT must verify against the cnf key the ISSUER bound.");

@@ -34,6 +34,12 @@ internal sealed class DpopProofPartReadingTests
     /// <summary>An embedded key every refusal row of the header carries where its own defect is elsewhere.</summary>
     private static string EmbeddedKey { get; } = Key();
 
+    /// <summary>A real DER certificate whose subject public key is the embedded key the rows carry (RFC 7517 section 4.7).</summary>
+    private static string CertificateOfTheKey { get; } = JwkCertificateFixtures.CertificateOfP256Key(KeyX, KeyY, IssuedAt);
+
+    /// <summary>A real DER certificate whose subject public key is another key than the embedded key the rows carry.</summary>
+    private static string CertificateOfAnotherKey { get; } = JwkCertificateFixtures.CertificateOfAnotherP256Key(IssuedAt);
+
     /// <summary>
     /// The header refusal rows: the header's JSON text, the member the refusal names, its name and the defect - RFC 9449 section
     /// 4.2 for the header's members, RFC 7517 section 4 and RFC 7518 section 6 for the embedded key's.
@@ -55,7 +61,17 @@ internal sealed class DpopProofPartReadingTests
         [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",7]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.NotAnArrayOfStrings],
         [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, "[]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
         [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, "[\"_-_-\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
-        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Ext, "\"true\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Ext, DpopProofMemberDefect.NotABoolean]
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Ext, "\"true\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Ext, DpopProofMemberDefect.NotABoolean],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Oth, $"[{Header(Member("r", Quoted("AQ")), Member("d", Quoted("AQ")), Member("t", Quoted("AQ")))}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Oth, DpopProofMemberDefect.PrivateKeyMaterial],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Oth, "\"AQ\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Oth, DpopProofMemberDefect.PrivateKeyMaterial],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.RepeatedKeyOperation],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseEnc)), Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"sign\",\"encrypt\"]"), Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseSig))))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Use, Quoted("x-attestation")), Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.KeyOperationsInconsistentWithUse],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted("MIIBkTCB+wIJAOfv")}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfTheKey)},{Quoted("AAECAw==")}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfAnotherKey)}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.CertificateNotOfTheKey],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfAnotherKey)},{Quoted(CertificateOfTheKey)}]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.CertificateNotOfTheKey]
     ];
 
 
@@ -116,16 +132,18 @@ internal sealed class DpopProofPartReadingTests
 
     /// <summary>
     /// RFC 7517 section 4 and the Web Cryptography API's <c>JsonWebKey</c> dictionary: a key carrying <c>key_ops</c> as an array
-    /// of strings, <c>x5c</c> as an array of base64-encoded certificates, <c>ext</c> as a Boolean and a member no rule names reads,
-    /// each judged by its own rule; the key's members defined as strings are the ones it is read as, and the member no rule names
-    /// is ignored.
+    /// of distinct operations consistent with its <c>use</c> (section 4.3), <c>x5c</c> as a chain of DER certificates whose first
+    /// certificate's key is the key itself (section 4.7) - a real certificate the row builds for the key, then a second for
+    /// another key the chain may carry after it - <c>ext</c> as a Boolean and a member no rule names reads, each judged by its own
+    /// rule; the key's members defined as strings are the ones it is read as, and the member no rule names is ignored.
     /// </summary>
     [TestMethod]
     public void AKeyCarryingKeyOperationsACertificateChainAnExtractableFlagAndAnUnknownMemberReads()
     {
         var key = Key(
             Member(WellKnownJwkMemberNames.KeyOps, $"[{Quoted("verify")}]"),
-            Member(WellKnownJwkMemberNames.X5c, $"[{Quoted("MIIBkTCB+wIJAOfv")}]"),
+            Member(WellKnownJwkMemberNames.Use, Quoted(WellKnownJwkValues.UseSig)),
+            Member(WellKnownJwkMemberNames.X5c, $"[{Quoted(CertificateOfTheKey)},{Quoted(CertificateOfAnotherKey)}]"),
             Member(WellKnownJwkMemberNames.Ext, "true"),
             Member(WellKnownJwkMemberNames.Kid, Quoted("proof-key")),
             Member("x-deployment", /*lang=json,strict*/ "{\"region\":[1,null]}"));
@@ -135,7 +153,7 @@ internal sealed class DpopProofPartReadingTests
         Assert.IsNotNull(read, "A key whose members keep their rules reads.");
         Assert.AreEqual(WellKnownKeyTypeValues.Ec, read.Part.Jwk[WellKnownJwkMemberNames.Kty]);
         Assert.AreEqual("proof-key", read.Part.Jwk[WellKnownJwkMemberNames.Kid]);
-        Assert.HasCount(5, read.Part.Jwk, "The key holds its string members: kty, crv, x, y and kid.");
+        Assert.HasCount(6, read.Part.Jwk, "The key holds its string members: kty, crv, x, y, use and kid.");
         Assert.IsFalse(read.Part.Jwk.ContainsKey("x-deployment"), "A member no rule names is ignored.");
     }
 
@@ -339,6 +357,31 @@ internal sealed class DpopProofPartReadingTests
             Member(WellKnownJwkMemberNames.Y, Quoted(KeyY)),
             .. members
         ]);
+
+
+    /// <summary>
+    /// A member refusal names the segment and the object of the proof its member is carried in (RFC 9449 section 4.2): every
+    /// member the reading knows is placed, the header's and the embedded key's in the protected header, the claims set's in the
+    /// payload, the two placements agreeing. A member the reading does not know is refused when the refusal is constructed, never
+    /// placed among the claims.
+    /// </summary>
+    [TestMethod]
+    public void ARefusalIsConstructedOnlyForAMemberTheReadingKnows()
+    {
+        foreach(var member in Enum.GetValues<DpopProofMember>())
+        {
+            var refusal = new DpopProofMemberRefusal(member, member.ToString(), new JsonMemberAbsent(), DpopProofMemberDefect.Absent);
+            var expectedPart = refusal.Place is DpopProofPartPlace.Claims ? JwsPart.Payload : JwsPart.ProtectedHeader;
+
+            Assert.AreEqual(expectedPart, refusal.Part, member.ToString());
+        }
+
+        var undefinedMember = (DpopProofMember)99;
+        var fault = Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+            () => new DpopProofMemberRefusal(undefinedMember, "unknown", new JsonMemberAbsent(), DpopProofMemberDefect.Absent));
+
+        Assert.AreEqual("member", fault.ParamName);
+    }
 
 
     /// <summary>The embedded EC key every row carries, the member of the name given carrying the value given in place of its own.</summary>

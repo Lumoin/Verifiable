@@ -183,8 +183,8 @@ public static class JAdESMessageJson
     //(JAdESProtectedHeaderJson.Decode) over the raw bytes UnverifiedJwsSignature.Protected carries, not this
     //generic dictionary -- an empty result keeps JwsParsing.ParseCompact's own contract satisfied without
     //re-introducing the DateTime-sniff hazard this file's remarks describe.
-    private static IReadOnlyDictionary<string, object> InertHeaderDeserializer(ReadOnlySpan<byte> headerJson) =>
-        new Dictionary<string, object>();
+    private static IReadOnlyDictionary<string, object?> InertHeaderDeserializer(ReadOnlySpan<byte> headerJson) =>
+        new Dictionary<string, object?>();
 
 
     //KeyNotFoundException/InvalidOperationException/OverflowException join JsonException/FormatException/

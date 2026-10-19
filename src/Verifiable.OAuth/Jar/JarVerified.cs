@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Jar;
 [DebuggerDisplay("JarVerified Exp={Exp}")]
 public sealed record JarVerified(
     UnverifiedJwtHeader ProtectedHeader,
-    IReadOnlyDictionary<string, object> Claims,
+    IReadOnlyDictionary<string, object?> Claims,
     NumericDate Iat,
     NumericDate Nbf,
     NumericDate Exp) : JarVerificationResult;

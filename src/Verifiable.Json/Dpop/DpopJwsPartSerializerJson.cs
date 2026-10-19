@@ -56,9 +56,9 @@ public static class DpopJwsPartSerializerJson
     /// </summary>
     /// <param name="header">The proof header to project.</param>
     /// <returns>The header as an ordinal property dictionary.</returns>
-    private static Dictionary<string, object> SerializeHeader(DpopProofHeader header)
+    private static Dictionary<string, object?> SerializeHeader(DpopProofHeader header)
     {
-        return new Dictionary<string, object>(StringComparer.Ordinal)
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = header.Alg,
             [WellKnownJoseHeaderNames.Typ] = header.Typ,
@@ -74,9 +74,9 @@ public static class DpopJwsPartSerializerJson
     /// </summary>
     /// <param name="claims">The proof claims to project.</param>
     /// <returns>The claims as an ordinal property dictionary; an absent conditional claim is omitted.</returns>
-    private static Dictionary<string, object> SerializePayload(DpopProofClaims claims)
+    private static Dictionary<string, object?> SerializePayload(DpopProofClaims claims)
     {
-        Dictionary<string, object> dictionary = new(StringComparer.Ordinal)
+        Dictionary<string, object?> dictionary = new(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Htm] = claims.Htm,
             [WellKnownJwtClaimNames.Htu] = claims.Htu,
@@ -106,11 +106,11 @@ public static class DpopJwsPartSerializerJson
     /// </summary>
     /// <param name="part">The header or payload dictionary to encode.</param>
     /// <returns>The UTF-8 JSON bytes of <paramref name="part"/>.</returns>
-    private static TaggedMemory<byte> EncodePart(IReadOnlyDictionary<string, object> part)
+    private static TaggedMemory<byte> EncodePart(IReadOnlyDictionary<string, object?> part)
     {
-        Dictionary<string, object> dictionary = part is Dictionary<string, object> existing
+        var dictionary = part is Dictionary<string, object?> existing
             ? existing
-            : new Dictionary<string, object>(part, StringComparer.Ordinal);
+            : new Dictionary<string, object?>(part, StringComparer.Ordinal);
 
         byte[] bytes = JsonSerializerExtensions.SerializeToUtf8Bytes(dictionary, Options);
 

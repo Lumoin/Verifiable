@@ -359,8 +359,8 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         var payload = new JwtPayload { [WellKnownJwtClaimNames.Iss] = "did:example:fixture-prior" };
         var unsigned = new UnsignedJwt(header, payload);
 
-        static ReadOnlySpan<byte> headerSerializer(JwtHeader h) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object>)h, TestSetup.DefaultSerializationOptions));
-        static ReadOnlySpan<byte> payloadSerializer(JwtPayload p) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object>)p, TestSetup.DefaultSerializationOptions));
+        static ReadOnlySpan<byte> headerSerializer(JwtHeader h) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object?>)h, TestSetup.DefaultSerializationOptions));
+        static ReadOnlySpan<byte> payloadSerializer(JwtPayload p) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object?>)p, TestSetup.DefaultSerializationOptions));
 
         var observed = new List<CryptoEvent>();
 

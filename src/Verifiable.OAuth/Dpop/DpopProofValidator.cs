@@ -276,23 +276,44 @@ public static class DpopProofValidator
     /// <summary>
     /// The coarse category a part's refusal is answered under, decided from the reading's typed refusal: a header carrying no
     /// <c>typ</c> is the proof the typ check names (RFC 9449 section 4.3 check 4), as it names one whose typ is another type; an
-    /// embedded key carrying private or symmetric material is no public key (section 4.2); every other refusal is a proof that is
-    /// not well formed (check 2).
+    /// embedded key carrying private or symmetric material is no public key (section 4.2); the JSON reader's refusal of a part's
+    /// document and every other member refusal a DPoP proof's reading answers is a proof that is not well formed (check 2). A
+    /// refusal of another kind, or a member refusal naming a defect the reading never names, is none a DPoP proof's reading
+    /// answers, and is refused as the fault of the reading that answered it.
     /// </summary>
     /// <param name="refusal">The reading's refusal.</param>
     /// <returns>The category.</returns>
+    /// <exception cref="InvalidOperationException">The refusal is none a DPoP proof's reading answers.</exception>
     private static DpopProofValidationFailureReason CategoryOf(JwsPartRefusal refusal) => refusal switch
     {
         DpopProofMemberRefusal { Member: DpopProofMember.Typ, Defect: DpopProofMemberDefect.Absent } => DpopProofValidationFailureReason.InvalidTyp,
         DpopProofMemberRefusal { Defect: DpopProofMemberDefect.PrivateKeyMaterial } => DpopProofValidationFailureReason.JwkContainsPrivateKey,
-        _ => DpopProofValidationFailureReason.Malformed
+        DpopProofMemberRefusal
+        {
+            Defect: DpopProofMemberDefect.Absent
+                or DpopProofMemberDefect.NotAString
+                or DpopProofMemberDefect.NotAnObject
+                or DpopProofMemberDefect.NotANumericDate
+                or DpopProofMemberDefect.NotAnArrayOfStrings
+                or DpopProofMemberDefect.RepeatedKeyOperation
+                or DpopProofMemberDefect.KeyOperationsInconsistentWithUse
+                or DpopProofMemberDefect.NotACertificateChain
+                or DpopProofMemberDefect.CertificateNotOfTheKey
+                or DpopProofMemberDefect.NotABoolean
+        } => DpopProofValidationFailureReason.Malformed,
+        JwsPartDocumentRefusal => DpopProofValidationFailureReason.Malformed,
+        _ => throw new InvalidOperationException(
+            $"The DPoP proof part's reading answered the refusal {refusal.GetType().FullName}, none a DPoP proof's reading answers.")
     };
 
 
     /// <summary>
     /// The proving public key a header's embedded JWK reconstructs, which the caller owns and disposes, or <see langword="null"/>
-    /// when no key materializes from it: the JWK is client-supplied wire input, so any failure to materialize a key from it is
-    /// an invalid JWK rather than an internal fault.
+    /// when the key the JWK states is none a key is built from: the decoder's refusal of a coordinate as no base64url text, its
+    /// <see cref="FormatException"/>, and the converter's refusal of the key's type, curve, size or coordinates, its
+    /// <see cref="ArgumentException"/> or <see cref="RsaPublicKeyException"/>, answer an invalid JWK. Any other exception - of
+    /// the allocator, of the decoder beyond its refusal, of the implementation - is a fault and surfaces as one, cancellation
+    /// among them.
     /// </summary>
     /// <param name="header">The header.</param>
     /// <param name="base64UrlDecoder">The decoder of the key's coordinates.</param>
@@ -304,7 +325,7 @@ public static class DpopProofValidator
         {
             return DpopJwkUtilities.PublicKeyFromJwk(header.Jwk, header.Alg, base64UrlDecoder, memoryPool);
         }
-        catch
+        catch(Exception exception) when(exception is FormatException or ArgumentException or RsaPublicKeyException)
         {
             return null;
         }

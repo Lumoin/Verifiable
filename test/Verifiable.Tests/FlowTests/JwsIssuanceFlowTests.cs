@@ -85,7 +85,7 @@ internal sealed class JwsIssuanceFlowTests
     /// Deserializes a JWT header from UTF-8 JSON bytes.
     /// </summary>
     private static JwtHeaderDeserializer HeaderDeserializer => headerBytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions);
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerBytes, JsonOptions);
 
 
     /// <summary>

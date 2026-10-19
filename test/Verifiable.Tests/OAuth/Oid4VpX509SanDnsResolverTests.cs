@@ -43,11 +43,11 @@ internal sealed class Oid4VpX509SanDnsResolverTests
 
     private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     private static JwtPayloadSerializer JwtPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
 
     [TestMethod]
@@ -215,7 +215,7 @@ internal sealed class Oid4VpX509SanDnsResolverTests
             clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
             base64UrlEncoder: Encoder,
             memoryPool: Pool,
-            additionalHeaderClaims: new Dictionary<string, object>
+            additionalHeaderClaims: new Dictionary<string, object?>
             {
                 [WellKnownJwkMemberNames.X5c] = x5cValues,
             },

@@ -15,7 +15,10 @@ public enum JwkSelectionOutcome
     /// </summary>
     Selected,
 
-    /// <summary>No key in the set satisfied the selection query.</summary>
+    /// <summary>
+    /// No key in the set satisfied the selection query; a set whose <c>keys</c> array is empty among them. A set carrying no
+    /// <c>keys</c> array is <see cref="MalformedDocument"/>, never this.
+    /// </summary>
     NoMatch,
 
     /// <summary>
@@ -49,7 +52,8 @@ public enum JwkSelectionOutcome
     /// <summary>
     /// The supplied JWK Set is not one well-formed JSON object (<see cref="JsonNotOneObject"/>: not
     /// exactly one well-formed JSON value within the reader's bounds, or one that is no object, which
-    /// RFC 7517 section 5 has a JWK Set be) and was refused before any key was scanned, OR — on
+    /// RFC 7517 section 5 has a JWK Set be) and was refused before any key was scanned, OR one whose REQUIRED <c>keys</c> member
+    /// (RFC 7517 section 5) is absent or carries a value other than an array, on every overload, OR — on
     /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?, ReadOnlySpan{byte})"/>
     /// and <see cref="JwkJsonReader.SelectSoleKey(ReadOnlySpan{byte}, ReadOnlySpan{byte})"/> — an
     /// element of a well-formed document's <c>keys</c> array was not itself a JSON object per

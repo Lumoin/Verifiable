@@ -24,8 +24,9 @@ internal sealed class DpopProofValidatorTests
     /// <summary>A <c>key_ops</c> naming verification alone (RFC 7517 section 4.3).</summary>
     private static string[] VerifyOnly { get; } = ["verify"];
 
-    /// <summary>An <c>x5c</c> of one base64-encoded certificate (RFC 7517 section 4.7).</summary>
-    private static string[] Base64CertificateChain { get; } = ["MIIBkTCB+wIJAOfv"];
+    /// <summary>A <c>key_ops</c> naming verification twice, which RFC 7517 section 4.3 forbids.</summary>
+    private static string[] VerifyTwice { get; } = ["verify", "verify"];
+
 
     /// <summary>An <c>x5c</c> whose one element is base64url text, which section 4.7 says it is not.</summary>
     private static string[] Base64UrlCertificateChain { get; } = ["_-_-"];
@@ -153,7 +154,7 @@ internal sealed class DpopProofValidatorTests
 
         //Build with a non-DPoP typ in the header by hand-spliced header dict.
         string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
-            header => new Dictionary<string, object>(header)
+            header => new Dictionary<string, object?>(header)
             {
                 [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
             }).ConfigureAwait(false);
@@ -179,7 +180,7 @@ internal sealed class DpopProofValidatorTests
         //ES256 but the header lies — validator should reject on alg shape before
         //attempting signature verification.
         string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
-            header => new Dictionary<string, object>(header)
+            header => new Dictionary<string, object?>(header)
             {
                 [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Hs256
             }).ConfigureAwait(false);
@@ -204,7 +205,7 @@ internal sealed class DpopProofValidatorTests
         string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
             header =>
             {
-                Dictionary<string, object> tampered = new(header);
+                Dictionary<string, object?> tampered = new(header);
                 _ = tampered.Remove(WellKnownJoseHeaderNames.Jwk);
                 return tampered;
             }).ConfigureAwait(false);
@@ -234,9 +235,9 @@ internal sealed class DpopProofValidatorTests
         string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
             header =>
             {
-                Dictionary<string, object> tampered = new(header);
-                var jwk = new Dictionary<string, object>(
-                    (IReadOnlyDictionary<string, object>)tampered[WellKnownJoseHeaderNames.Jwk],
+                Dictionary<string, object?> tampered = new(header);
+                var jwk = new Dictionary<string, object?>(
+                    Assert.IsInstanceOfType<IReadOnlyDictionary<string, object?>>(tampered[WellKnownJoseHeaderNames.Jwk]),
                     StringComparer.Ordinal)
                 {
                     [WellKnownJwkMemberNames.D] = "cHJpdmF0ZS1zY2FsYXI"
@@ -778,12 +779,14 @@ internal sealed class DpopProofValidatorTests
 
     /// <summary>
     /// RFC 7517 section 4 and the Web Cryptography API's <c>JsonWebKey</c> dictionary, through a signed proof: a key carrying
-    /// <c>key_ops</c> as an array of strings, <c>x5c</c> as an array of base64-encoded certificates, <c>ext</c> as a Boolean, or a
-    /// member no rule names, validates, its signature verifying under the key; a key member of another kind than its rule names -
-    /// a Boolean <c>kty</c>, a <c>null</c> <c>crv</c>, a <c>key_ops</c> holding a number, an <c>x5c</c> of base64url text, an
-    /// <c>ext</c> in a string - is refused as <see cref="DpopProofValidationFailureReason.Malformed"/>, and a <c>d</c> carried as
-    /// an array as <see cref="DpopProofValidationFailureReason.JwkContainsPrivateKey"/>, each carrying the reading's refusal of the
-    /// member whole.
+    /// <c>key_ops</c> as an array of distinct operations, <c>x5c</c> as a chain whose first certificate - a real DER certificate
+    /// the row builds for the proof's own key - is the key's, <c>ext</c> as a Boolean, or a member no rule names, validates, its
+    /// signature verifying under the key; a key member of another kind than its rule names - a Boolean <c>kty</c>, a <c>null</c>
+    /// <c>crv</c>, a <c>key_ops</c> holding a number, an <c>x5c</c> of base64url text, an <c>ext</c> in a string - a
+    /// <c>key_ops</c> naming an operation twice, and an <c>x5c</c> whose first certificate is another key's are refused as
+    /// <see cref="DpopProofValidationFailureReason.Malformed"/>, and a <c>d</c> carried as an array as
+    /// <see cref="DpopProofValidationFailureReason.JwkContainsPrivateKey"/>, each carrying the reading's refusal of the member
+    /// whole.
     /// </summary>
     /// <param name="keyCase">The name of the key members the row adds or changes.</param>
     /// <param name="expected">The failure the proof is answered with, or <see langword="null"/> for a valid proof.</param>
@@ -798,6 +801,8 @@ internal sealed class DpopProofValidatorTests
     [DataRow("x5c-base64url", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.NotACertificateChain)]
     [DataRow("ext-string", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.NotABoolean)]
     [DataRow("d-array", DpopProofValidationFailureReason.JwkContainsPrivateKey, DpopProofMemberDefect.PrivateKeyMaterial)]
+    [DataRow("key-ops-repeated", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.RepeatedKeyOperation)]
+    [DataRow("x5c-of-another-key", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.CertificateNotOfTheKey)]
     public async Task ValidateAsyncJudgesEachMemberOfTheEmbeddedKeyByItsOwnRule(
         string keyCase, DpopProofValidationFailureReason? expected, DpopProofMemberDefect? defect)
     {
@@ -807,59 +812,16 @@ internal sealed class DpopProofValidatorTests
         var proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
             header =>
             {
-                var jwk = new Dictionary<string, object>((IReadOnlyDictionary<string, object>)header[WellKnownJoseHeaderNames.Jwk], StringComparer.Ordinal);
+                var jwk = new Dictionary<string, object?>(Assert.IsInstanceOfType<IReadOnlyDictionary<string, object?>>(header[WellKnownJoseHeaderNames.Jwk]), StringComparer.Ordinal);
+                var certificateOfTheKey = JwkCertificateFixtures.CertificateOfP256Key(
+                    Assert.IsInstanceOfType<string>(jwk[WellKnownJwkMemberNames.X]), Assert.IsInstanceOfType<string>(jwk[WellKnownJwkMemberNames.Y]), NowInstant);
 
-                switch(keyCase)
+                foreach(var member in KeyMembersOf(keyCase, certificateOfTheKey))
                 {
-                    case "key-ops-x5c-ext":
-                    {
-                        jwk[WellKnownJwkMemberNames.KeyOps] = VerifyOnly;
-                        jwk[WellKnownJwkMemberNames.X5c] = Base64CertificateChain;
-                        jwk[WellKnownJwkMemberNames.Ext] = true;
-                        break;
-                    }
-                    case "unknown-member":
-                    {
-                        jwk["x-deployment"] = new Dictionary<string, object>(StringComparer.Ordinal) { ["region"] = 7L };
-                        break;
-                    }
-                    case "kty-boolean":
-                    {
-                        jwk[WellKnownJwkMemberNames.Kty] = true;
-                        break;
-                    }
-                    case "crv-null":
-                    {
-                        jwk[WellKnownJwkMemberNames.Crv] = null!;
-                        break;
-                    }
-                    case "key-ops-number":
-                    {
-                        jwk[WellKnownJwkMemberNames.KeyOps] = new object[] { "verify", 7L };
-                        break;
-                    }
-                    case "x5c-base64url":
-                    {
-                        jwk[WellKnownJwkMemberNames.X5c] = Base64UrlCertificateChain;
-                        break;
-                    }
-                    case "ext-string":
-                    {
-                        jwk[WellKnownJwkMemberNames.Ext] = "true";
-                        break;
-                    }
-                    case "d-array":
-                    {
-                        jwk[WellKnownJwkMemberNames.D] = PrivateScalarInAnArray;
-                        break;
-                    }
-                    default:
-                    {
-                        throw new ArgumentOutOfRangeException(nameof(keyCase), keyCase, "No key is named so.");
-                    }
+                    jwk[member.Key] = member.Value;
                 }
 
-                return new Dictionary<string, object>(header) { [WellKnownJoseHeaderNames.Jwk] = jwk };
+                return new Dictionary<string, object?>(header) { [WellKnownJoseHeaderNames.Jwk] = jwk };
             }).ConfigureAwait(false);
 
         var result = await ValidateAsync(
@@ -875,6 +837,31 @@ internal sealed class DpopProofValidatorTests
         Assert.IsTrue(expected is not null || result.JwkThumbprint == DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             $"{keyCase}: a valid proof's thumbprint is its key's, over the required members alone.");
     }
+
+
+    /// <summary>The members a row of the embedded-key test adds to or changes in the proof's embedded key, in the order written.</summary>
+    /// <param name="keyCase">The row's name of the key members.</param>
+    /// <param name="certificateOfTheKey">A real certificate of the proof's own key.</param>
+    /// <returns>The members.</returns>
+    private static KeyValuePair<string, object?>[] KeyMembersOf(string keyCase, string certificateOfTheKey) => keyCase switch
+    {
+        "key-ops-x5c-ext" =>
+        [
+            new(WellKnownJwkMemberNames.KeyOps, VerifyOnly),
+            new(WellKnownJwkMemberNames.X5c, new[] { certificateOfTheKey }),
+            new(WellKnownJwkMemberNames.Ext, true)
+        ],
+        "key-ops-repeated" => [new(WellKnownJwkMemberNames.KeyOps, VerifyTwice)],
+        "x5c-of-another-key" => [new(WellKnownJwkMemberNames.X5c, new[] { JwkCertificateFixtures.CertificateOfAnotherP256Key(NowInstant), certificateOfTheKey })],
+        "unknown-member" => [new("x-deployment", new Dictionary<string, object>(StringComparer.Ordinal) { ["region"] = 7L })],
+        "kty-boolean" => [new(WellKnownJwkMemberNames.Kty, true)],
+        "crv-null" => [new(WellKnownJwkMemberNames.Crv, null)],
+        "key-ops-number" => [new(WellKnownJwkMemberNames.KeyOps, new object[] { "verify", 7L })],
+        "x5c-base64url" => [new(WellKnownJwkMemberNames.X5c, Base64UrlCertificateChain)],
+        "ext-string" => [new(WellKnownJwkMemberNames.Ext, "true")],
+        "d-array" => [new(WellKnownJwkMemberNames.D, PrivateScalarInAnArray)],
+        _ => throw new ArgumentOutOfRangeException(nameof(keyCase), keyCase, "No key is named so.")
+    };
 
 
     /// <summary>
@@ -901,13 +888,13 @@ internal sealed class DpopProofValidatorTests
         var numberJti = await ValidateSignedAsync(await SignClaimsUnderHeaderAsync(keys.PrivateKey, headerSegment, $"{{\"{WellKnownJwtClaimNames.Jti}\":7,{htm},{htu},{iat}}}").ConfigureAwait(false)).ConfigureAwait(false);
         var absentTyp = await ValidateSignedAsync(await BuildProofWithCustomHeaderAsync(key, BuildClaims(), static header =>
         {
-            var changed = new Dictionary<string, object>(header);
+            var changed = new Dictionary<string, object?>(header);
             _ = changed.Remove(WellKnownJoseHeaderNames.Typ);
 
             return changed;
         }).ConfigureAwait(false)).ConfigureAwait(false);
         var nullTyp = await ValidateSignedAsync(await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
-            static header => new Dictionary<string, object>(header) { [WellKnownJoseHeaderNames.Typ] = null! }).ConfigureAwait(false)).ConfigureAwait(false);
+            static header => new Dictionary<string, object?>(header) { [WellKnownJoseHeaderNames.Typ] = null }).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(DpopProofValidationFailureReason.Malformed, repeatedHtu.FailureReason);
         Assert.IsTrue(repeatedHtu.PartRefusal is JwsPartDocumentRefusal { Part: JwsPart.Payload, Refusal: JsonRepeatedMemberName }, "The reader's refusal of the payload is carried.");
@@ -987,7 +974,7 @@ internal sealed class DpopProofValidatorTests
     private async Task<string> BuildProofWithCustomHeaderAsync(
         DpopKey key,
         DpopProofClaims claims,
-        Func<IReadOnlyDictionary<string, object>, IReadOnlyDictionary<string, object>> headerTransform)
+        Func<IReadOnlyDictionary<string, object?>, IReadOnlyDictionary<string, object?>> headerTransform)
     {
         DpopJwsPartSerializer customSerializer = DpopJwsPartSerializerJson.Default with
         {

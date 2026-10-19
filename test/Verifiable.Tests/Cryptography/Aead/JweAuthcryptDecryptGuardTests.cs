@@ -30,7 +30,7 @@ internal sealed class JweAuthcryptDecryptGuardTests
 
     private static JwtHeaderSerializer JwtHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     //Appendix B static keys (X25519, JWK base64url coordinates) — reused so the tamper test
@@ -220,7 +220,7 @@ internal sealed class JweAuthcryptDecryptGuardTests
     //reached. The iv/ciphertext/tag/encrypted_key are arbitrary valid base64url placeholders.
     private static string BuildGeneralJson(string algorithm, string encryption)
     {
-        var protectedHeader = new Dictionary<string, object>(3)
+        var protectedHeader = new Dictionary<string, object?>(3)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Enc] = encryption,

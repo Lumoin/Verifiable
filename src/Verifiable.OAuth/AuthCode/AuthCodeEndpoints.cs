@@ -2390,7 +2390,7 @@ public static class AuthCodeEndpoints
     /// so both single-string and array-form <c>aud</c> per RFC 7519 §4.1.3 work.
     /// </summary>
     private static async ValueTask<ServerHttpResponse?> ValidateJarAudienceAsync(
-        IReadOnlyDictionary<string, object> claims,
+        IReadOnlyDictionary<string, object?> claims,
         ClientRecord registration,
         ExchangeContext context,
         EndpointServer server,

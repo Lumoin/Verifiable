@@ -552,7 +552,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
             IReadOnlyDictionary<string, object> dict => dict,
             JsonElement element when element.ValueKind == JsonValueKind.Object => MaterializeJsonObject(element),
             _ => throw new InvalidOperationException(
-                $"Unexpected metadata claim CLR type '{metadataObj.GetType().FullName}'.")
+                $"Unexpected metadata claim CLR type '{metadataObj?.GetType().FullName}'.")
         };
     }
 
@@ -620,10 +620,10 @@ internal sealed class FederationEntityConfigurationEndpointTests
         using IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], Pool);
         using IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool);
 
-        Dictionary<string, object> headerDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
+        var headerDict = JsonSerializer.Deserialize<Dictionary<string, object?>>(
             headerBytes.Memory.Span, TestSetup.DefaultSerializationOptions)
             ?? throw new InvalidOperationException("EC header parsed to null.");
-        Dictionary<string, object> payloadDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
+        var payloadDict = JsonSerializer.Deserialize<Dictionary<string, object?>>(
             payloadBytes.Memory.Span, TestSetup.DefaultSerializationOptions)
             ?? throw new InvalidOperationException("EC payload parsed to null.");
 

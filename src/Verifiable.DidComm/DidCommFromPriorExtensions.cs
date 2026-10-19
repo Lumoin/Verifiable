@@ -224,7 +224,7 @@ public static class DidCommFromPriorExtensions
         DidResolver didResolver,
         ExchangeContext exchangeContext,
         JwtClaimsDeserializer payloadDeserializer,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         BaseMemoryPool memoryPool,

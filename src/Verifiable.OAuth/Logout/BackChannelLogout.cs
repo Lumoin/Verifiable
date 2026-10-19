@@ -41,8 +41,8 @@ public static class BackChannelLogout
     public static string BackChannelLogoutEventType { get; } = Utf8Constants.ToInternedString(BackChannelLogoutEventTypeUtf8);
 
     /// <summary>Reused empty payload for tolerant reads of an absent or malformed claim.</summary>
-    private static IReadOnlyDictionary<string, object> EmptyPayload { get; } =
-        new Dictionary<string, object>(0, StringComparer.Ordinal);
+    private static IReadOnlyDictionary<string, object?> EmptyPayload { get; } =
+        new Dictionary<string, object?>(0, StringComparer.Ordinal);
 
 
     /// <summary>
@@ -211,7 +211,7 @@ public static class BackChannelLogout
         string expectedIssuer,
         string expectedAudience,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>?> payloadDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>?> payloadDeserializer,
         BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {

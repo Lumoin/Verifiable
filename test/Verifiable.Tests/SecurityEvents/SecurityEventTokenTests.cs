@@ -281,7 +281,7 @@ internal sealed class SecurityEventTokenTests
     [TestMethod]
     public void AFractionalNumericDateIsSurfacedAsTheInstantWritten()
     {
-        var payload = new Dictionary<string, object>(StringComparer.Ordinal)
+        var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = Issuer,
             [WellKnownJwtClaimNames.Iat] = 1615305159.75m,

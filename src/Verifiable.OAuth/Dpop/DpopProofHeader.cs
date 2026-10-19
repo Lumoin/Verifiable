@@ -27,8 +27,9 @@ public sealed record DpopProofHeader
     /// The public key used to verify the proof, as the members of the JWK RFC 7517 section 4 and RFC 7518 section 6 define as
     /// strings: the members the key is reconstructed from and its RFC 7638 thumbprint computed over, which the AS / RS compares
     /// to the access token's <c>cnf.jkt</c> binding. A received proof's key is read by <see cref="Read"/>, which judges every
-    /// member it knows by that member's own rule; its <c>key_ops</c>, <c>x5c</c> and <c>ext</c>, of other kinds, are judged and
-    /// not carried here, since no check of RFC 9449 reads them, and a member no rule names is ignored (RFC 7517 section 4).
+    /// member it knows by that member's own rule, the rules relating one member to another among them; its <c>key_ops</c>,
+    /// <c>x5c</c> and <c>ext</c>, of other kinds, are held until those judgements are made and are not carried here, since no
+    /// check of RFC 9449 reads them, and a member no rule names is ignored (RFC 7517 section 4).
     /// </summary>
     public required IReadOnlyDictionary<string, string> Jwk { get; init; }
 
@@ -39,11 +40,15 @@ public sealed record DpopProofHeader
     /// REQUIRED, the first two strings and the third a JSON object read by the same reader, each of whose members is judged by
     /// its own rule (RFC 7517 section 4, RFC 7518 section 6): a member defined as a string is a string, <c>key_ops</c> an array
     /// of strings, <c>x5c</c> a non-empty array of base64-encoded strings and <c>ext</c> a Boolean, a private or symmetric member
-    /// is refused whatever its kind, and a member no rule names is ignored. A header the reader refuses, a required member
-    /// absent and a known member of another kind - <c>null</c> among them - are refused, each a typed reason
-    /// (<see cref="DpopProofPartRefused{TPart}"/>), in the order <c>alg</c>, <c>typ</c>, <c>jwk</c>, then the key's members in
-    /// document order; the members are judged by <see cref="DpopProofValidator"/>, never here. Header members the section does not
-    /// name are not read. Never throws on the bytes it is handed.
+    /// is refused whatever its kind, and a member no rule names is ignored. Once every member of the key is read, the rules that
+    /// relate them are judged: a <c>key_ops</c> naming no operation twice and consistent with a <c>use</c> the key carries (RFC
+    /// 7517 section 4.3), then an <c>x5c</c> whose every element is a DER certificate and whose first certificate's key is the
+    /// key the other members state (section 4.7, through <see cref="JwkCertificateChain"/>). A header the reader refuses, a
+    /// required member absent, a known member of another kind - <c>null</c> among them - and a key breaking a rule relating its
+    /// members are refused, each a typed reason (<see cref="DpopProofPartRefused{TPart}"/>), in the order <c>alg</c>, <c>typ</c>,
+    /// <c>jwk</c>, then the key's members in document order, then <c>key_ops</c> and <c>x5c</c>; what the claims name is judged by
+    /// <see cref="DpopProofValidator"/>, never here. Header members the section does not name are not read. Never throws on the
+    /// bytes it is handed.
     /// </summary>
     /// <param name="json">The header's UTF-8 JSON bytes, the protected header segment base64url-decoded.</param>
     /// <returns>The header, or its refusal.</returns>
@@ -95,6 +100,8 @@ public sealed record DpopProofHeader
         }
 
         var key = new Dictionary<string, string>(jwkMembers.Members.Count, StringComparer.Ordinal);
+        JsonTopLevelMember? keyOperations = null;
+        JsonTopLevelMember? certificateChain = null;
 
         foreach(var member in jwkMembers.Members)
         {
@@ -107,10 +114,97 @@ public sealed record DpopProofHeader
             {
                 key[member.Name] = member.Text;
             }
+            else if(WellKnownJwkMemberNames.IsKeyOps(member.Name))
+            {
+                keyOperations = member;
+            }
+            else if(WellKnownJwkMemberNames.IsX5c(member.Name))
+            {
+                certificateChain = member;
+            }
+        }
+
+        //RFC 7517 sections 4.3 and 4.7 relate a key's members to one another, wherever in the key each is written, so they are
+        //judged once every member is read: the operations against the use, the first certificate against the key.
+        if(keyOperations is not null && KeyOperationsDefectOf(StringsOf(keyOperations), key) is DpopProofMemberDefect operationsDefect)
+        {
+            return Refused(new DpopProofMemberRefusal(
+                DpopProofMember.JwkMember, keyOperations.Name, jwkMembers.Find(keyOperations.Name), operationsDefect));
+        }
+
+        if(certificateChain is not null && JwkCertificateChain.DefectOf(StringsOf(certificateChain), key) is JwkCertificateChainDefect chainDefect)
+        {
+            return Refused(new DpopProofMemberRefusal(
+                DpopProofMember.JwkMember, certificateChain.Name, jwkMembers.Find(certificateChain.Name), MemberDefectOf(chainDefect)));
         }
 
         return new DpopProofPartRead<DpopProofHeader>(new DpopProofHeader { Alg = algText.Text, Typ = typText.Text, Jwk = key });
     }
+
+
+    /// <summary>
+    /// Why a key's operations break RFC 7517 section 4.3, or <see langword="null"/> when they keep it: an operation named twice,
+    /// then, where the key carries a <c>use</c>, an operation the use does not permit or a use no rule relates operations to.
+    /// </summary>
+    /// <param name="operations">The <c>key_ops</c> values, in document order.</param>
+    /// <param name="key">The key's string members, its <c>use</c> among them where it carries one.</param>
+    /// <returns>The defect, or <see langword="null"/>.</returns>
+    private static DpopProofMemberDefect? KeyOperationsDefectOf(IReadOnlyList<string> operations, Dictionary<string, string> key)
+    {
+        if(operations.Distinct(StringComparer.Ordinal).Count() != operations.Count)
+        {
+            return DpopProofMemberDefect.RepeatedKeyOperation;
+        }
+
+        return key.TryGetValue(WellKnownJwkMemberNames.Use, out var use) && !operations.All(operation => IsPermittedBy(use, operation))
+            ? DpopProofMemberDefect.KeyOperationsInconsistentWithUse
+            : null;
+    }
+
+
+    /// <summary>
+    /// Whether a key operation is consistent with a key's <c>use</c> (RFC 7517 sections 4.2 and 4.3): <c>sig</c>, "signature",
+    /// with <c>sign</c> and <c>verify</c>; <c>enc</c>, "encryption", with <c>encrypt</c>, <c>decrypt</c>, <c>wrapKey</c>,
+    /// <c>unwrapKey</c>, <c>deriveKey</c> and <c>deriveBits</c>. A use or an operation no rule relates is consistent with none.
+    /// </summary>
+    /// <param name="use">The key's <c>use</c>.</param>
+    /// <param name="operation">One of its <c>key_ops</c>.</param>
+    /// <returns><see langword="true"/> when the two are consistent.</returns>
+    private static bool IsPermittedBy(string use, string operation) => use switch
+    {
+        var value when WellKnownJwkValues.IsUseSig(value) =>
+            WellKnownJwkValues.IsKeyOpsSign(operation) || WellKnownJwkValues.IsKeyOpsVerify(operation),
+        var value when WellKnownJwkValues.IsUseEnc(value) =>
+            WellKnownJwkValues.IsKeyOpsEncrypt(operation)
+            || WellKnownJwkValues.IsKeyOpsDecrypt(operation)
+            || WellKnownJwkValues.IsKeyOpsWrapKey(operation)
+            || WellKnownJwkValues.IsKeyOpsUnwrapKey(operation)
+            || WellKnownJwkValues.IsKeyOpsDeriveKey(operation)
+            || WellKnownJwkValues.IsKeyOpsDeriveBits(operation),
+        _ => false
+    };
+
+
+    /// <summary>The member defect a refusal of a key's <c>x5c</c> is answered with.</summary>
+    /// <param name="defect">Why the <c>x5c</c> is refused.</param>
+    /// <returns>The member defect.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="defect"/> is none the judgement answers.</exception>
+    private static DpopProofMemberDefect MemberDefectOf(JwkCertificateChainDefect defect) => defect switch
+    {
+        JwkCertificateChainDefect.NotBase64Text or JwkCertificateChainDefect.NotACertificate => DpopProofMemberDefect.NotACertificateChain,
+        JwkCertificateChainDefect.FirstCertificateNotOfTheKey => DpopProofMemberDefect.CertificateNotOfTheKey,
+        _ => throw new ArgumentOutOfRangeException(nameof(defect), defect, "The certificate chain's judgement answered a defect it never answers.")
+    };
+
+
+    /// <summary>The strings of a member already judged an array of strings, in document order.</summary>
+    /// <param name="member">The member.</param>
+    /// <returns>The strings.</returns>
+    /// <exception cref="InvalidOperationException">The member is no array of strings, which its judgement refused: an invariant failure.</exception>
+    private static IReadOnlyList<string> StringsOf(JsonTopLevelMember member) =>
+        member.ArrayElements() is { } elements && elements.All(static element => element is JsonMemberString)
+            ? [.. elements.Cast<JsonMemberString>().Select(static element => element.Text)]
+            : throw new InvalidOperationException("A key member judged an array of strings read to none.");
 
 
     /// <summary>The refusal of a header for a member, as its reading answers it.</summary>
@@ -157,7 +251,7 @@ public sealed record DpopProofHeader
         || WellKnownJwkMemberNames.IsY(name)
         || WellKnownJwkMemberNames.IsN(name)
         || WellKnownJwkMemberNames.IsE(name)
-        || WellKnownJwkMemberNames.Equals(name, WellKnownJwkMemberNames.Pub);
+        || WellKnownJwkMemberNames.IsPub(name);
 
 
     /// <summary>Whether a member is an array every element of which is a string (RFC 7517 section 4.3's <c>key_ops</c>).</summary>

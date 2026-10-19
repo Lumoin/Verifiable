@@ -55,7 +55,7 @@ public sealed record ValidationContext
     public FlowState? FlowState { get; init; }
 
     /// <summary>The parsed JWT payload claims.</summary>
-    public IReadOnlyDictionary<string, object>? TokenClaims { get; init; }
+    public IReadOnlyDictionary<string, object?>? TokenClaims { get; init; }
 
     /// <summary>The expected issuer identifier for <c>iss</c> comparison.</summary>
     public string? ExpectedIssuer { get; init; }

@@ -36,7 +36,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
     //this delegate to produce the UTF-8 JSON bytes.
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
     private const string ExampleDidPrefix = "did:example";

@@ -645,9 +645,9 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             TimeProvider.GetUtcNow(),
             TestSetup.Base64UrlEncoder,
             static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions),
             static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-                (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
+                (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions),
             Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -670,18 +670,18 @@ internal sealed class SdJwtVpTokenVerificationPathTests
         string vpToken,
         PublicKeyMemory issuerPublicKey,
         CancellationToken cancellationToken) =>
-        (await VerifyPresentationOutcomeAsync(vpToken, issuerPublicKey, cancellationToken).ConfigureAwait(false)).ExpectVerified();
+        (await VerifyPresentationOutcomeAsync(vpToken, issuerPublicKey, cancellationToken).ConfigureAwait(false)).ExpectRead();
 
 
     /// <summary>
-    /// Verifier side, answering the verification's outcome as it is: the verified presentation, or the typed refusal of a
-    /// presentation no conformant Wallet produces.
+    /// Verifier side, answering the verification's outcome as it is: the presentation's contents and the facts of its checks, or
+    /// the typed defect of a presentation no conformant Wallet produces.
     /// </summary>
     /// <param name="vpToken">The vp_token value the wallet produced.</param>
     /// <param name="issuerPublicKey">The issuer key the trust framework resolves.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The outcome.</returns>
-    private static async ValueTask<SdJwtVpTokenVerificationOutcome> VerifyPresentationOutcomeAsync(
+    private static async ValueTask<Result<VpTokenParsed, SdJwtPresentationDefect>> VerifyPresentationOutcomeAsync(
         string vpToken,
         PublicKeyMemory issuerPublicKey,
         CancellationToken cancellationToken)
@@ -1049,7 +1049,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
 
         var outcome = await VerifyPresentationOutcomeAsync(malformed, issuerKey, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(new SdJwtVpTokenRefused(SdJwtPresentationDefect.StatusClaimMalformed), outcome,
+        Assert.AreEqual(Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.StatusClaimMalformed), outcome,
             "Section 6.1: a present status claim carrying no mechanism is a malformed presentation, refused for its status claim.");
     }
 
@@ -1074,7 +1074,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
 
         var outcome = await VerifyPresentationOutcomeAsync(malformed, issuerKey, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(new SdJwtVpTokenRefused(SdJwtPresentationDefect.StatusClaimMalformed), outcome,
+        Assert.AreEqual(Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.StatusClaimMalformed), outcome,
             "Section 6.1: a status claim that is not a JSON Object names no mechanism, refused for its status claim.");
     }
 
@@ -1101,7 +1101,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
 
         var outcome = await VerifyPresentationOutcomeAsync(repeated, issuerKey, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(new SdJwtVpTokenRefused(SdJwtPresentationDefect.IssuerPayloadNotOneObject), outcome,
+        Assert.AreEqual(Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.IssuerPayloadNotOneObject), outcome,
             "A repeated top-level claim name is refused rather than resolved to one of its occurrences.");
     }
 
@@ -1126,7 +1126,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
 
         var outcome = await VerifyPresentationOutcomeAsync(presentation.VpToken, issuerKey, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(new SdJwtVpTokenRefused(SdJwtPresentationDefect.KeyBindingIssuedAtNotANumericDate), outcome,
+        Assert.AreEqual(Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.KeyBindingIssuedAtNotANumericDate), outcome,
             "An iat the KB-JWT carries that names no date is refused, never read as absent.");
     }
 
@@ -1154,7 +1154,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
         Assert.IsTrue(omittedParsed.KbJwtSignatureValid);
         Assert.IsTrue(carriedParsed.KbJwtSignatureValid);
         Assert.IsTrue(carriedParsed.SdHashValid);
-        Assert.AreEqual(writtenIat, carriedParsed.KbJwtIat!.ToString());
+        Assert.AreEqual(writtenIat, carriedParsed.KbJwtIat?.ToString());
     }
 
 
@@ -1485,7 +1485,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: resolveTrustedAuthorityEvidence,
             context: new ExchangeContext(),
-            cancellationToken: cancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: cancellationToken).ConfigureAwait(false)).ExpectRead();
     }
 
 
@@ -1515,7 +1515,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: cancellationToken).ConfigureAwait(false)).ExpectVerified();
+            cancellationToken: cancellationToken).ConfigureAwait(false)).ExpectRead();
     }
 
 

@@ -52,12 +52,18 @@ public sealed record DpopProofMemberRefusal(
     JsonMemberLookup Carried,
     DpopProofMemberDefect Defect) : JwsPartRefusal(PartOf(Member))
 {
-    /// <summary>The object of the proof carrying, or required to carry, the member.</summary>
+    /// <summary>
+    /// The object of the proof carrying, or required to carry, the member, derived from <see cref="Member"/>, which a refusal
+    /// is constructed with only as one of the members its reading knows (<see cref="PartOf"/> refuses any other).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The member is none the reading knows, which construction refused: an invariant failure.</exception>
     public DpopProofPartPlace Place => Member switch
     {
         DpopProofMember.Typ or DpopProofMember.Alg or DpopProofMember.Jwk => DpopProofPartPlace.ProtectedHeader,
         DpopProofMember.JwkMember => DpopProofPartPlace.EmbeddedJwk,
-        _ => DpopProofPartPlace.Claims
+        DpopProofMember.Jti or DpopProofMember.Htm or DpopProofMember.Htu or DpopProofMember.Iat or DpopProofMember.Nonce or DpopProofMember.Ath =>
+            DpopProofPartPlace.Claims,
+        _ => throw new InvalidOperationException($"The member {Member} is none a DPoP proof's reading knows.")
     };
 
 
@@ -73,13 +79,19 @@ public sealed record DpopProofMemberRefusal(
         new(member, memberName, carried, carried is JsonMemberAbsent ? DpopProofMemberDefect.Absent : DpopProofMemberDefect.NotAString);
 
 
-    /// <summary>The segment of the proof a member is carried in: the claims set's members in the payload, every other in the header.</summary>
+    /// <summary>
+    /// The segment of the proof a member is carried in: the header's members and the embedded key's in the protected header, the
+    /// claims set's in the payload. A member the reading does not know is refused, so no refusal is constructed for one.
+    /// </summary>
     /// <param name="member">The member.</param>
     /// <returns>The segment.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="member"/> is none of the members a DPoP proof's reading knows.</exception>
     private static JwsPart PartOf(DpopProofMember member) => member switch
     {
         DpopProofMember.Typ or DpopProofMember.Alg or DpopProofMember.Jwk or DpopProofMember.JwkMember => JwsPart.ProtectedHeader,
-        _ => JwsPart.Payload
+        DpopProofMember.Jti or DpopProofMember.Htm or DpopProofMember.Htu or DpopProofMember.Iat or DpopProofMember.Nonce or DpopProofMember.Ath =>
+            JwsPart.Payload,
+        _ => throw new ArgumentOutOfRangeException(nameof(member), member, "The member is none a DPoP proof's reading knows.")
     };
 }
 
@@ -165,9 +177,11 @@ public enum DpopProofMemberDefect
     NotAnArrayOfStrings,
 
     /// <summary>
-    /// The embedded <c>jwk</c>'s <c>x5c</c> is no non-empty array of base64-encoded strings (RFC 7517 section 4.7: "Each string in
-    /// the array is a base64-encoded (Section 4 of [RFC4648] -- not base64url-encoded) DER [ITU.X690.2008] PKIX certificate
-    /// value", the first the certificate containing the key).
+    /// The embedded <c>jwk</c>'s <c>x5c</c> is no non-empty array of base64-encoded DER certificates (RFC 7517 section 4.7: "Each
+    /// string in the array is a base64-encoded (Section 4 of [RFC4648] -- not base64url-encoded) DER [ITU.X690.2008] PKIX
+    /// certificate value"): an empty array, an element of another kind, base64url or other text, or text decoding to bytes that
+    /// are no X.509 certificate (RFC 5280 section 4.1) among them. Each element is read structurally; the certification of each
+    /// certificate by the next is a matter of trust in the chain, which the reading does not judge.
     /// </summary>
     NotACertificateChain,
 
@@ -179,5 +193,27 @@ public enum DpopProofMemberDefect
     /// <c>qi</c>, <c>oth</c>, <c>k</c>, or the <c>priv</c> of an AKP key), whatever the kind of its value: RFC 9449 section 4.2
     /// has the key "a public key".
     /// </summary>
-    PrivateKeyMaterial
+    PrivateKeyMaterial,
+
+    /// <summary>
+    /// The embedded <c>jwk</c>'s <c>key_ops</c> names an operation more than once (RFC 7517 section 4.3: "Duplicate key operation
+    /// values MUST NOT be present in the array").
+    /// </summary>
+    RepeatedKeyOperation,
+
+    /// <summary>
+    /// The embedded <c>jwk</c> carries both <c>use</c> and <c>key_ops</c>, and they do not convey consistent information (RFC
+    /// 7517 section 4.3: "if both are used, the information they convey MUST be consistent"): <c>sig</c> permits <c>sign</c> and
+    /// <c>verify</c>, and <c>enc</c> the encryption, key wrapping and derivation operations, so an operation the use does not
+    /// permit is inconsistent with it, as is a use or an operation no rule relates, whose consistency is not established.
+    /// </summary>
+    KeyOperationsInconsistentWithUse,
+
+    /// <summary>
+    /// The embedded <c>jwk</c>'s <c>x5c</c> is a chain of certificates whose first certificate's key is not the key the
+    /// <c>jwk</c>'s other members represent (RFC 7517 section 4.7: "The key in the first certificate MUST match the public key
+    /// represented by other members of the JWK"), a key whose agreement with a certificate's the library does not establish
+    /// among them.
+    /// </summary>
+    CertificateNotOfTheKey
 }

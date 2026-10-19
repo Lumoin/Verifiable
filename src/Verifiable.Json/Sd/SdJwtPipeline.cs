@@ -137,7 +137,7 @@ internal static class SdJwtPipeline
     /// <see cref="ManualJsonWriter"/>, avoiding <see cref="JsonSerializer"/>
     /// and its type metadata resolution.
     /// </summary>
-    private static byte[] SerializeDictionaryToUtf8(IDictionary<string, object> dictionary)
+    private static byte[] SerializeDictionaryToUtf8(IDictionary<string, object?> dictionary)
     {
         using var stream = new MemoryStream();
         using(var writer = new Utf8JsonWriter(stream))

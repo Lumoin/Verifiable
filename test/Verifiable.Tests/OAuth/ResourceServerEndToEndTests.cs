@@ -794,12 +794,12 @@ internal sealed class ResourceServerEndToEndTests
 
     private static ReadOnlySpan<byte> HeaderSerializer(JwtHeader header) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
+            (Dictionary<string, object?>)header,
             TestSetup.DefaultSerializationOptions);
 
 
     private static ReadOnlySpan<byte> PayloadSerializer(JwtPayload payload) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
+            (Dictionary<string, object?>)payload,
             TestSetup.DefaultSerializationOptions);
 }

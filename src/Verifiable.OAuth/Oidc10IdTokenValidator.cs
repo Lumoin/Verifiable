@@ -134,11 +134,11 @@ public static class Oidc10IdTokenValidator
             JwtTypeEnforcement.RejectAtJwt,
             cancellationToken).ConfigureAwait(false);
 
-        if(!outcome.IsSuccess)
+        if(outcome.FailureReason is { } failureReason)
         {
             return outcome.PartRefusal is { } partRefusal
-                ? Oidc10IdTokenValidationResult.PartRefused(outcome.FailureReason!.Value, outcome.FailureDescription, partRefusal)
-                : Oidc10IdTokenValidationResult.Failure(outcome.FailureReason!.Value, outcome.FailureDescription);
+                ? Oidc10IdTokenValidationResult.PartRefused(failureReason, outcome.FailureDescription, partRefusal)
+                : Oidc10IdTokenValidationResult.Failure(failureReason, outcome.FailureDescription);
         }
 
         JwtPayload payload = outcome.Payload!;
@@ -177,23 +177,23 @@ public static class Oidc10IdTokenValidator
         var authTime = authTimeRead == NumericDateReadResult.Value ? authTimeValue : null;
         _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Acr, out string? acr);
 
-        //OIDC Core §2: amr is a JSON array of strings. A present amr of another shape is refused whole, never filtered into the
-        //methods it does name nor read as an absent one.
-        var amrRead = JwsAccessTokenValidator.ReadStringList(payload, WellKnownJwtClaimNames.Amr, out var amrValues);
+        //OIDC Core §2: amr is a JSON array of strings. A present amr of another shape, a single string among them, is refused
+        //whole, never filtered into the methods it does name nor read as an absent one.
+        var amrRead = JwsAccessTokenValidator.ReadStringArray(payload, WellKnownJwtClaimNames.Amr, out var amrValues);
         if(amrRead == ClaimReadResult.Malformed)
         {
             return Oidc10IdTokenValidationResult.Failure(
                 JwsAccessTokenValidationFailureReason.Malformed,
-                "ID Token amr claim is neither a non-empty string nor a non-empty array of non-empty strings.");
+                "ID Token amr claim is not a non-empty array of non-empty strings.");
         }
 
         var amr = amrRead == ClaimReadResult.Value ? amrValues : null;
         _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Sid, out string? sid);
         var confirmationRead = JwsAccessTokenValidator.ReadConfirmation(payload, out var confirmation);
 
-        if(JwsAccessTokenValidator.ConfirmationRefusalOf(confirmationRead, "ID Token") is { } confirmationRefusal)
+        if(JwsAccessTokenValidator.ConfirmationRefusalOf(confirmationRead, "ID Token") is { FailureReason: { } confirmationFailure } confirmationRefusal)
         {
-            return Oidc10IdTokenValidationResult.Failure(confirmationRefusal.FailureReason!.Value, confirmationRefusal.FailureDescription);
+            return Oidc10IdTokenValidationResult.Failure(confirmationFailure, confirmationRefusal.FailureDescription);
         }
 
         Oidc10IdTokenClaims claims = new()

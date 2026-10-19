@@ -166,12 +166,12 @@ internal sealed class IdJagGrantTests
     /// <summary>Serialises a client-assertion protected header to UTF-8 JSON bytes for the OAuthClient.IdJag flow test.</summary>
     private static JwtHeaderSerializer ClientAssertionHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serialises a client-assertion payload to UTF-8 JSON bytes for the OAuthClient.IdJag flow test.</summary>
     private static JwtPayloadSerializer ClientAssertionPayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
 
     /// <summary>
@@ -6685,8 +6685,8 @@ internal sealed class IdJagGrantTests
             Jwk = DpopJwkUtilities.ToJwk(dpopKey.Material.PublicKey, dpopKey.Alg, TestHostShell.Base64UrlEncoder)
         };
 
-        IReadOnlyDictionary<string, object> headerDict = DpopTestSupport.Serializer.SerializeHeader(header);
-        IReadOnlyDictionary<string, object> payloadDict = DpopTestSupport.Serializer.SerializePayload(claims);
+        var headerDict = DpopTestSupport.Serializer.SerializeHeader(header);
+        var payloadDict = DpopTestSupport.Serializer.SerializePayload(claims);
 
         using JwsMessage message = await Jws.SignAsync(
             headerDict,

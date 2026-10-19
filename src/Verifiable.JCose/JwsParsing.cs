@@ -23,7 +23,7 @@ public static class JwsParsing
     public static UnverifiedJwsMessage ParseCompact(
         string compact,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(compact);
@@ -89,7 +89,7 @@ public static class JwsParsing
     public static UnverifiedJwsMessage ParseFlattenedJson(
         ReadOnlySpan<byte> json,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> jsonDeserializer,
         BaseMemoryPool pool)
     {
@@ -128,7 +128,7 @@ public static class JwsParsing
         }
 
         UnverifiedJwtHeader? unprotectedHeader = null;
-        if(jsonObject.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object> headerDict)
+        if(jsonObject.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object?> headerDict)
         {
             unprotectedHeader = new(headerDict);
         }
@@ -157,7 +157,7 @@ public static class JwsParsing
     public static UnverifiedJwsMessage ParseGeneralJson(
         ReadOnlySpan<byte> json,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> jsonDeserializer,
         BaseMemoryPool pool)
     {
@@ -218,7 +218,7 @@ public static class JwsParsing
 
             UnverifiedJwtHeader? unprotectedHeader = null;
 
-            if(sigDict.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object> headerDict)
+            if(sigDict.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object?> headerDict)
             {
                 unprotectedHeader = new(headerDict);
             }
@@ -250,7 +250,7 @@ public static class JwsParsing
     public static bool TryParse(
         ReadOnlySpan<byte> input,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> jsonDeserializer,
         BaseMemoryPool pool,
         out UnverifiedJwsMessage? message,

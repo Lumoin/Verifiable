@@ -37,7 +37,7 @@ public static class JwtClaimsJson
     /// JSON bytes — the protected header of the <c>from_prior</c> JWT.
     /// </summary>
     public static JwtHeaderSerializer HeaderSerializer { get; } =
-        static header => JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object>)header, Options);
+        static header => JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object?>)header, Options);
 
 
     /// <summary>
@@ -45,7 +45,7 @@ public static class JwtClaimsJson
     /// JSON bytes — the claims set (<c>iss</c>/<c>sub</c>/<c>iat</c>) of the <c>from_prior</c> JWT.
     /// </summary>
     public static JwtPayloadSerializer PayloadSerializer { get; } =
-        static payload => JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object>)payload, Options);
+        static payload => JsonSerializerExtensions.SerializeToUtf8Bytes((Dictionary<string, object?>)payload, Options);
 
 
     /// <summary>
@@ -59,7 +59,7 @@ public static class JwtClaimsJson
     /// The protected-header deserializer <see cref="JwsParsing.ParseCompact"/> takes — adapts the
     /// leaf's dictionary deserialization to the parser's header-deserializer <see cref="System.Func{T, TResult}"/>.
     /// </summary>
-    public static IReadOnlyDictionary<string, object> HeaderDeserializer(System.ReadOnlySpan<byte> headerJson)
+    public static IReadOnlyDictionary<string, object?> HeaderDeserializer(System.ReadOnlySpan<byte> headerJson)
     {
         return DeserializeObject(headerJson, "header");
     }
@@ -76,12 +76,12 @@ public static class JwtClaimsJson
 
     //Deserializes a from_prior JWT segment's UTF-8 JSON object, translating System.Text.Json's JsonException
     //(and a JSON-null result) into FormatException so no STJ type escapes this leaf.
-    private static Dictionary<string, object> DeserializeObject(System.ReadOnlySpan<byte> json, string segment)
+    private static Dictionary<string, object?> DeserializeObject(System.ReadOnlySpan<byte> json, string segment)
     {
-        Dictionary<string, object>? value;
+        Dictionary<string, object?>? value;
         try
         {
-            value = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, Options);
+            value = JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(json, Options);
         }
         catch(JsonException exception)
         {

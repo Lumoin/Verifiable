@@ -60,7 +60,7 @@ public static class JarAttestationExtensions
     public static bool TryGetVerifierAttestationJwt(
         string compactJar,
         DecodeDelegate base64UrlDecoder,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> headerDeserializer,
         BaseMemoryPool pool,
         out VerifierAttestationJwt? attestation)
     {

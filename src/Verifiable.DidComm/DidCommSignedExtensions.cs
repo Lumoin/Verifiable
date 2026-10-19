@@ -180,7 +180,7 @@ public static class DidCommSignedExtensions
             [WellKnownJwkMemberNames.Alg] = algorithm
         };
 
-        var unprotectedHeader = new Dictionary<string, object>
+        var unprotectedHeader = new Dictionary<string, object?>
         {
             [WellKnownJwkMemberNames.Kid] = keyId
         };
@@ -238,7 +238,7 @@ public static class DidCommSignedExtensions
         EncodeDelegate base64UrlEncoder,
         BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedMessage);
@@ -455,7 +455,7 @@ public static class DidCommSignedExtensions
         DidResolver didResolver,
         ExchangeContext exchangeContext,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>? fromPriorHeaderDeserializer,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         BaseMemoryPool memoryPool,

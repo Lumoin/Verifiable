@@ -22,12 +22,12 @@ public sealed class JwsSignatureComponent : IEquatable<JwsSignatureComponent>, I
     /// <summary>
     /// The decoded protected header parameters.
     /// </summary>
-    public IReadOnlyDictionary<string, object> ProtectedHeader { get; }
+    public IReadOnlyDictionary<string, object?> ProtectedHeader { get; }
 
     /// <summary>
     /// The unprotected header parameters (not integrity-protected).
     /// </summary>
-    public IReadOnlyDictionary<string, object>? UnprotectedHeader { get; }
+    public IReadOnlyDictionary<string, object?>? UnprotectedHeader { get; }
 
     /// <summary>
     /// The cryptographic signature. Owned by this component.
@@ -49,9 +49,9 @@ public sealed class JwsSignatureComponent : IEquatable<JwsSignatureComponent>, I
     /// <param name="unprotectedHeader">Optional unprotected header parameters.</param>
     public JwsSignatureComponent(
         string protectedEncoded,
-        IReadOnlyDictionary<string, object> protectedHeader,
+        IReadOnlyDictionary<string, object?> protectedHeader,
         Signature signature,
-        IReadOnlyDictionary<string, object>? unprotectedHeader = null)
+        IReadOnlyDictionary<string, object?>? unprotectedHeader = null)
     {
         ArgumentNullException.ThrowIfNull(protectedEncoded);
         ArgumentNullException.ThrowIfNull(protectedHeader);
@@ -160,8 +160,8 @@ public sealed class JwsSignatureComponent : IEquatable<JwsSignatureComponent>, I
 
 
     private static bool HeadersEqual(
-        IReadOnlyDictionary<string, object>? a,
-        IReadOnlyDictionary<string, object>? b)
+        IReadOnlyDictionary<string, object?>? a,
+        IReadOnlyDictionary<string, object?>? b)
     {
         if(a is null && b is null)
         {

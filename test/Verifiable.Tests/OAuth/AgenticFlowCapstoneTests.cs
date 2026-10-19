@@ -101,12 +101,12 @@ internal sealed class AgenticFlowCapstoneTests
     /// <summary>Serialises a JWT protected header to UTF-8 JSON bytes for client-side signing.</summary>
     private static JwtHeaderSerializer CapstoneHeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)header, TestSetup.DefaultSerializationOptions);
 
     /// <summary>Serialises a JWT payload to UTF-8 JSON bytes for client-side signing.</summary>
     private static JwtPayloadSerializer CapstonePayloadSerializer { get; } =
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+            (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
 
     /// <summary>
