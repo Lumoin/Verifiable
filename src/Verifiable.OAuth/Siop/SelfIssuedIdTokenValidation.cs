@@ -95,48 +95,44 @@ public static class SelfIssuedIdTokenValidation
         Dictionary<string, object>? subJwk = null;
         bool isStructurallyValid = false;
 
-        string[] parts = idToken.Split('.');
-        if(parts.Length == 3 && parts[0].Length > 0 && parts[1].Length > 0)
+        //Each segment is decoded by the segment decoding every reading of wire input shares: a segment the decoder refuses as no
+        //base64url text leaves the token structurally invalid, while any other failure of the decoder or of the allocator is a
+        //fault and surfaces as one.
+        var parts = idToken.Split('.');
+        using var headerBytes = parts.Length == 3 && parts[0].Length > 0 ? JwsSegmentDecoding.DecodedOrNone(parts[0], base64UrlDecoder, memoryPool) : null;
+        using var payloadBytes = headerBytes is not null && parts[1].Length > 0 ? JwsSegmentDecoding.DecodedOrNone(parts[1], base64UrlDecoder, memoryPool) : null;
+
+        if(headerBytes is not null && payloadBytes is not null)
         {
-            try
+            var header = headerBytes.Memory.Span;
+            var payload = payloadBytes.Memory.Span;
+
+            //RFC 7515 §4 / RFC 7519 §4: gate both the header and the claims set for well-formedness —
+            //a repeated name at any nesting depth, including inside the nested "sub_jwk" object — before
+            //extracting a single field, so alg/kid/sub_jwk selection below never runs against a first
+            //occurrence while a duplicate second occurrence goes unnoticed. A token failing the gate is answered as
+            //structurally invalid, the judgement this validator returns, never raised as an exception.
+            //
+            //RFC 7519 Section 2: exp and iat are NumericDates, read as written. SIOPv2 Section 11 has a Self-Issued ID Token
+            //carry the ID Token claims of OpenID Connect Core 1.0 Section 2, where iat is REQUIRED, so an omitted iat leaves the
+            //token structurally invalid, as one the payload carries that names no date does: an iat a relying party polices is
+            //never surfaced as absent. An omitted exp leaves the token expired below, and one that names no date is invalid.
+            if(JwkJsonReader.IsWellFormedJsonDocument(header)
+                && JwkJsonReader.ReadTopLevelMembers(payload) is JsonTopLevelMembers claims
+                && NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Exp, out expiresAt) is not NumericDateReadResult.Malformed
+                && NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Iat, out issuedAt) is NumericDateReadResult.Value)
             {
-                using IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], memoryPool);
-                ReadOnlySpan<byte> header = headerBytes.Memory.Span;
+                alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
+                kid = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.KidUtf8);
 
-                using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool);
-                ReadOnlySpan<byte> payload = payloadBytes.Memory.Span;
+                iss = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.IssUtf8);
+                sub = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.SubUtf8);
+                audString = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
+                audArray = JwkJsonReader.ExtractStringArrayProperty(payload, WellKnownJwtClaimNames.AudUtf8);
+                nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
+                subJwk = JwkJsonReader.ExtractObjectProperties(payload, WellKnownJwtClaimNames.SubJwkUtf8);
 
-                //RFC 7515 §4 / RFC 7519 §4: gate both the header and the claims set for well-formedness —
-                //a repeated name at any nesting depth, including inside the nested "sub_jwk" object — before
-                //extracting a single field, so alg/kid/sub_jwk selection below never runs against a first
-                //occurrence while a duplicate second occurrence goes unnoticed. A token failing the gate is answered as
-                //structurally invalid, the judgement this validator returns, never raised as an exception.
-                //
-                //RFC 7519 Section 2: exp and iat are NumericDates, read as written. SIOPv2 Section 11 has a Self-Issued ID Token
-                //carry the ID Token claims of OpenID Connect Core 1.0 Section 2, where iat is REQUIRED, so an omitted iat leaves the
-                //token structurally invalid, as one the payload carries that names no date does: an iat a relying party polices is
-                //never surfaced as absent. An omitted exp leaves the token expired below, and one that names no date is invalid.
-                if(JwkJsonReader.IsWellFormedJsonDocument(header)
-                    && JwkJsonReader.ReadTopLevelMembers(payload) is JsonTopLevelMembers claims
-                    && NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Exp, out expiresAt) is not NumericDateReadResult.Malformed
-                    && NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Iat, out issuedAt) is NumericDateReadResult.Value)
-                {
-                    alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
-                    kid = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.KidUtf8);
-
-                    iss = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.IssUtf8);
-                    sub = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.SubUtf8);
-                    audString = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
-                    audArray = JwkJsonReader.ExtractStringArrayProperty(payload, WellKnownJwtClaimNames.AudUtf8);
-                    nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
-                    subJwk = JwkJsonReader.ExtractObjectProperties(payload, WellKnownJwtClaimNames.SubJwkUtf8);
-
-                    isStructurallyValid = true;
-                }
-            }
-            catch(Exception ex) when(ex is FormatException or InvalidOperationException)
-            {
-                isStructurallyValid = false;
+                isStructurallyValid = true;
             }
         }
 
@@ -229,18 +225,14 @@ public static class SelfIssuedIdTokenValidation
                     {
                         isSubjectConfirmed = true;
 
+                        //The signature is verified under no catch, as under the sub_jwk key: the verification answers its own
+                        //refusals as not verifying, and a failure of the DID resolver's key, of the decoder beyond its refusal,
+                        //of the allocator or of a signature backend is a fault and surfaces as one.
                         if(isAlgorithmAllowed)
                         {
-                            try
-                            {
-                                isSignatureValid = await Jws.VerifyAsync(
-                                    idToken, base64UrlDecoder, memoryPool,
-                                    didKey, cancellationToken).ConfigureAwait(false);
-                            }
-                            catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException)
-                            {
-                                isSignatureValid = false;
-                            }
+                            isSignatureValid = await Jws.VerifyAsync(
+                                idToken, base64UrlDecoder, memoryPool,
+                                didKey, cancellationToken).ConfigureAwait(false);
                         }
                     }
                 }
@@ -282,11 +274,10 @@ public static class SelfIssuedIdTokenValidation
 
     /// <summary>
     /// Reconstructs the subject's public key from the <c>sub_jwk</c> members and verifies the compact JWS against it - the same
-    /// composition the OID4VP verifier uses for the <c>cnf.jwk</c> holder key. The reconstruction's own refusal of the key
-    /// (<see cref="JwkPublicKeyException"/>, or <see cref="RsaPublicKeyException"/> for an RSA key's parameters) and the
-    /// decoder's refusal of a member as no base64url text (its <see cref="FormatException"/>) state no key, so the signature
-    /// cannot be valid; the verification answers its own refusals as not verifying. Any other failure of the decoder, of the
-    /// allocator or of a signature backend, cancellation among them, is a fault and surfaces as one.
+    /// composition the OID4VP verifier uses for the <c>cnf.jwk</c> holder key. The reconstruction's typed refusal of the key
+    /// (<see cref="JwkKeyRefused"/>), a member the decoder refuses as no base64url text among them, states no key, so the
+    /// signature cannot be valid; the verification answers its own refusals as not verifying. Any failure of the decoder beyond
+    /// its refusal, of the allocator or of a signature backend, cancellation among them, is a fault and surfaces as one.
     /// </summary>
     /// <param name="idToken">The compact Self-Issued ID Token.</param>
     /// <param name="subJwk">The <c>sub_jwk</c> members.</param>
@@ -316,20 +307,10 @@ public static class SelfIssuedIdTokenValidation
     /// <param name="base64UrlDecoder">The decoder of the key's members.</param>
     /// <param name="memoryPool">The pool the key material is rented from.</param>
     /// <returns>The key, which the caller disposes, or <see langword="null"/>.</returns>
-    private static PublicKeyMemory? SubjectKeyOrNone(Dictionary<string, object> subJwk, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool)
-    {
-        try
-        {
-            var (algorithm, purpose, scheme, keyBytesOwner) =
-                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(subJwk, memoryPool, base64UrlDecoder);
-
-            return new PublicKeyMemory(keyBytesOwner, Tag.Create(algorithm).With(purpose).With(scheme));
-        }
-        catch(Exception exception) when(exception is FormatException or JwkPublicKeyException or RsaPublicKeyException)
-        {
-            return null;
-        }
-    }
+    private static PublicKeyMemory? SubjectKeyOrNone(Dictionary<string, object> subJwk, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool) =>
+        CryptoFormatConversions.DefaultJwkToAlgorithmConverter(subJwk, memoryPool, base64UrlDecoder) is JwkKeyReconstructed reconstructed
+            ? reconstructed.ToPublicKeyMemory()
+            : null;
 
 
     //Projects a sub_jwk to exactly the RFC 7638 §3.2 required members for its key type

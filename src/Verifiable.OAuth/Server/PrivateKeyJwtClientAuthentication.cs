@@ -9,6 +9,7 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Server;
 
@@ -449,217 +450,187 @@ public static class PrivateKeyJwtClientAuthentication
                 clientJwksJson = jwksResolution.Jwks;
             }
 
-            UnverifiedJwsMessage unverified;
-            try
-            {
-                unverified = JwsParsing.ParseCompact(
-                    clientAssertion,
-                    oauth.Codecs.Decoder,
-                    bytes => oauth.Codecs.JwtHeaderDeserializer(bytes),
-                    memoryPool);
-            }
-            catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+            //The compact form the header reading admitted is three base64url segments, so the payload segment is decoded by the
+            //segment decoding every reading of wire input shares, the header already read once above: the decoder's refusal of
+            //the segment as no base64url text refuses the assertion, and any other failure of the decoder or of the allocator is
+            //a fault and surfaces as one.
+            using var payloadBytes = JwsSegmentDecoding.DecodedOrNone(clientAssertion.Split('.')[1], oauth.Codecs.Decoder, memoryPool);
+
+            //RFC 7515 section 4.1.4: a kid is a string; a header carrying one of another JSON type names no key, never read as a
+            //header naming none.
+            var hasKid = presentedHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out var kidObj);
+
+            if(payloadBytes is null || (hasKid && kidObj is not string))
             {
                 return false;
             }
 
-            using(unverified)
+            var jwkMembers = FindJwkMembers(clientJwksJson, kidObj as string, memoryPool);
+
+            //A JWK carrying a private or symmetric member cannot be a verification key —
+            //draft-ietf-oauth-client-id-metadata-document-02 §4.1 (CIMD-023) already forbids this
+            //at the document-reader layer, so this is defense-in-depth for a directly-registered
+            //ClientJwks the reader never validated. Mirrors DpopJwkUtilities.ContainsPrivateKeyMaterial.
+            if(jwkMembers is null
+                || WellKnownJwkMemberNames.ContainsPrivateOrSymmetricMember(jwkMembers.Keys))
             {
-                var kid = presentedHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out var kidObj)
-                    && kidObj is string kidValue
-                    ? kidValue
-                    : null;
+                return false;
+            }
 
-                IReadOnlyDictionary<string, string>? jwkMembers = FindJwkMembers(clientJwksJson, kid, memoryPool);
+            //The reconstruction's typed refusal of the registered key, a member the decoder refuses as no base64url text among
+            //them, states no key; any failure of the decoder beyond its refusal or of the allocator is a fault and surfaces as one.
+            if(DpopJwkUtilities.PublicKeyFromJwk(jwkMembers, alg, oauth.Codecs.Decoder, memoryPool) is not JwkKeyReconstructed reconstructed)
+            {
+                return false;
+            }
 
-                //A JWK carrying a private or symmetric member cannot be a verification key —
-                //draft-ietf-oauth-client-id-metadata-document-02 §4.1 (CIMD-023) already forbids this
-                //at the document-reader layer, so this is defense-in-depth for a directly-registered
-                //ClientJwks the reader never validated. Mirrors DpopJwkUtilities.ContainsPrivateKeyMaterial.
-                if(jwkMembers is null
-                    || WellKnownJwkMemberNames.ContainsPrivateOrSymmetricMember(jwkMembers.Keys))
+            using(var publicKey = reconstructed.ToPublicKeyMemory())
+            {
+                //RFC 7515 Section 5.2 step 8 and RFC 8725 Section 3.1: the key was reconstructed from its material alone, so the
+                //algorithm the header names is bound to it here, before either verification runs - for a verification
+                //resolved from the key's tag, the one algorithm that function computes; for a verification the caller
+                //supplies, the one algorithm it is bound to, defined over the key's type - and an ES256 signature beneath an
+                //RS256 header, or an RS256 signature beneath a PS256 header, is refused unverified.
+                var binding = verification is not null
+                    ? JwsKeyAlgorithmBinding.JudgeSuppliedVerification(alg, publicKey, verification)
+                    : JwsKeyAlgorithmBinding.JudgeRegistryVerification(alg, publicKey);
+
+                if(binding is not null)
                 {
                     return false;
                 }
 
-                PublicKeyMemory publicKey;
-                try
+                //The verification answers its own refusals - an empty segment, the decoder's refusal of a segment as no
+                //base64url text - as not verifying; any other failure of the decoder, of the verification function or of
+                //the allocator, cancellation among them, is a fault and surfaces as one.
+                var signatureValid = verification is not null
+                    ? await Jws.VerifyAsync(
+                        clientAssertion, oauth.Codecs.Decoder, memoryPool,
+                        publicKey, verification.Verification, cancellationToken).ConfigureAwait(false)
+                    : await Jws.VerifyAsync(
+                        clientAssertion, oauth.Codecs.Decoder, memoryPool,
+                        publicKey, cancellationToken).ConfigureAwait(false);
+
+                if(!signatureValid)
                 {
-                    publicKey = DpopJwkUtilities.PublicKeyFromJwk(
-                        jwkMembers, alg, oauth.Codecs.Decoder, memoryPool);
-                }
-                catch(Exception ex) when(ex is FormatException or JwkPublicKeyException or RsaPublicKeyException)
-                {
-                    //The reconstruction's own refusal of the registered key and the decoder's refusal of a member as no base64url
-                    //text state no key; any other failure of the decoder or of the allocator is a fault and surfaces as one.
                     return false;
                 }
 
-                using(publicKey)
+                //RFC 7519 section 7.2 and section 4: the claims set is one JSON object whose claim names are unique. The payload
+                //is judged by the library's one reading of a document's members before it reaches the wired deserializer, so a
+                //claims set that is no object, repeats a claim name or names no Unicode text is refused here, and the codec
+                //then reads an admitted object under no catch: a failure of it is a fault and surfaces as one.
+                if(JwkJsonReader.ReadTopLevelMembers(payloadBytes.Memory.Span) is not JsonTopLevelMembers)
                 {
-                    //RFC 7515 Section 5.2 step 8 and RFC 8725 Section 3.1: the key was reconstructed from its material alone, so the
-                    //algorithm the header names is bound to it here, before either verification runs - for a verification
-                    //resolved from the key's tag, the one algorithm that function computes; for a verification the caller
-                    //supplies, the one algorithm it is bound to, defined over the key's type - and an ES256 signature beneath an
-                    //RS256 header, or an RS256 signature beneath a PS256 header, is refused unverified.
-                    var binding = verification is not null
-                        ? JwsKeyAlgorithmBinding.JudgeSuppliedVerification(alg, publicKey, verification)
-                        : JwsKeyAlgorithmBinding.JudgeRegistryVerification(alg, publicKey);
+                    return false;
+                }
 
-                    if(binding is not null)
+                //RFC 7519 Section 2: a NumericDate may carry a fraction, and the claim rules judge it to the tick under their
+                //own tolerance, as the payload codec states every member as written.
+                var payload = new JwtPayload(oauth.Codecs.JwtPayloadDeserializer(payloadBytes.Memory.Span));
+
+                //A step endpoint (code redemption, refresh) resolves and carries the issuer
+                //BEFORE running declared authentication — read that carried value rather than
+                //resolving a second time for the same request. PAR, client credentials, and
+                //the other stepless callers carry nothing, so they resolve here as before.
+                //rfc7523bis-11 Section 4 item b: "The authorization server MUST have an issuer
+                //identifier to be used with this specification." A resolver answering no issuer leaves
+                //no issuer identifier to compare the audience with, so the assertion is refused; a
+                //failure of the resolver is the deployment's fault, never the client's, and surfaces as one.
+                var issuerUri = context.CorrelationStepIssuer is Uri carriedIssuer
+                    ? carriedIssuer
+                    : oauth.ResolveIssuerAsync is not null
+                        ? await oauth.ResolveIssuerAsync(registration, context, cancellationToken).ConfigureAwait(false)
+                        : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken).ConfigureAwait(false);
+
+                if(issuerUri is null)
+                {
+                    return false;
+                }
+
+                ClientAssertionAudiencePolicy effectiveAudiencePolicy =
+                    audiencePolicy ?? ClientAssertionAudiencePolicy.AuthorizationServerIdentities;
+
+                List<string> acceptedAudiences = [issuerUri.OriginalString];
+                if(effectiveAudiencePolicy == ClientAssertionAudiencePolicy.IssuerIdentifierOnly)
+                {
+                    //rfc7523bis-11 Section 4 item b: the authorization server "MUST reject any JWT
+                    //that does not contain its issuer identifier as its sole audience value." A
+                    //CARDINALITY rule, not only a membership rule, so an array naming the issuer
+                    //twice is refused even though every element would otherwise match an accepted
+                    //audience below.
+                    if(!payload.TryGetValue(WellKnownJwtClaimNames.Aud, out object? issuerOnlyAudienceRaw)
+                        || !IsIssuerIdentifierOnlyAudience(issuerOnlyAudienceRaw, issuerUri.OriginalString))
                     {
                         return false;
                     }
-
-                    //The verification answers its own refusals - an empty segment, the decoder's refusal of a segment as no
-                    //base64url text - as not verifying; any other failure of the decoder, of the verification function or of
-                    //the allocator, cancellation among them, is a fault and surfaces as one.
-                    var signatureValid = verification is not null
-                        ? await Jws.VerifyAsync(
-                            clientAssertion, oauth.Codecs.Decoder, memoryPool,
-                            publicKey, verification.Verification, cancellationToken).ConfigureAwait(false)
-                        : await Jws.VerifyAsync(
-                            clientAssertion, oauth.Codecs.Decoder, memoryPool,
-                            publicKey, cancellationToken).ConfigureAwait(false);
-
-                    if(!signatureValid)
+                }
+                else
+                {
+                    if(additionalAcceptedAudiences is not null)
                     {
-                        return false;
+                        acceptedAudiences.AddRange(additionalAcceptedAudiences);
                     }
 
-                    //RFC 7519 §4: the Claim Names within a JWT Claims Set MUST be unique. Gate the
-                    //decoded payload for well-formedness before it reaches the wired deserializer,
-                    //so a duplicate claim name is refused here rather than escaping the
-                    //deserializer as an unhandled exception.
-                    if(!JwkJsonReader.IsWellFormedJsonDocument(unverified.Payload.Span))
+                    //RFC 9126 Section 2: "the authorization server MUST accept its issuer identifier,
+                    //token endpoint URL, or pushed authorization request endpoint URL as values
+                    //that identify it as an intended audience" - a blanket MUST on the
+                    //authorization server, not only at the PAR endpoint, so every caller of this
+                    //validator accepts the same three identities without a second wiring
+                    //parameter. The per-request EndpointChain already carries each active
+                    //endpoint's resolved URL (the same one MetadataEndpoints publishes), so the
+                    //token and PAR endpoint URLs are read from it rather than duplicated here. The
+                    //accepted string is the PUBLISHED one: RFC 7519 Section 2's StringOrURI is "compared
+                    //as case-sensitive strings with no transformations or canonicalizations
+                    //applied", so an `aud` copied from `MetadataEndpoints`' own
+                    //`ResolvedUri.ToString()` must be matched with the same call, never
+                    //`OriginalString`.
+                    if(context.EndpointChain is { } endpointChain)
                     {
-                        return false;
-                    }
-
-                    //RFC 7519 Section 2: a NumericDate may carry a fraction, and the claim rules judge it to the tick under their
-                    //own tolerance, as the payload codec states every member as written.
-                    JwtPayload payload;
-                    try
-                    {
-                        payload = new(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
-                    }
-                    catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
-                    {
-                        return false;
-                    }
-
-                    //A step endpoint (code redemption, refresh) resolves and carries the issuer
-                    //BEFORE running declared authentication — read that carried value rather than
-                    //resolving a second time for the same request. PAR, client credentials, and
-                    //the other stepless callers carry nothing, so they resolve here as before.
-                    //rfc7523bis-11 Section 4 item b: "The authorization server MUST have an issuer
-                    //identifier to be used with this specification." A resolution that fails leaves
-                    //no issuer identifier to compare the audience with, so the assertion is refused.
-                    Uri issuerUri;
-                    if(context.CorrelationStepIssuer is Uri carriedIssuer)
-                    {
-                        issuerUri = carriedIssuer;
-                    }
-                    else
-                    {
-                        try
+                        foreach(ServerEndpoint chainEndpoint in endpointChain)
                         {
-                            issuerUri = oauth.ResolveIssuerAsync is not null
-                                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
-                                    .ConfigureAwait(false))!
-                                : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
-                                    .ConfigureAwait(false);
-                        }
-                        catch(InvalidOperationException)
-                        {
-                            return false;
-                        }
-                    }
-
-                    ClientAssertionAudiencePolicy effectiveAudiencePolicy =
-                        audiencePolicy ?? ClientAssertionAudiencePolicy.AuthorizationServerIdentities;
-
-                    List<string> acceptedAudiences = [issuerUri.OriginalString];
-                    if(effectiveAudiencePolicy == ClientAssertionAudiencePolicy.IssuerIdentifierOnly)
-                    {
-                        //rfc7523bis-11 Section 4 item b: the authorization server "MUST reject any JWT
-                        //that does not contain its issuer identifier as its sole audience value." A
-                        //CARDINALITY rule, not only a membership rule, so an array naming the issuer
-                        //twice is refused even though every element would otherwise match an accepted
-                        //audience below.
-                        if(!payload.TryGetValue(WellKnownJwtClaimNames.Aud, out object? issuerOnlyAudienceRaw)
-                            || !IsIssuerIdentifierOnlyAudience(issuerOnlyAudienceRaw, issuerUri.OriginalString))
-                        {
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        if(additionalAcceptedAudiences is not null)
-                        {
-                            acceptedAudiences.AddRange(additionalAcceptedAudiences);
-                        }
-
-                        //RFC 9126 Section 2: "the authorization server MUST accept its issuer identifier,
-                        //token endpoint URL, or pushed authorization request endpoint URL as values
-                        //that identify it as an intended audience" - a blanket MUST on the
-                        //authorization server, not only at the PAR endpoint, so every caller of this
-                        //validator accepts the same three identities without a second wiring
-                        //parameter. The per-request EndpointChain already carries each active
-                        //endpoint's resolved URL (the same one MetadataEndpoints publishes), so the
-                        //token and PAR endpoint URLs are read from it rather than duplicated here. The
-                        //accepted string is the PUBLISHED one: RFC 7519 Section 2's StringOrURI is "compared
-                        //as case-sensitive strings with no transformations or canonicalizations
-                        //applied", so an `aud` copied from `MetadataEndpoints`' own
-                        //`ResolvedUri.ToString()` must be matched with the same call, never
-                        //`OriginalString`.
-                        if(context.EndpointChain is { } endpointChain)
-                        {
-                            foreach(ServerEndpoint chainEndpoint in endpointChain)
+                            if(string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodeToken, StringComparison.Ordinal)
+                                || string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodePar, StringComparison.Ordinal))
                             {
-                                if(string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodeToken, StringComparison.Ordinal)
-                                    || string.Equals(chainEndpoint.Name, WellKnownEndpointNames.AuthCodePar, StringComparison.Ordinal))
-                                {
-                                    acceptedAudiences.Add(chainEndpoint.ResolvedUri.ToString());
-                                }
+                                acceptedAudiences.Add(chainEndpoint.ResolvedUri.ToString());
                             }
                         }
                     }
+                }
 
-                    DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                    PrivateKeyJwtClientAuthenticationResult result = Validate(
-                        payload, registration.ClientId, acceptedAudiences, now, context.ClockSkewTolerance);
+                DateTimeOffset now = server.TimeProvider.GetUtcNow();
+                PrivateKeyJwtClientAuthenticationResult result = Validate(
+                    payload, registration.ClientId, acceptedAudiences, now, context.ClockSkewTolerance);
 
-                    if(!result.IsValid)
+                if(!result.IsValid)
+                {
+                    return false;
+                }
+
+                if(checkJtiReplayAsync is not null)
+                {
+                    //RFC 7523 §3 rule 7: the recorded jti is retained "for the length of time for
+                    //which the JWT would be considered valid based on the applicable exp instant" —
+                    //here that is exp plus the clock-skew tolerance Validate just accepted the
+                    //assertion's timing under, not the bare exp, and to the clock's end where that
+                    //window reaches past it.
+                    var expiration = result.Expiration
+                        ?? throw new InvalidOperationException("A client assertion the validation accepted carries the exp it was judged by.");
+                    JtiReplayOutcome outcome = await checkJtiReplayAsync(
+                        server, context, registration.TenantId, result.ClientId!, result.Jti!,
+                        ClientAssertionClaimRules.ReplayRecordRetentionOf(expiration, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
+
+                    //Any outcome other than FirstUse refuses the assertion: Replayed is the
+                    //defense doing its job, StoreUnavailable is a policy that cannot prove
+                    //itself, and Unacceptable is an oversized jti the guard will not track —
+                    //none of the three authenticates the client.
+                    if(outcome != JtiReplayOutcome.FirstUse)
                     {
                         return false;
                     }
-
-                    if(checkJtiReplayAsync is not null)
-                    {
-                        //RFC 7523 §3 rule 7: the recorded jti is retained "for the length of time for
-                        //which the JWT would be considered valid based on the applicable exp instant" —
-                        //here that is exp plus the clock-skew tolerance Validate just accepted the
-                        //assertion's timing under, not the bare exp, and to the clock's end where that
-                        //window reaches past it.
-                        var expiration = result.Expiration
-                            ?? throw new InvalidOperationException("A client assertion the validation accepted carries the exp it was judged by.");
-                        JtiReplayOutcome outcome = await checkJtiReplayAsync(
-                            server, context, registration.TenantId, result.ClientId!, result.Jti!,
-                            ClientAssertionClaimRules.ReplayRecordRetentionOf(expiration, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
-
-                        //Any outcome other than FirstUse refuses the assertion: Replayed is the
-                        //defense doing its job, StoreUnavailable is a policy that cannot prove
-                        //itself, and Unacceptable is an oversized jti the guard will not track —
-                        //none of the three authenticates the client.
-                        if(outcome != JtiReplayOutcome.FirstUse)
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
                 }
+
+                return true;
             }
         };
     }

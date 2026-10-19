@@ -63,6 +63,33 @@ public static class RsaPublicKeyEncoding
 
 
     /// <summary>
+    /// Which necessary RSA condition the supplied unsigned big-endian parameters break, read without an exception: a modulus that
+    /// is not positive, or a public exponent that is not odd with <c>3 &lt;= e &lt; n</c>; <see langword="null"/> when they break
+    /// none. Modulus-size policies remain with the caller; the prime factors are not available here.
+    /// </summary>
+    /// <param name="modulus">The unsigned big-endian modulus.</param>
+    /// <param name="publicExponent">The unsigned big-endian public exponent.</param>
+    /// <returns>The broken condition, or <see langword="null"/>.</returns>
+    public static RsaPublicKeyFailureKind? ParameterDefectOf(ReadOnlySpan<byte> modulus, ReadOnlySpan<byte> publicExponent) =>
+        DefectOf(new BigInteger(modulus, isUnsigned: true, isBigEndian: true), new BigInteger(publicExponent, isUnsigned: true, isBigEndian: true));
+
+
+    /// <summary>Which necessary RSA condition the parameters break, or <see langword="null"/> when they break none.</summary>
+    /// <param name="modulus">The modulus.</param>
+    /// <param name="publicExponent">The public exponent.</param>
+    /// <returns>The broken condition, or <see langword="null"/>.</returns>
+    private static RsaPublicKeyFailureKind? DefectOf(BigInteger modulus, BigInteger publicExponent)
+    {
+        if(modulus.Sign <= 0)
+        {
+            return RsaPublicKeyFailureKind.InvalidModulus;
+        }
+
+        return publicExponent < 3 || publicExponent.IsEven || publicExponent >= modulus ? RsaPublicKeyFailureKind.InvalidPublicExponent : null;
+    }
+
+
+    /// <summary>
     /// Checks the public exponent's necessary RSA conditions: odd and <c>3 &lt;= e &lt; n</c>.
     /// Modulus-size policies remain with the caller; the prime factors are not available here.
     /// </summary>
@@ -70,13 +97,15 @@ public static class RsaPublicKeyEncoding
     /// <param name="publicExponent">The public exponent.</param>
     private static void Validate(BigInteger modulus, BigInteger publicExponent)
     {
-        if(modulus.Sign <= 0)
+        var defect = DefectOf(modulus, publicExponent);
+
+        if(defect == RsaPublicKeyFailureKind.InvalidModulus)
         {
             throw new RsaPublicKeyException(RsaPublicKeyFailureKind.InvalidModulus,
                 "The RSA modulus must be positive.");
         }
 
-        if(publicExponent < 3 || publicExponent.IsEven || publicExponent >= modulus)
+        if(defect == RsaPublicKeyFailureKind.InvalidPublicExponent)
         {
             throw new RsaPublicKeyException(RsaPublicKeyFailureKind.InvalidPublicExponent,
                 "The RSA public exponent must be odd and satisfy 3 <= e < n.");

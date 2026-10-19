@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -45,7 +44,10 @@ public static class MdocVerificationExtensions
         /// <param name="parseCoseSign1">Delegate that parses the COSE_Sign1 wire form. Wired to <c>Verifiable.Cbor.CoseSerialization.ParseCoseSign1</c>.</param>
         /// <param name="buildSigStructure">Delegate that builds the COSE Sig_structure. Wired to <c>Verifiable.Cbor.CoseSerialization.BuildSigStructure</c>.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns><see langword="true"/> when the signature is valid; otherwise <see langword="false"/>.</returns>
+        /// <returns>
+        /// <see langword="true"/> when the signature is valid; otherwise <see langword="false"/>, an IssuerAuth whose COSE_Sign1 the
+        /// reading refuses among them.
+        /// </returns>
         public async ValueTask<bool> VerifyAsync(
             PublicKeyMemory issuerVerificationKey,
             BaseMemoryPool pool,
@@ -59,7 +61,13 @@ public static class MdocVerificationExtensions
             ArgumentNullException.ThrowIfNull(parseCoseSign1);
             ArgumentNullException.ThrowIfNull(buildSigStructure);
 
-            using CoseSign1Message message = parseCoseSign1(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
+            //An IssuerAuth whose COSE_Sign1 the reading refuses carries no signature this verification can find valid.
+            if(parseCoseSign1(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool) is not CoseSign1Read { Message: var parsed })
+            {
+                return false;
+            }
+
+            using var message = parsed;
 
             return await Cose.VerifyAsync(
                 message, buildSigStructure, issuerVerificationKey, cancellationToken).ConfigureAwait(false);
@@ -156,8 +164,11 @@ public static class MdocVerificationExtensions
             }
 
             //Re-parse to hand the caller a live message; the verify step above disposed its own
-            //copy. The returned context owns this one — the caller disposes the context.
-            CoseSign1Message message = parseCoseSign1(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
+            //copy. The returned context owns this one — the caller disposes the context. The bytes the signature verified over
+            //were read once already, so a refusal of them now is an invariant failure, never an answer.
+            var message = parseCoseSign1(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool) is CoseSign1Read { Message: var reread }
+                ? reread
+                : throw new InvalidOperationException("The IssuerAuth's COSE_Sign1, read once already, was refused on its second reading.");
 
             return (true, new MdocIssuerAuthVerificationContext(message, issuerAuth.Mso));
         }
@@ -246,8 +257,14 @@ public static class MdocVerificationExtensions
             }
 
             //Re-parse to hand the caller a live message; the verify step above disposed its own
-            //copy. The returned context owns this message and the trust resolution.
-            CoseSign1Message message = parseCoseSign1(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
+            //copy. The returned context owns this message and the trust resolution. The bytes the signature verified over were
+            //read once already, so a refusal of them now is an invariant failure, never an answer.
+            if(parseCoseSign1(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool) is not CoseSign1Read { Message: var message })
+            {
+                resolution.Dispose();
+
+                throw new InvalidOperationException("The IssuerAuth's COSE_Sign1, read once already, was refused on its second reading.");
+            }
 
             return (true, new MdocIssuerAuthVerificationContext(message, issuerAuth.Mso, resolution));
         }
@@ -333,67 +350,137 @@ public static class MdocVerificationExtensions
             ArgumentNullException.ThrowIfNull(encodeDeviceAuthenticationBytes);
             ArgumentNullException.ThrowIfNull(buildSigStructure);
 
-            if(deviceSigned.DeviceAuth.DeviceSignature is not MdocDeviceSignature signature)
+            //A device half carrying a MAC rather than a signature, or a device signature whose detached-payload COSE_Sign1 the
+            //reading refuses, carries no signature this verification can find valid.
+            if(deviceSigned.DeviceAuth.DeviceSignature is not MdocDeviceSignature signature
+                || parseCoseSign1AllowingNilPayload(signature.EncodedCoseSign1.AsReadOnlyMemory(), pool) is not CoseSign1Read { Message: var parsed })
             {
                 return (false, null);
             }
 
-            //Reconstruct the DeviceAuthenticationBytes from the same inputs the signer used. The
-            //device half preserves EncodedDeviceNameSpacesBytes verbatim so the verifier hashes the
-            //same byte pattern.
-            ReadOnlyMemory<byte> deviceAuthenticationBytes = encodeDeviceAuthenticationBytes(
-                encodedSessionTranscript, docType, deviceSigned.EncodedDeviceNameSpacesBytes);
+            //The detached parse is disposed regardless of outcome; the context the verification answers owns copies of its
+            //carriers.
+            using var detachedMessage = parsed;
+            var context = await VerifyDetachedSignatureAsync(
+                deviceSigned, docType, encodedSessionTranscript, deviceVerificationKey, pool, detachedMessage,
+                encodeDeviceAuthenticationBytes, buildSigStructure, cancellationToken).ConfigureAwait(false);
 
-            //Parse the detached-payload COSE_Sign1 into pool-routed carriers. The Sig_structure
-            //computation reads the carriers' bytes and re-attaches the reconstructed payload for
-            //the actual verification call; this detached parse is disposed regardless of outcome.
-            using CoseSign1Message detachedMessage = parseCoseSign1AllowingNilPayload(signature.EncodedCoseSign1.AsReadOnlyMemory(), pool);
-
-            //Re-pool-allocate the protected header and signature for the verifiable message — the
-            //same EncodedCoseProtectedHeader / Signature cannot be shared between two IDisposable
-            //messages without a disposal conflict.
-            ReadOnlySpan<byte> phSpan = detachedMessage.ProtectedHeader.AsReadOnlySpan();
-            IMemoryOwner<byte> phOwner = pool.Rent(phSpan.Length);
-            phSpan.CopyTo(phOwner.Memory.Span);
-            EncodedCoseProtectedHeader verifiableHeader = new(phOwner, CryptoTags.CoseEncodedProtectedHeader);
-
-            ReadOnlySpan<byte> sigSpan = detachedMessage.Signature.AsReadOnlySpan();
-            IMemoryOwner<byte> sigOwner = pool.Rent(sigSpan.Length);
-            sigSpan.CopyTo(sigOwner.Memory.Span);
-            Verifiable.Cryptography.Signature verifiableSignature = new(sigOwner, detachedMessage.Signature.Tag);
-
-            //verifiableMessage owns verifiableHeader + verifiableSignature; it borrows only the
-            //plain UnprotectedHeader dict and the standalone payload from detachedMessage, so it
-            //outlives detachedMessage's disposal. On success it transfers to the returned context;
-            //otherwise it is disposed here.
-            CoseSign1Message verifiableMessage = new(
-                verifiableHeader,
-                detachedMessage.UnprotectedHeader,
-                deviceAuthenticationBytes,
-                verifiableSignature);
-
-            bool isVerified;
-            try
-            {
-                isVerified = await Cose.VerifyAsync(
-                    verifiableMessage, buildSigStructure, deviceVerificationKey, cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                verifiableMessage.Dispose();
-                throw;
-            }
-
-            if(!isVerified)
-            {
-                verifiableMessage.Dispose();
-                return (false, null);
-            }
-
-            return (true, new MdocDeviceSignedVerificationContext(verifiableMessage, deviceAuthenticationBytes));
+            return (context is not null, context);
         }
 
 
+        /// <summary>
+        /// Verifies the device signature on this <see cref="MdocDeviceSigned"/> per ISO/IEC 18013-5 §9.1.3.4 over its detached
+        /// COSE_Sign1 the caller has already read - the message its reading answered, which the caller owns and disposes and this
+        /// verification borrows, so the signature is read once whatever judges its wire shape first.
+        /// </summary>
+        /// <param name="docType">The enclosing document's docType URI.</param>
+        /// <param name="encodedSessionTranscript">The session transcript bytes; MUST match what the device used at signing time.</param>
+        /// <param name="deviceVerificationKey">The device's verification key.</param>
+        /// <param name="pool">Memory pool the verifiable message's carriers rent from.</param>
+        /// <param name="detachedSignature">The device signature's detached-payload COSE_Sign1, read; borrowed.</param>
+        /// <param name="encodeDeviceAuthenticationBytes">Delegate that reconstructs the DeviceAuthenticationBytes.</param>
+        /// <param name="buildSigStructure">Delegate that builds the COSE Sig_structure.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns><see langword="true"/> when the device signature verifies against the reconstructed <c>DeviceAuthenticationBytes</c>.</returns>
+        public async ValueTask<bool> VerifyAsync(
+            string docType,
+            ReadOnlyMemory<byte> encodedSessionTranscript,
+            PublicKeyMemory deviceVerificationKey,
+            BaseMemoryPool pool,
+            CoseSign1Message detachedSignature,
+            EncodeDeviceAuthenticationBytesDelegate encodeDeviceAuthenticationBytes,
+            BuildSigStructureDelegate buildSigStructure,
+            CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(deviceSigned);
+            ArgumentException.ThrowIfNullOrEmpty(docType);
+            ArgumentNullException.ThrowIfNull(deviceVerificationKey);
+            ArgumentNullException.ThrowIfNull(pool);
+            ArgumentNullException.ThrowIfNull(detachedSignature);
+            ArgumentNullException.ThrowIfNull(encodeDeviceAuthenticationBytes);
+            ArgumentNullException.ThrowIfNull(buildSigStructure);
+
+            using var context = await VerifyDetachedSignatureAsync(
+                deviceSigned, docType, encodedSessionTranscript, deviceVerificationKey, pool, detachedSignature,
+                encodeDeviceAuthenticationBytes, buildSigStructure, cancellationToken).ConfigureAwait(false);
+
+            return context is not null;
+        }
+    }
+
+
+    /// <summary>
+    /// The device signature's verification over its detached COSE_Sign1 already read (ISO/IEC 18013-5 §9.1.3.4): the
+    /// <c>DeviceAuthenticationBytes</c> the wire form omits are reconstructed from the session transcript, the doctype and the
+    /// preserved namespace bytes, re-attached as the payload of a verifiable message carrying copies of the detached message's
+    /// protected header and signature, and verified by <c>Cose.VerifyAsync</c>.
+    /// </summary>
+    /// <param name="deviceSigned">The device half.</param>
+    /// <param name="docType">The enclosing document's docType URI.</param>
+    /// <param name="encodedSessionTranscript">The session transcript bytes.</param>
+    /// <param name="deviceVerificationKey">The device's verification key.</param>
+    /// <param name="pool">Memory pool the verifiable message's carriers rent from.</param>
+    /// <param name="detachedMessage">The detached COSE_Sign1, read; borrowed.</param>
+    /// <param name="encodeDeviceAuthenticationBytes">Delegate that reconstructs the DeviceAuthenticationBytes.</param>
+    /// <param name="buildSigStructure">Delegate that builds the COSE Sig_structure.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The context, which the caller owns, once the signature verifies; otherwise <see langword="null"/>.</returns>
+    private static async ValueTask<MdocDeviceSignedVerificationContext?> VerifyDetachedSignatureAsync(
+        MdocDeviceSigned deviceSigned,
+        string docType,
+        ReadOnlyMemory<byte> encodedSessionTranscript,
+        PublicKeyMemory deviceVerificationKey,
+        BaseMemoryPool pool,
+        CoseSign1Message detachedMessage,
+        EncodeDeviceAuthenticationBytesDelegate encodeDeviceAuthenticationBytes,
+        BuildSigStructureDelegate buildSigStructure,
+        CancellationToken cancellationToken)
+    {
+        //Reconstruct the DeviceAuthenticationBytes from the same inputs the signer used. The
+        //device half preserves EncodedDeviceNameSpacesBytes verbatim so the verifier hashes the
+        //same byte pattern.
+        var deviceAuthenticationBytes = encodeDeviceAuthenticationBytes(
+            encodedSessionTranscript, docType, deviceSigned.EncodedDeviceNameSpacesBytes);
+
+        //The verifiable message carries copies of the detached message's protected header and signature in carriers of its
+        //own - one carrier cannot be shared between two disposable messages without a disposal conflict - and borrows only the
+        //plain unprotected header and the reconstructed payload, so it outlives the detached message, which its reader's
+        //caller owns. On success it transfers to the returned context; otherwise it is disposed here.
+        var verifiableMessage = CoseSign1Message.FromElements(
+            detachedMessage.ProtectedHeader.AsReadOnlySpan(),
+            detachedMessage.UnprotectedHeader,
+            deviceAuthenticationBytes,
+            detachedMessage.Signature.AsReadOnlySpan(),
+            detachedMessage.Signature.Tag,
+            pool);
+
+        bool isVerified;
+        try
+        {
+            isVerified = await Cose.VerifyAsync(
+                verifiableMessage, buildSigStructure, deviceVerificationKey, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            verifiableMessage.Dispose();
+
+            throw;
+        }
+
+        if(!isVerified)
+        {
+            verifiableMessage.Dispose();
+
+            return null;
+        }
+
+        return new MdocDeviceSignedVerificationContext(verifiableMessage, deviceAuthenticationBytes);
+    }
+
+
+    extension(MdocDeviceSigned deviceSigned)
+    {
         /// <summary>
         /// Verifies the device signature on this <see cref="MdocDeviceSigned"/>. Forwards to
         /// <c>VerifyVerboseAsync</c> and discards the intermediate context.
