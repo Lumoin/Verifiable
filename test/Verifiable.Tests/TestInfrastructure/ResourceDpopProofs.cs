@@ -42,9 +42,9 @@ internal static class ResourceDpopProofs
     /// <param name="accessToken">The access token the <c>ath</c> claim hashes.</param>
     /// <param name="nonce">The <c>nonce</c> value, or <see langword="null"/> to carry none.</param>
     /// <param name="issuedAt">The <c>iat</c> value.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="jti">The <c>jti</c> value, or <see langword="null"/> for a fresh unique one.</param>
     /// <param name="alterHeader">Rewrites the serialized protected header before signing, or <see langword="null"/> to keep it.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact DPoP proof.</returns>
     public static async Task<string> BuildAsync(
         DpopKey key,
@@ -53,9 +53,9 @@ internal static class ResourceDpopProofs
         string accessToken,
         string? nonce,
         DateTimeOffset issuedAt,
-        CancellationToken cancellationToken,
-        string? jti = null,
-        Action<Dictionary<string, object?>>? alterHeader = null)
+        string? jti,
+        Action<Dictionary<string, object?>>? alterHeader,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
 
@@ -79,7 +79,7 @@ internal static class ResourceDpopProofs
             {
                 SerializeHeader = header =>
                 {
-                    Dictionary<string, object?> altered = new(DpopTestSupport.Serializer.SerializeHeader(header), StringComparer.Ordinal);
+                    var altered = new Dictionary<string, object?>(DpopTestSupport.Serializer.SerializeHeader(header), StringComparer.Ordinal);
                     alterHeader(altered);
 
                     return altered;

@@ -41,6 +41,10 @@ public static class SecurityEventTokenParsing
     }
 
 
+    /// <summary>The string value of a claim, or <see langword="null"/> when absent or of another kind.</summary>
+    /// <param name="obj">The token's claims.</param>
+    /// <param name="name">The claim's name.</param>
+    /// <returns>The string, or <see langword="null"/>.</returns>
     private static string? ReadString(IReadOnlyDictionary<string, object?> obj, string name) =>
         obj.TryGetValue(name, out object? value) && value is string s ? s : null;
 
@@ -57,6 +61,9 @@ public static class SecurityEventTokenParsing
         obj.TryGetValue(name, out var value) ? NumericDate.Of(value) : null;
 
 
+    /// <summary>The audiences the token's <c>aud</c> claim names, a string or an array of strings (RFC 7519 section 4.1.3).</summary>
+    /// <param name="obj">The token's claims.</param>
+    /// <returns>The audiences, empty when the claim is absent.</returns>
     private static List<string> ReadAudiences(IReadOnlyDictionary<string, object?> obj)
     {
         if(!obj.TryGetValue(WellKnownJwtClaimNames.Aud, out object? value))
@@ -85,12 +92,18 @@ public static class SecurityEventTokenParsing
     }
 
 
+    /// <summary>The subject identifier the token's <c>sub_id</c> claim carries (RFC 9493), or <see langword="null"/> when absent or no object.</summary>
+    /// <param name="obj">The token's claims.</param>
+    /// <returns>The subject identifier, or <see langword="null"/>.</returns>
     private static SubjectIdentifier? ReadSubjectId(IReadOnlyDictionary<string, object?> obj) =>
         obj.TryGetValue(SecurityEventTokenClaimNames.SubId, out object? value) && value is IReadOnlyDictionary<string, object> subId
             ? SubjectIdentifier.FromWireObject(subId)
             : null;
 
 
+    /// <summary>The security events the token's <c>events</c> claim carries (RFC 8417 section 2.2), each with its event type and payload.</summary>
+    /// <param name="obj">The token's claims.</param>
+    /// <returns>The events.</returns>
     private static List<SecurityEvent> ReadEvents(IReadOnlyDictionary<string, object?> obj)
     {
         if(!obj.TryGetValue(SecurityEventTokenClaimNames.Events, out object? value) || value is not IReadOnlyDictionary<string, object> events)

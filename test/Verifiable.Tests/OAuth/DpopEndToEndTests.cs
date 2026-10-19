@@ -177,7 +177,7 @@ internal sealed class DpopEndToEndTests
         const string resourceUrl = "https://rs.example.com/api/profile";
         string resourceProof = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, WellKnownHttpMethods.Get, resourceUrl, accessToken, nonce: null, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult rsResult = await DpopProofValidator.ValidateAsync(
             new DpopProofValidationRequest

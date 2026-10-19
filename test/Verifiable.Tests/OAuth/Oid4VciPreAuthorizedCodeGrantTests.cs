@@ -968,7 +968,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
         string credentialProof = await ResourceDpopProofs.BuildAsync(
             dpopKey, WellKnownHttpMethods.Post, credentialUrl.ToString(), accessToken, resourceNonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+            TimeProvider.GetUtcNow(), jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage provenResponse = await PostCredentialRequestAsync(
             httpClient, credentialUrl, ConfigurationId, accessToken, credentialProof, TestContext.CancellationToken)

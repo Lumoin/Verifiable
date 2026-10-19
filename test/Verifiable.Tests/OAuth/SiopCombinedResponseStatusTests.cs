@@ -940,8 +940,45 @@ internal sealed class SiopCombinedResponseStatusTests
             "An unparseable vp_token is a classified refusal, not an unclassified server fault.");
         Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind,
             "A vp_token with no issuer-JWT/disclosure structure is the Malformed refusal class.");
+        Assert.AreEqual(SdJwtPresentationDefect.CompactSerializationMalformed, failed.PresentationDefect,
+            "The failed flow carries the reading's typed defect: the compact serialization is malformed.");
         Assert.AreEqual(0, resolverInvocations(),
             "The parse fails before any status claim is ever read, so the resolver is never invoked.");
+    }
+
+
+    /// <summary>
+    /// RFC 7515 section 7.1 and RFC 9901 section 4.3: the Key Binding JWT a presentation ends in is a compact JWS whose payload
+    /// segment is base64url text. A Wallet writing one whose payload segment is no base64url text answers the SIOPv2 §12
+    /// combined response with a presentation no conformant Wallet produces, refused as HTTP 400 <c>invalid_request</c>, the
+    /// failed flow carrying the reading's typed structure defect; the Wallet writes the malformed Key Binding JWT itself, before
+    /// the presentation is composed.
+    /// </summary>
+    /// <returns>A task completing once the combined response is judged.</returns>
+    [TestMethod]
+    public async Task AKeyBindingJwtWhosePayloadIsNoBase64UrlIsRefusedWithTheStructureDefect()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        var (serializedSdJwt, holderPrivateKey, issuerPublicKey) = await SdJwtVpFixture.IssuePidCredentialAsync(
+            TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
+        using var holderKey = holderPrivateKey;
+        using var issuerKey = issuerPublicKey;
+        host.RegisterIssuerTrust(SiopCombinedResponseFixture.IssuerId, issuerKey);
+
+        var malformedKeyBindingJwt = "eyJhbGciOiJFZERTQSIsInR5cCI6ImtiK2p3dCJ9.A.c2lnbmF0dXJl";
+        var outcome = await SiopCombinedResponseFixture.PostCombinedResponseWithKeyBindingJwtAsync(
+            host, serializedSdJwt, "n-siop-kb-payload-no-base64url", malformedKeyBindingJwt,
+            TimeProvider, Pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual((int)HttpStatusCode.BadRequest, outcome.Response.StatusCode, outcome.Response.Body,
+            "Section 4.1.2.1: a malformed presentation is answered as HTTP 400, never as a 500 server fault.");
+
+        var failed = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(outcome.State);
+        Assert.IsNotNull(failed.Refusal, "The malformed presentation is a classified refusal.");
+        Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind);
+        Assert.AreEqual(SdJwtPresentationDefect.CompactSerializationMalformed, failed.PresentationDefect,
+            "The failed flow carries the reading's typed defect: the Key Binding JWT's payload segment is no base64url text.");
     }
 
 

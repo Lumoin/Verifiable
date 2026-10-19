@@ -222,7 +222,7 @@ public static class SiopVerifierExecutor
             //and are never overwritten — every other key (x5c, trust_chain, jwt, kid) is copied in.
             if(action.AdditionalHeaderClaims is not null)
             {
-                foreach(KeyValuePair<string, object?> claim in action.AdditionalHeaderClaims)
+                foreach(var claim in action.AdditionalHeaderClaims)
                 {
                     if(claim.Key != WellKnownJwkMemberNames.Alg
                         && claim.Key != WellKnownJoseHeaderNames.Typ)
@@ -361,7 +361,10 @@ public static class SiopVerifierExecutor
                             FailedAt = now
                         },
 
-                        _ => null
+                        //The guard answers one of the four outcomes above; a value of no outcome it gives is the guard's fault,
+                        //never a consultation that let the nonce through.
+                        _ => throw new InvalidOperationException(
+                            $"The replay guard answered {nonceReplayOutcome}, no outcome it gives, so the nonce's replay defense is not established.")
                     };
                     if(nonceReplayFailure is not null)
                     {
@@ -439,42 +442,27 @@ public static class SiopVerifierExecutor
             //KB-JWT signature against the cnf holder key, and sd_hash over the disclosed set.
             //
             //Wallet-attributable malformed-presentation detection mirrors the OID4VP seat's per-format
-            //dispatch (HaipOid4VpVerifierExecutor): an unparseable SD-JWT/KB-JWT or a status.status_list
-            //reference that fails Section 6.2's own rules is a shape no conformant Wallet would produce
-            //— Malformed, not a 500 fault. VerifyAsync answers such a presentation with its typed refusal, and
-            //throws FormatException only from the wire format's own parse; a non-format failure is left on the
-            //fault path.
-            Result<VpTokenParsed, SdJwtPresentationDefect> verification;
-
-            try
-            {
-                verification = await SdJwtVpTokenVerification.VerifyAsync(
-                    action.VpToken,
-                    resolvedVpTokenCredentialQueryId,
-                    parseSdJwtToken,
-                    computeSdJwtHashInput,
-                    resolveIssuerKey,
-                    computeDigest,
-                    base64UrlDecoder,
-                    base64UrlEncoder,
-                    pool,
-                    saltReuseSeam,
-                    parseX5c: null,
-                    resolveTrustedAuthorityEvidence: null,
-                    context,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch(FormatException exception)
-            {
-                return new SiopFlowFailed
-                {
-                    Reason =
-                        $"Malformed vp_token presentation for credential query '{resolvedVpTokenCredentialQueryId}': "
-                        + exception.Message,
-                    FailedAt = now,
-                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
-                };
-            }
+            //dispatch (HaipOid4VpVerifierExecutor): a compact serialization the wire format's parse refuses, an
+            //undecodable segment, an unreadable claims set or confirmation key, or a status.status_list reference
+            //that fails Section 6.2's own rules is a shape no conformant Wallet would produce - Malformed, not a 500
+            //fault. VerifyAsync answers each such presentation with its typed defect at the reading that refuses it,
+            //so nothing here catches: a failure of the issuer-key resolver, of the digest, of the decoder beyond its
+            //refusal or of the allocator stays on the fault path.
+            var verification = await SdJwtVpTokenVerification.VerifyAsync(
+                action.VpToken,
+                resolvedVpTokenCredentialQueryId,
+                parseSdJwtToken,
+                computeSdJwtHashInput,
+                resolveIssuerKey,
+                computeDigest,
+                base64UrlDecoder,
+                base64UrlEncoder,
+                pool,
+                saltReuseSeam,
+                parseX5c: null,
+                resolveTrustedAuthorityEvidence: null,
+                context,
+                cancellationToken).ConfigureAwait(false);
 
             //The typed defect rides the failure to the failed state; the Wallet is answered the generic malformed description.
             if(!verification.IsSuccess)
@@ -773,7 +761,7 @@ public static class SiopVerifierExecutor
     /// <summary>
     /// Applies <paramref name="credentialStatusPolicy"/> once over the complete
     /// <paramref name="credentialStatuses"/> map the §12 combined-response handler read, after the
-    /// seven-way id_token/vp_token binding has already been confirmed. SD-JWT VC -18: "Verifier policy
+    /// eight-way id_token/vp_token binding has already been confirmed. SD-JWT VC -18: "Verifier policy
     /// decides whether to reject or accept a presentation of a SD-JWT VC based on the status of the
     /// Verifiable Digital Credential." Skipped entirely when the map is empty — nothing was surfaced to
     /// judge. The SIOP-side sibling of <see cref="Oid4Vp.HaipOid4VpVerifierExecutor"/>'s equivalent step.

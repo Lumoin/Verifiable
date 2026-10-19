@@ -56,7 +56,7 @@ internal sealed class FederationKeyResolverTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Construct a synthetic "issuer" with empty payload (no jwks).
-        Dictionary<string, object?> emptyPayloadDict = new(StringComparer.Ordinal)
+        var emptyPayloadDict = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = anchor.Identifier.Value,
             [WellKnownJwtClaimNames.Sub] = anchor.Identifier.Value,
@@ -204,7 +204,7 @@ internal sealed class FederationKeyResolverTests
             }
         };
 
-        Dictionary<string, object?> payloadDict = new(StringComparer.Ordinal)
+        var payloadDict = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = issuer.Value,
             [WellKnownJwtClaimNames.Sub] = issuer.Value,
@@ -272,7 +272,7 @@ internal sealed class FederationKeyResolverTests
             [WellKnownJwkMemberNames.Keys] = new List<object> { firstJwk, secondJwk }
         };
 
-        Dictionary<string, object?> payloadDict = new(StringComparer.Ordinal)
+        var payloadDict = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = issuer.Value,
             [WellKnownJwtClaimNames.Sub] = issuer.Value,

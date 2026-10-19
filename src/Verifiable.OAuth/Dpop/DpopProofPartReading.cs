@@ -37,21 +37,53 @@ public sealed record DpopProofPartRefused<TPart>(JwsPartRefusal Refusal) : DpopP
 /// A member a DPoP proof's part requires is absent, or a member it reads is carried as a value of another kind than its rule
 /// names - RFC 9449 section 4.2 for the header's and the claims set's members, RFC 7517 section 4 and RFC 7518 section 6 for the
 /// members of the key the header embeds - the member identified as the reading knows it, named as the object carrying it names
-/// it, and carried as the JSON reader answered it.
+/// it, and carried as the JSON reader answered it. Every fact is fixed by the one construction, which refuses a member the
+/// reading does not know; the segment (<see cref="Part"/>) and the object (<see cref="Place"/>) are derived from the member, so
+/// no object initializer or <c>with</c> expression can make the three disagree.
 /// </summary>
-/// <param name="Member">Which member the refusal concerns, as the reading knows it.</param>
-/// <param name="MemberName">The member's name as the object carrying it names it.</param>
-/// <param name="Carried">
-/// The member as the JSON reader answered it (<see cref="JsonMemberLookup"/>): absent, a string with its decoded text, a number
-/// with its spelling, or a value of another kind naming which.
-/// </param>
-/// <param name="Defect">Why the part is refused for the member.</param>
-public sealed record DpopProofMemberRefusal(
-    DpopProofMember Member,
-    string MemberName,
-    JsonMemberLookup Carried,
-    DpopProofMemberDefect Defect) : JwsPartRefusal(PartOf(Member))
+public sealed record DpopProofMemberRefusal : JwsPartRefusal
 {
+    /// <summary>Creates the refusal of a part for one of its members.</summary>
+    /// <param name="member">Which member the refusal concerns, as the reading knows it.</param>
+    /// <param name="memberName">The member's name as the object carrying it names it.</param>
+    /// <param name="carried">
+    /// The member as the JSON reader answered it (<see cref="JsonMemberLookup"/>): absent, a string with its decoded text, a
+    /// number with its spelling, or a value of another kind naming which.
+    /// </param>
+    /// <param name="defect">Why the part is refused for the member.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="member"/> is none of the members a DPoP proof's reading knows.</exception>
+    public DpopProofMemberRefusal(DpopProofMember member, string memberName, JsonMemberLookup carried, DpopProofMemberDefect defect)
+    {
+        ArgumentNullException.ThrowIfNull(memberName);
+        ArgumentNullException.ThrowIfNull(carried);
+
+        _ = PartOf(member);
+        Member = member;
+        MemberName = memberName;
+        Carried = carried;
+        Defect = defect;
+    }
+
+
+    /// <summary>Which member the refusal concerns, as the reading knows it.</summary>
+    public DpopProofMember Member { get; }
+
+    /// <summary>The member's name as the object carrying it names it.</summary>
+    public string MemberName { get; }
+
+    /// <summary>
+    /// The member as the JSON reader answered it (<see cref="JsonMemberLookup"/>): absent, a string with its decoded text, a number
+    /// with its spelling, or a value of another kind naming which.
+    /// </summary>
+    public JsonMemberLookup Carried { get; }
+
+    /// <summary>Why the part is refused for the member.</summary>
+    public DpopProofMemberDefect Defect { get; }
+
+    /// <summary>The segment of the proof the member is carried in, derived from <see cref="Member"/>.</summary>
+    public override JwsPart Part => PartOf(Member);
+
+
     /// <summary>
     /// The object of the proof carrying, or required to carry, the member, derived from <see cref="Member"/>, which a refusal
     /// is constructed with only as one of the members its reading knows (<see cref="PartOf"/> refuses any other).
@@ -202,18 +234,33 @@ public enum DpopProofMemberDefect
     RepeatedKeyOperation,
 
     /// <summary>
-    /// The embedded <c>jwk</c> carries both <c>use</c> and <c>key_ops</c>, and they do not convey consistent information (RFC
-    /// 7517 section 4.3: "if both are used, the information they convey MUST be consistent"): <c>sig</c> permits <c>sign</c> and
-    /// <c>verify</c>, and <c>enc</c> the encryption, key wrapping and derivation operations, so an operation the use does not
-    /// permit is inconsistent with it, as is a use or an operation no rule relates, whose consistency is not established.
+    /// The embedded <c>jwk</c> carries both <c>use</c> and <c>key_ops</c>, and they are established not to convey consistent
+    /// information (RFC 7517 section 4.3: "if both are used, the information they convey MUST be consistent"): <c>sig</c>
+    /// permits <c>sign</c> and <c>verify</c>, and <c>enc</c> the encryption, key wrapping and derivation operations, so an
+    /// operation of that vocabulary the known use does not permit is inconsistent with it.
     /// </summary>
     KeyOperationsInconsistentWithUse,
 
     /// <summary>
-    /// The embedded <c>jwk</c>'s <c>x5c</c> is a chain of certificates whose first certificate's key is not the key the
-    /// <c>jwk</c>'s other members represent (RFC 7517 section 4.7: "The key in the first certificate MUST match the public key
-    /// represented by other members of the JWK"), a key whose agreement with a certificate's the library does not establish
-    /// among them.
+    /// The embedded <c>jwk</c>'s <c>x5c</c> is a chain of certificates whose first certificate's key is established not to be the
+    /// key the <c>jwk</c>'s other members represent (RFC 7517 section 4.7: "The key in the first certificate MUST match the public
+    /// key represented by other members of the JWK").
     /// </summary>
-    CertificateNotOfTheKey
+    CertificateNotOfTheKey,
+
+    /// <summary>
+    /// The embedded <c>jwk</c> carries both <c>use</c> and <c>key_ops</c>, and the use or an operation is outside the vocabulary
+    /// RFC 7517 sections 4.2 and 4.3 register (<c>sig</c> and <c>enc</c>; <c>sign</c>, <c>verify</c>, <c>encrypt</c>,
+    /// <c>decrypt</c>, <c>wrapKey</c>, <c>unwrapKey</c>, <c>deriveKey</c>, <c>deriveBits</c>), so whether the two are consistent,
+    /// which the section requires, is not established: a judgement not made, never an established inconsistency.
+    /// </summary>
+    KeyOperationsRelationToUseUnestablished,
+
+    /// <summary>
+    /// The embedded <c>jwk</c>'s <c>x5c</c> is a chain of DER certificates, but the key the <c>jwk</c>'s other members represent is
+    /// of a type, curve or algorithm whose agreement with a certificate's key the library does not compare, so whether the first
+    /// certificate's key is that key, which RFC 7517 section 4.7 requires, is not established: a judgement not made, never an
+    /// established mismatch.
+    /// </summary>
+    CertificateKeyRelationUnestablished
 }

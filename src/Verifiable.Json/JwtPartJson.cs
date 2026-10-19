@@ -31,10 +31,14 @@ public static class JwtPartJson
     public static JwtPartDecoder Default { get; } = Decode;
 
 
-    //Deserializes a JWT part's UTF-8 JSON bytes, translating System.Text.Json's JsonException (and a
-    //JSON-null result) into FormatException so no System.Text.Json type escapes this leaf into the
-    //serialization-agnostic Verifiable.JCose verify path — the same firewall JwtClaimsJson.
-    //DeserializeObject applies for the from_prior JWT, generalized to any JWT part.
+    /// <summary>
+    /// Deserializes a JWT part's UTF-8 JSON bytes, translating System.Text.Json's <c>JsonException</c> (and a JSON <c>null</c>
+    /// result) into <see cref="FormatException"/>, so no System.Text.Json type escapes this leaf into the serialization-agnostic
+    /// verify path.
+    /// </summary>
+    /// <param name="partBytes">The part's UTF-8 JSON bytes.</param>
+    /// <returns>The members.</returns>
+    /// <exception cref="FormatException">The bytes are no JSON object.</exception>
     private static IReadOnlyDictionary<string, object?> Decode(ReadOnlySpan<byte> partBytes)
     {
         Dictionary<string, object?>? value;

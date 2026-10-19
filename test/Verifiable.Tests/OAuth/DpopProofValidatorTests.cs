@@ -205,7 +205,7 @@ internal sealed class DpopProofValidatorTests
         string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
             header =>
             {
-                Dictionary<string, object?> tampered = new(header);
+                var tampered = new Dictionary<string, object?>(header);
                 _ = tampered.Remove(WellKnownJoseHeaderNames.Jwk);
                 return tampered;
             }).ConfigureAwait(false);
@@ -235,7 +235,7 @@ internal sealed class DpopProofValidatorTests
         string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
             header =>
             {
-                Dictionary<string, object?> tampered = new(header);
+                var tampered = new Dictionary<string, object?>(header);
                 var jwk = new Dictionary<string, object?>(
                     Assert.IsInstanceOfType<IReadOnlyDictionary<string, object?>>(tampered[WellKnownJoseHeaderNames.Jwk]),
                     StringComparer.Ordinal)

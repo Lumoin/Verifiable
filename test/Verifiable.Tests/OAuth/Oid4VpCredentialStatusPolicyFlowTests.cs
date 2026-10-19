@@ -1089,6 +1089,49 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
 
     /// <summary>
+    /// RFC 7515 section 7.1 and RFC 9901 section 4.3: the Key Binding JWT a presentation ends in is a compact JWS whose payload
+    /// segment is base64url text. A Wallet presenting through the HAIP verifier, end to end over the in-process listener, a
+    /// presentation whose Key Binding JWT it wrote with a payload segment that is no base64url text is refused as HTTP 400
+    /// <c>invalid_request</c>, the failed flow carrying the reading's typed structure defect rather than an untyped malformed
+    /// refusal. The Wallet writes the malformed Key Binding JWT at its producer, before the presentation is composed.
+    /// </summary>
+    /// <returns>A task completing once the presentation is judged.</returns>
+    [TestMethod]
+    public async Task AKeyBindingJwtWhosePayloadIsNoBase64UrlIsRefusedWithTheStructureDefect()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using var verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        var (serializedSdJwt, holderPrivateKey, issuerPublicKey) = await IssuePidAsync("Alice", "Smith", status: null).ConfigureAwait(false);
+        using var holderKey = holderPrivateKey;
+        using var issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        var produce = TestHostShell.BuildSdJwtProduceDelegate(
+            serializedSdJwt,
+            holderKey,
+            static (_, _, _, _) => ValueTask.FromResult("eyJhbGciOiJFZERTQSIsInR5cCI6ImtiK2p3dCJ9.A.c2lnbmF0dXJl"));
+
+        var walletClient = await app.CreateHttpBackedOid4VpWalletClientAsync(
+            verifierKeys, produce, TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey), TestContext.CancellationToken).ConfigureAwait(false);
+
+        var (parHandle, refusalDetail) = await PresentAsync(
+            app, verifierKeys, walletClient, DcqlFixtures.PidFamilyNamePrepared(), "nonce-kb-payload-no-base64url").ConfigureAwait(false);
+
+        Assert.IsNotNull(refusalDetail, "A presentation whose Key Binding JWT payload is no base64url text is no presentation the verifier accepts.");
+        OAuthErrorAssertions.AssertWireStatusCode(400, refusalDetail, "The refusal is the Wallet's, answered as HTTP 400.");
+        Assert.AreEqual(OAuthErrors.InvalidRequest, OAuthErrorAssertions.ReadOAuthErrorBody(refusalDetail).Item1);
+
+        var failed = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State);
+        Assert.IsNotNull(failed.Refusal, "The failed flow records its refusal.");
+        Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind);
+        Assert.AreEqual(SdJwtPresentationDefect.CompactSerializationMalformed, failed.PresentationDefect,
+            "The failed flow carries the reading's typed defect: the Key Binding JWT's payload segment is no base64url text.");
+    }
+
+
+    /// <summary>
     /// Wraps a <see cref="CredentialStatusPolicy"/> and records every outcome map it is asked to decide over, so a
     /// test can assert not only what the policy answered but that the verifier consulted it exactly as often as the
     /// verification order allows — once per presentation, and never before the presentation verified.

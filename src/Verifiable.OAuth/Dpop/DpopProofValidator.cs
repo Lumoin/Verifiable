@@ -297,8 +297,10 @@ public static class DpopProofValidator
                 or DpopProofMemberDefect.NotAnArrayOfStrings
                 or DpopProofMemberDefect.RepeatedKeyOperation
                 or DpopProofMemberDefect.KeyOperationsInconsistentWithUse
+                or DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished
                 or DpopProofMemberDefect.NotACertificateChain
                 or DpopProofMemberDefect.CertificateNotOfTheKey
+                or DpopProofMemberDefect.CertificateKeyRelationUnestablished
                 or DpopProofMemberDefect.NotABoolean
         } => DpopProofValidationFailureReason.Malformed,
         JwsPartDocumentRefusal => DpopProofValidationFailureReason.Malformed,
@@ -310,10 +312,10 @@ public static class DpopProofValidator
     /// <summary>
     /// The proving public key a header's embedded JWK reconstructs, which the caller owns and disposes, or <see langword="null"/>
     /// when the key the JWK states is none a key is built from: the decoder's refusal of a coordinate as no base64url text, its
-    /// <see cref="FormatException"/>, and the converter's refusal of the key's type, curve, size or coordinates, its
-    /// <see cref="ArgumentException"/> or <see cref="RsaPublicKeyException"/>, answer an invalid JWK. Any other exception - of
-    /// the allocator, of the decoder beyond its refusal, of the implementation - is a fault and surfaces as one, cancellation
-    /// among them.
+    /// <see cref="FormatException"/>, and the library's own reconstruction's refusal of the key's type, curve, size or
+    /// coordinates, its <see cref="JwkPublicKeyException"/> or <see cref="RsaPublicKeyException"/>, answer an invalid JWK. Any
+    /// other exception - an <see cref="ArgumentException"/> of the decoder or of the allocator, a failure of the implementation -
+    /// is a fault of a delegate the caller supplied or of the library and surfaces as one, cancellation among them.
     /// </summary>
     /// <param name="header">The header.</param>
     /// <param name="base64UrlDecoder">The decoder of the key's coordinates.</param>
@@ -325,7 +327,7 @@ public static class DpopProofValidator
         {
             return DpopJwkUtilities.PublicKeyFromJwk(header.Jwk, header.Alg, base64UrlDecoder, memoryPool);
         }
-        catch(Exception exception) when(exception is FormatException or ArgumentException or RsaPublicKeyException)
+        catch(Exception exception) when(exception is FormatException or JwkPublicKeyException or RsaPublicKeyException)
         {
             return null;
         }

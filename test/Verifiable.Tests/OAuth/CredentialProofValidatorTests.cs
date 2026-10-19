@@ -180,7 +180,7 @@ internal sealed class CredentialProofValidatorTests
         using PublicKeyMemory holderPublic = keys.PublicKey;
         using PrivateKeyMemory holderPrivate = keys.PrivateKey;
 
-        string proof = await MintTamperedAsync(holderPrivate, holderPublic,
+        var proof = await MintTamperedAsync(holderPrivate, holderPublic, tamperPayload: null,
             tamperHeader: h => h[WellKnownJoseHeaderNames.Typ] = "jwt").ConfigureAwait(false);
 
         CredentialProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
@@ -198,7 +198,7 @@ internal sealed class CredentialProofValidatorTests
         using PublicKeyMemory holderPublic = keys.PublicKey;
         using PrivateKeyMemory holderPrivate = keys.PrivateKey;
 
-        string proof = await MintTamperedAsync(holderPrivate, holderPublic,
+        var proof = await MintTamperedAsync(holderPrivate, holderPublic, tamperPayload: null,
             tamperHeader: h => h[WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.None).ConfigureAwait(false);
 
         CredentialProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
@@ -237,7 +237,7 @@ internal sealed class CredentialProofValidatorTests
         using PublicKeyMemory holderPublic = keys.PublicKey;
         using PrivateKeyMemory holderPrivate = keys.PrivateKey;
 
-        string proof = await MintTamperedAsync(holderPrivate, holderPublic,
+        var proof = await MintTamperedAsync(holderPrivate, holderPublic, tamperPayload: null,
             tamperHeader: h =>
             {
                 var jwk = new Dictionary<string, object?>(
@@ -265,7 +265,7 @@ internal sealed class CredentialProofValidatorTests
         using PrivateKeyMemory holderPrivate = keys.PrivateKey;
 
         //Both jwk and kid present — §F.1 mutual exclusivity violated.
-        string proof = await MintTamperedAsync(holderPrivate, holderPublic,
+        var proof = await MintTamperedAsync(holderPrivate, holderPublic, tamperPayload: null,
             tamperHeader: h => h["kid"] = "did:example:123#key-1").ConfigureAwait(false);
 
         CredentialProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
@@ -413,7 +413,7 @@ internal sealed class CredentialProofValidatorTests
         using PublicKeyMemory holderPublic = keys.PublicKey;
         using PrivateKeyMemory holderPrivate = keys.PrivateKey;
 
-        string proof = await MintTamperedAsync(holderPrivate, holderPublic,
+        var proof = await MintTamperedAsync(holderPrivate, holderPublic, tamperHeader: null,
             tamperPayload: p => p.Remove(WellKnownJwtClaimNames.Nonce)).ConfigureAwait(false);
 
         CredentialProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
@@ -633,14 +633,20 @@ internal sealed class CredentialProofValidatorTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
 
-    //Mints a jwt proof whose header/payload are transformed before signing, so a single §F.4 MUST
-    //can be violated while everything else stays well-formed. Mirrors the §F.1 header/claim shape
-    //the production minter produces.
+    /// <summary>
+    /// Mints a jwt proof whose header/payload are transformed before signing, so a single §F.4 MUST can be violated while
+    /// everything else stays well-formed. Mirrors the §F.1 header/claim shape the production minter produces.
+    /// </summary>
+    /// <param name="holderPrivate">The holder's private key, which signs the proof.</param>
+    /// <param name="holderPublic">The holder's public key, embedded as the header's <c>jwk</c>.</param>
+    /// <param name="tamperHeader">Rewrites the header before signing, or <see langword="null"/> to keep it.</param>
+    /// <param name="tamperPayload">Rewrites the claims set before signing, or <see langword="null"/> to keep it.</param>
+    /// <returns>The compact proof.</returns>
     private async Task<string> MintTamperedAsync(
         PrivateKeyMemory holderPrivate,
         PublicKeyMemory holderPublic,
-        Action<Dictionary<string, object?>>? tamperHeader = null,
-        Action<Dictionary<string, object?>>? tamperPayload = null)
+        Action<Dictionary<string, object?>>? tamperHeader,
+        Action<Dictionary<string, object?>>? tamperPayload)
     {
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivate.Tag);
         JsonWebKey jwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
@@ -649,7 +655,7 @@ internal sealed class CredentialProofValidatorTests
             holderPublic.AsReadOnlySpan(),
             TestSetup.Base64UrlEncoder);
 
-        Dictionary<string, object?> header = new(StringComparer.Ordinal)
+        var header = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = Oid4VciProofIssuance.ProofJwtType,
@@ -662,7 +668,7 @@ internal sealed class CredentialProofValidatorTests
             }
         };
 
-        Dictionary<string, object?> payload = new(StringComparer.Ordinal)
+        var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Aud] = Audience,
             [WellKnownJwtClaimNames.Nonce] = CredentialNonce,

@@ -933,53 +933,47 @@ public static class HaipOid4VpVerifierExecutor
                 MdocVpVerificationResult? mdocResult = null;
 
                 //Wallet-attributable malformed-presentation detection: a vp_token whose credential-query
-                //array is missing or empty, or an unparseable SD-JWT/KB-JWT/mdoc/SD-CWT presentation, is a
-                //shape no conformant Wallet would produce — Malformed, not a 500 fault. The per-format
-                //VerifyAsync calls throw many exception types for many reasons (a wrong issuer key, a bad
-                //signature); only FormatException — the library's own parse-exception type, thrown directly
-                //by the two extraction calls in this block — is targeted here, so a non-format failure deep
-                //in a format verifier is left on the fault path rather than mis-attributed to the Wallet.
-                try
+                //array is missing or empty, or a presentation its format's reading refuses, is a shape no
+                //conformant Wallet would produce - Malformed, not a 500 fault. The SD-JWT reading answers its
+                //refusals as typed defects at the reading that refuses them, so its verification runs under no
+                //catch and a failure of a resolver, of the decoder beyond its refusal or of the allocator stays a
+                //fault. The mdoc and SD-CWT verifications signal their parse refusals with FormatException, which
+                //is caught around each of them alone.
+                if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdJwt, StringComparison.Ordinal))
                 {
-                    if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdJwt, StringComparison.Ordinal))
+                    if(JwkJsonReader.ExtractFirstStringFromArrayProperty(vpTokenObject.Span, credentialQueryIdUtf8) is not { } compactPresentation)
                     {
-                        string compactPresentation =
-                            JwkJsonReader.ExtractFirstStringFromArrayProperty(
-                                vpTokenObject.Span,
-                                credentialQueryIdUtf8)
-                            ?? throw new FormatException(
-                                $"vp_token does not contain a non-empty array of presentations " +
-                                $"under credential query identifier '{credentialQueryId}'.");
-
-                        var sdJwtRead = await ReadSdJwtPresentationAsync(compactPresentation, credentialQueryId, context, ct)
-                            .ConfigureAwait(false);
-
-                        if(!sdJwtRead.IsSuccess)
-                        {
-                            return sdJwtRead.Error;
-                        }
-
-                        parsed = sdJwtRead.Value;
+                        return NoPresentationUnder(credentialQueryId, context);
                     }
-                    else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.MsoMdoc, StringComparison.Ordinal))
+
+                    var sdJwtRead = await ReadSdJwtPresentationAsync(compactPresentation, credentialQueryId, context, ct)
+                        .ConfigureAwait(false);
+
+                    if(!sdJwtRead.IsSuccess)
                     {
-                        //client_id / response_uri / nonce are the verifier's own JAR inputs from
-                        //persisted state; response_uri must be the byte-exact OriginalString the
-                        //JAR emitted (the codebase serialises URIs via Uri.OriginalString) so the
-                        //reconstructed transcript hashes identically to the wallet's.
-                        string responseUri = registration.ResponseUri?.OriginalString
-                            ?? throw new InvalidOperationException(
-                                $"ClientRecord for the flow has no ResponseUri; it is required to reconstruct " +
-                                $"the mdoc SessionTranscript for credential query '{credentialQueryId}'.");
+                        return sdJwtRead.Error;
+                    }
 
-                        string compactPresentation =
-                            JwkJsonReader.ExtractFirstStringFromArrayProperty(
-                                vpTokenObject.Span,
-                                credentialQueryIdUtf8)
-                            ?? throw new FormatException(
-                                $"vp_token does not contain a non-empty array of presentations " +
-                                $"under credential query identifier '{credentialQueryId}'.");
+                    parsed = sdJwtRead.Value;
+                }
+                else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.MsoMdoc, StringComparison.Ordinal))
+                {
+                    //client_id / response_uri / nonce are the verifier's own JAR inputs from
+                    //persisted state; response_uri must be the byte-exact OriginalString the
+                    //JAR emitted (the codebase serialises URIs via Uri.OriginalString) so the
+                    //reconstructed transcript hashes identically to the wallet's.
+                    string responseUri = registration.ResponseUri?.OriginalString
+                        ?? throw new InvalidOperationException(
+                            $"ClientRecord for the flow has no ResponseUri; it is required to reconstruct " +
+                            $"the mdoc SessionTranscript for credential query '{credentialQueryId}'.");
 
+                    if(JwkJsonReader.ExtractFirstStringFromArrayProperty(vpTokenObject.Span, credentialQueryIdUtf8) is not { } compactPresentation)
+                    {
+                        return NoPresentationUnder(credentialQueryId, context);
+                    }
+
+                    try
+                    {
                         //mdocGeneratedNonce is non-null here: ExtractMdocGeneratedNonce ran above
                         //because this response carries an mso_mdoc query, and it also asserted the
                         //mdoc seams were supplied.
@@ -991,45 +985,43 @@ public static class HaipOid4VpVerifierExecutor
                             mdocSeams.ParseCoseSign1, mdocSeams.ParseCoseSign1AllowingNilPayload,
                             mdocSeams.EncodeDeviceAuthenticationBytes, mdocSeams.BuildSigStructure,
                             decoder, pool, ct).ConfigureAwait(false);
-                        parsed = mdocResult.Parsed;
                     }
-                    else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdCwt, StringComparison.Ordinal))
+                    catch(FormatException exception)
                     {
-                        SdCwtVpVerificationSeams seams = sdCwtSeams
-                            ?? throw new InvalidOperationException(
-                                "The vp_token contains a dc+sd-cwt credential query but the executor was " +
-                                "constructed without SD-CWT verification seams. Pass SdCwtVpVerificationSeams to " +
-                                "HaipOid4VpVerifierExecutor.Create / CreateWithRegistry to enable dc+sd-cwt verification.");
+                        return MalformedPresentation(credentialQueryId, exception, context);
+                    }
 
-                        string compactPresentation =
-                            JwkJsonReader.ExtractFirstStringFromArrayProperty(
-                                vpTokenObject.Span,
-                                credentialQueryIdUtf8)
-                            ?? throw new FormatException(
-                                $"vp_token does not contain a non-empty array of presentations " +
-                                $"under credential query identifier '{credentialQueryId}'.");
+                    parsed = mdocResult.Parsed;
+                }
+                else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdCwt, StringComparison.Ordinal))
+                {
+                    SdCwtVpVerificationSeams seams = sdCwtSeams
+                        ?? throw new InvalidOperationException(
+                            "The vp_token contains a dc+sd-cwt credential query but the executor was " +
+                            "constructed without SD-CWT verification seams. Pass SdCwtVpVerificationSeams to " +
+                            "HaipOid4VpVerifierExecutor.Create / CreateWithRegistry to enable dc+sd-cwt verification.");
 
+                    if(JwkJsonReader.ExtractFirstStringFromArrayProperty(vpTokenObject.Span, credentialQueryIdUtf8) is not { } compactPresentation)
+                    {
+                        return NoPresentationUnder(credentialQueryId, context);
+                    }
+
+                    try
+                    {
                         parsed = await SdCwtVpTokenVerification.VerifyAsync(
                             compactPresentation, credentialQueryId, seams, decoder, saltReuseSeam, pool, ct)
                             .ConfigureAwait(false);
                     }
-                    else
+                    catch(FormatException exception)
                     {
-                        throw new NotSupportedException(
-                            $"VP-token verification for credential format '{credentialQuery.Format}' is not yet " +
-                            $"supported (credential query '{credentialQueryId}').");
+                        return MalformedPresentation(credentialQueryId, exception, context);
                     }
                 }
-                catch(FormatException exception)
+                else
                 {
-                    DateTimeOffset malformedAt = context.VerifiedAt
-                        ?? throw new InvalidOperationException(
-                            "Request timestamp not found in context.");
-
-                    return new VerifierPresentationRefused(
-                        VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
-                        $"Malformed vp_token presentation for credential query '{credentialQueryId}': {exception.Message}",
-                        malformedAt);
+                    throw new NotSupportedException(
+                        $"VP-token verification for credential format '{credentialQuery.Format}' is not yet " +
+                        $"supported (credential query '{credentialQueryId}').");
                 }
 
                 //Scopes the mdoc trust resolution's disposal to the remainder of this credential's step —
@@ -1225,60 +1217,51 @@ public static class HaipOid4VpVerifierExecutor
                 VpTokenParsed parsed;
 
                 //Wallet-attributable malformed-presentation detection (see the encrypted-path handler
-                //above): a missing/empty credential-query array or an unparseable SD-JWT/KB-JWT/SD-CWT
-                //presentation is a shape no conformant Wallet would produce — Malformed, not a 500 fault.
-                //Only FormatException is targeted; a non-format failure deep in a format verifier is left
-                //on the fault path.
-                try
+                //above): a missing/empty credential-query array, or a presentation its format's reading
+                //refuses, is a shape no conformant Wallet would produce - Malformed, not a 500 fault. The
+                //SD-JWT reading answers its refusals as typed defects under no catch; the SD-CWT verification's
+                //FormatException is caught around it alone.
+                if(JwkJsonReader.ExtractFirstStringFromArrayProperty(vpTokenBytes, credentialQueryIdUtf8) is not { } compactPresentation)
                 {
-                    string compactPresentation =
-                        JwkJsonReader.ExtractFirstStringFromArrayProperty(
-                            vpTokenBytes, credentialQueryIdUtf8)
-                        ?? throw new FormatException(
-                            $"vp_token does not contain a non-empty array of presentations " +
-                            $"under credential query identifier '{credentialQueryId}'.");
+                    return NoPresentationUnder(credentialQueryId, context);
+                }
 
-                    if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdJwt, StringComparison.Ordinal))
+                if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdJwt, StringComparison.Ordinal))
+                {
+                    var sdJwtRead = await ReadSdJwtPresentationAsync(compactPresentation, credentialQueryId, context, ct)
+                        .ConfigureAwait(false);
+
+                    if(!sdJwtRead.IsSuccess)
                     {
-                        var sdJwtRead = await ReadSdJwtPresentationAsync(compactPresentation, credentialQueryId, context, ct)
-                            .ConfigureAwait(false);
-
-                        if(!sdJwtRead.IsSuccess)
-                        {
-                            return sdJwtRead.Error;
-                        }
-
-                        parsed = sdJwtRead.Value;
+                        return sdJwtRead.Error;
                     }
-                    else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdCwt, StringComparison.Ordinal))
-                    {
-                        SdCwtVpVerificationSeams seams = sdCwtSeams
-                            ?? throw new InvalidOperationException(
-                                "The vp_token contains a dc+sd-cwt credential query but the executor was " +
-                                "constructed without SD-CWT verification seams. Pass SdCwtVpVerificationSeams to " +
-                                "HaipOid4VpVerifierExecutor.Create / CreateWithRegistry to enable dc+sd-cwt verification.");
 
+                    parsed = sdJwtRead.Value;
+                }
+                else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdCwt, StringComparison.Ordinal))
+                {
+                    SdCwtVpVerificationSeams seams = sdCwtSeams
+                        ?? throw new InvalidOperationException(
+                            "The vp_token contains a dc+sd-cwt credential query but the executor was " +
+                            "constructed without SD-CWT verification seams. Pass SdCwtVpVerificationSeams to " +
+                            "HaipOid4VpVerifierExecutor.Create / CreateWithRegistry to enable dc+sd-cwt verification.");
+
+                    try
+                    {
                         parsed = await SdCwtVpTokenVerification.VerifyAsync(
                             compactPresentation, credentialQueryId, seams, decoder, saltReuseSeam, pool, ct)
                             .ConfigureAwait(false);
                     }
-                    else
+                    catch(FormatException exception)
                     {
-                        throw new NotSupportedException(
-                            $"VP-token verification for credential format '{credentialQuery.Format}' is not yet " +
-                            $"supported on the unencrypted direct_post path (credential query '{credentialQueryId}').");
+                        return MalformedPresentation(credentialQueryId, exception, context);
                     }
                 }
-                catch(FormatException exception)
+                else
                 {
-                    DateTimeOffset malformedAt = context.VerifiedAt
-                        ?? throw new InvalidOperationException(
-                            "Request timestamp not found in context.");
-
-                    return new VerifierPresentationRefused(
-                        VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
-                        $"Malformed vp_token presentation for credential query '{credentialQueryId}': {exception.Message}",
-                        malformedAt);
+                    throw new NotSupportedException(
+                        $"VP-token verification for credential format '{credentialQuery.Format}' is not yet " +
+                        $"supported on the unencrypted direct_post path (credential query '{credentialQueryId}').");
                 }
 
                 (bool dcqlSatisfied, bool dcqlOverDisclosed) = await AssessDcqlAsync(
@@ -1396,6 +1379,47 @@ public static class HaipOid4VpVerifierExecutor
         {
             PresentationDefect = defect
         };
+    }
+
+
+    /// <summary>
+    /// The refusal of a <c>vp_token</c> carrying no non-empty array of presentations under a credential query's identifier
+    /// (OID4VP 1.0 section 8.1), on the executor's malformed route: a response no conformant Wallet produces, never a fault.
+    /// </summary>
+    /// <param name="credentialQueryId">The credential query the response answers no presentation for.</param>
+    /// <param name="context">The request's context, carrying the instant it is verified at.</param>
+    /// <returns>The refusal.</returns>
+    private static VerifierPresentationRefused NoPresentationUnder(CredentialQueryId credentialQueryId, ExchangeContext context)
+    {
+        var refusedAt = context.VerifiedAt
+            ?? throw new InvalidOperationException("Request timestamp not found in context.");
+
+        return new VerifierPresentationRefused(
+            VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
+            $"Malformed vp_token presentation for credential query '{credentialQueryId}': vp_token does not contain a non-empty "
+            + $"array of presentations under credential query identifier '{credentialQueryId}'.",
+            refusedAt);
+    }
+
+
+    /// <summary>
+    /// The refusal of an mdoc or SD-CWT presentation whose verification refused it as malformed, its
+    /// <see cref="FormatException"/>, on the executor's malformed route.
+    /// </summary>
+    /// <param name="credentialQueryId">The credential query the presentation answered.</param>
+    /// <param name="exception">The verification's refusal.</param>
+    /// <param name="context">The request's context, carrying the instant it is verified at.</param>
+    /// <returns>The refusal.</returns>
+    private static VerifierPresentationRefused MalformedPresentation(
+        CredentialQueryId credentialQueryId, FormatException exception, ExchangeContext context)
+    {
+        var refusedAt = context.VerifiedAt
+            ?? throw new InvalidOperationException("Request timestamp not found in context.");
+
+        return new VerifierPresentationRefused(
+            VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
+            $"Malformed vp_token presentation for credential query '{credentialQueryId}': {exception.Message}",
+            refusedAt);
     }
 
 

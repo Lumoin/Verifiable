@@ -245,7 +245,7 @@ internal sealed class CredentialProofKeyReferenceTests
 
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(chain.LeafSigningKey.Tag);
 
-        Dictionary<string, object?> header = new(StringComparer.Ordinal)
+        var header = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = Oid4VciProofIssuance.ProofJwtType,
@@ -262,7 +262,7 @@ internal sealed class CredentialProofKeyReferenceTests
     {
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivate.Tag);
 
-        Dictionary<string, object?> header = new(StringComparer.Ordinal)
+        var header = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = Oid4VciProofIssuance.ProofJwtType,
@@ -273,10 +273,13 @@ internal sealed class CredentialProofKeyReferenceTests
     }
 
 
-    //Signs the supplied header with the §F.1 aud/nonce/iat payload and serializes the compact JWS.
+    /// <summary>Signs the supplied header with the section F.1 <c>aud</c>, <c>nonce</c> and <c>iat</c> payload and serializes the compact JWS.</summary>
+    /// <param name="signingKey">The key signing the proof.</param>
+    /// <param name="header">The proof's header members.</param>
+    /// <returns>The compact proof.</returns>
     private async Task<string> SignProofAsync(PrivateKeyMemory signingKey, Dictionary<string, object?> header)
     {
-        Dictionary<string, object?> payload = new(StringComparer.Ordinal)
+        var payload = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Aud] = Audience,
             [WellKnownJwtClaimNames.Nonce] = CredentialNonce,

@@ -688,7 +688,9 @@ public static class CredentialJwsExtensions
     }
 
 
-    //Reads the JWS 'kid' header as the verification method / key id for the verification context.
+    /// <summary>The JWS <c>kid</c> header (RFC 7515 section 4.1.4), the verification method or key identifier of the verification context.</summary>
+    /// <param name="header">The protected header's members, or <see langword="null"/> when none were decoded.</param>
+    /// <returns>The key identifier, or <see langword="null"/> when absent or no string.</returns>
     private static string? ExtractKeyId(Dictionary<string, object?>? header)
     {
         if(header is not null && header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? value) && value is string keyId)

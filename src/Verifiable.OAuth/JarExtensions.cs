@@ -146,7 +146,7 @@ public static class JarExtensions
 
             if(additionalHeaderClaims is not null)
             {
-                foreach(KeyValuePair<string, object?> claim in additionalHeaderClaims)
+                foreach(var claim in additionalHeaderClaims)
                 {
                     if(claim.Key != WellKnownJwkMemberNames.Alg && claim.Key != WellKnownJoseHeaderNames.Typ)
                     {
@@ -268,7 +268,7 @@ public static class JarExtensions
 
             if(additionalHeaderClaims is not null)
             {
-                foreach(KeyValuePair<string, object?> claim in additionalHeaderClaims)
+                foreach(var claim in additionalHeaderClaims)
                 {
                     if(claim.Key != WellKnownJwkMemberNames.Alg
                         && claim.Key != WellKnownJoseHeaderNames.Typ)
@@ -361,17 +361,12 @@ public static class JarExtensions
     }
 
 
-    //Resolves a dcql_query/client_metadata claim value to its JSON text
-    //regardless of which of the two accepted shapes it arrived as. A JSON
-    //object — a Dictionary<string, object> produced when the payload
-    //deserializer parses a JSON object claim (see
-    //DictionaryStringObjectJsonConverter in Verifiable.Json) — is re-encoded
-    //to text with JsonAppender, the same pooled writer the rest of
-    //Verifiable.OAuth uses wherever a CLR JSON graph needs to become wire
-    //text without a System.Text.Json reference (e.g. EntityStatementJson-
-    //Builder.EncodeJwtPart). A JSON string is returned as-is. Routing the
-    //object form through the same JarClaimDeserializer<T> the string form
-    //uses keeps one parsing path for the claim rather than two.
+    /// <summary>
+    /// The JSON text of a JAR claim value given as a JSON string or as an object a part encoder produced, so the object form is
+    /// routed through the same claim deserializer the string form uses, one parsing path for the claim rather than two.
+    /// </summary>
+    /// <param name="claimValue">The claim's value, which may be none.</param>
+    /// <returns>The JSON text, or <see langword="null"/> when the value is of neither form.</returns>
     private static string? ResolveClaimJson(object? claimValue)
     {
         switch(claimValue)
@@ -486,11 +481,13 @@ public static class JarExtensions
     }
 
 
-    //Projects the deserialised transaction_data array onto a typed
-    //IReadOnlyList<string>. JSON arrays surface as IEnumerable<object>
-    //(typically List<object>) from the dictionary converter; every
-    //entry MUST be a string per OID4VP 1.0 §8.4 — non-string entries
-    //are a structural error.
+    /// <summary>
+    /// Reads a <c>transaction_data</c> claim value as the array of strings OID4VP 1.0 section 8.4 has it: JSON arrays surface as
+    /// <see cref="IEnumerable{T}"/> of <see cref="object"/> from the dictionary converter, and an entry that is no string is a
+    /// structural error.
+    /// </summary>
+    /// <param name="raw">The claim's value, which may be none.</param>
+    /// <returns>The strings.</returns>
     private static List<string> ReadTransactionDataArray(object? raw)
     {
         if(raw is not IEnumerable<object> items)

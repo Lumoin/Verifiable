@@ -129,14 +129,18 @@ public static class JwsAccessTokenValidator
                 : JwsAccessTokenValidationResult.Failure(failureReason, outcome.FailureDescription);
         }
 
+        //A successful outcome carries the verified payload; one carrying none is an invariant failure of the shared core.
+        var payload = outcome.Payload
+            ?? throw new InvalidOperationException("A signed JWT validation outcome carrying no failure carries no payload.");
+
         //Optional access-token-specific claims, read from the shared core's verified payload.
-        _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.ClientId, out string? clientId);
-        _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Scope, out string? scope);
-        _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Jti, out string? jti);
+        _ = TryReadString(payload, WellKnownJwtClaimNames.ClientId, out string? clientId);
+        _ = TryReadString(payload, WellKnownJwtClaimNames.Scope, out string? scope);
+        _ = TryReadString(payload, WellKnownJwtClaimNames.Jti, out string? jti);
 
         //RFC 7800 section 3: a cnf names the key the token is bound to. A cnf that is malformed, or that binds by a method this
         //validator does not verify, refuses the token before success, never read as an unbound token.
-        var confirmationRead = ReadConfirmation(outcome.Payload!, out var confirmation);
+        var confirmationRead = ReadConfirmation(payload, out var confirmation);
 
         if(ConfirmationRefusalOf(confirmationRead, "Access token") is { FailureReason: { } confirmationFailure } confirmationRefusal)
         {
@@ -147,14 +151,14 @@ public static class JwsAccessTokenValidator
         //A present-but-unparseable claim is a rejection, not an omission — the token asserts a
         //delegation (or a constraint on delegation) the resource server cannot read, and the
         //permissive reading of an unreadable assertion is exactly the one an attacker would want.
-        if(!TryReadActor(outcome.Payload!, out CurrentActor? act))
+        if(!TryReadActor(payload, out CurrentActor? act))
         {
             return JwsAccessTokenValidationResult.Failure(
                 JwsAccessTokenValidationFailureReason.Malformed,
                 "Access token act claim is not a well-formed RFC 8693 §4.1 actor object.");
         }
 
-        if(!TryReadAuthorizedActor(outcome.Payload!, out string? mayActSubject, out string? mayActIssuer))
+        if(!TryReadAuthorizedActor(payload, out string? mayActSubject, out string? mayActIssuer))
         {
             return JwsAccessTokenValidationResult.Failure(
                 JwsAccessTokenValidationFailureReason.Malformed,

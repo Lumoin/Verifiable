@@ -128,7 +128,7 @@ public static class JwsParsing
         }
 
         UnverifiedJwtHeader? unprotectedHeader = null;
-        if(jsonObject.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object?> headerDict)
+        if(jsonObject.TryGetValue("header", out var headerObj) && headerObj is Dictionary<string, object?> headerDict)
         {
             unprotectedHeader = new(headerDict);
         }
@@ -218,7 +218,7 @@ public static class JwsParsing
 
             UnverifiedJwtHeader? unprotectedHeader = null;
 
-            if(sigDict.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object?> headerDict)
+            if(sigDict.TryGetValue("header", out var headerObj) && headerObj is Dictionary<string, object?> headerDict)
             {
                 unprotectedHeader = new(headerDict);
             }

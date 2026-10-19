@@ -558,9 +558,14 @@ public static class KeyAttestationVerifier
     };
 
 
-    /// <summary>Maps the shared header-key resolver's neutral status to the attestation verification failure reason.</summary>
-    /// <param name="status">The shared resolver's outcome status.</param>
+    /// <summary>
+    /// Maps the shared header-key resolver's failure status to the attestation verification failure reason. A resolved key is no
+    /// failure, and a value of no status the resolver gives is the resolver's fault; neither is given a known refusal.
+    /// </summary>
+    /// <param name="status">The shared resolver's failure status.</param>
     /// <returns>The corresponding <see cref="KeyAttestationVerificationFailureReason"/>.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="status"/> is the resolved status, which is no failure.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="status"/> is no status the resolver gives.</exception>
     private static KeyAttestationVerificationFailureReason MapResolutionFailure(HeaderKeyResolutionStatus status) =>
         status switch
         {
@@ -570,8 +575,9 @@ public static class KeyAttestationVerifier
             //private key material; it is an invalid key reference here too.
             HeaderKeyResolutionStatus.JwkContainsPrivateKey => KeyAttestationVerificationFailureReason.InvalidKeyReference,
             HeaderKeyResolutionStatus.InvalidKeyReference => KeyAttestationVerificationFailureReason.InvalidKeyReference,
-            HeaderKeyResolutionStatus.Resolved => KeyAttestationVerificationFailureReason.InvalidKeyReference,
+            HeaderKeyResolutionStatus.Resolved => throw new InvalidOperationException(
+                "The header key resolved, which is no failure to map to a refusal."),
 
-            _ => KeyAttestationVerificationFailureReason.InvalidKeyReference
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "The status is none the header key resolution gives.")
         };
 }

@@ -682,12 +682,15 @@ namespace Verifiable.Cryptography
 
 
         /// <summary>
-        /// Checks if a given elliptic curve point is on the curve or not.
+        /// Checks if a given elliptic curve point is on the curve or not: both coordinates the full width of the curve's field
+        /// element (SEC 1 section 2.3.5, RFC 7518 sections 6.2.1.2 and 6.2.1.3), each in the range <c>[0, p - 1]</c>, and the
+        /// point satisfying the curve equation. A pair whose coordinates are of different widths is no point of any curve,
+        /// whatever their concatenation spells.
         /// </summary>
-        /// <param name="publicKeyX">The public key material.</param>
-        /// <param name="publicKeyY">The private key material.</param>
+        /// <param name="publicKeyX">The point's x coordinate, big-endian, the curve's field-element width.</param>
+        /// <param name="publicKeyY">The point's y coordinate, big-endian, the curve's field-element width.</param>
         /// <param name="curveType">The curve type (this is to separate P-256 from Secp256k1).</param>
-        /// <returns></returns>
+        /// <returns><see langword="true"/> when the coordinates name a point of the curve.</returns>
         /// <remarks>The steps are defined in <see href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-186.pdf">NIST Special Publication 800-186
         /// Recommendations for Discrete Logarithm-Based Cryptography: Elliptic Curve Domain Parameters</see>
         /// D.1.1.1. Partial Public Key Validation (Short-Weierstrass Form) page 42. This holds also for secp256k1.</remarks>
@@ -709,6 +712,13 @@ namespace Verifiable.Cryptography
             //Step 1: Verify public key is not point at infinity. Basically this means either
             //of the parameters is null or empty.
             if(publicKeyX.IsEmpty && publicKeyY.IsEmpty)
+            {
+                return false;
+            }
+
+            //Both coordinates are field elements of the one curve, so they are of its one width; the width of x selects the
+            //curve's parameters below.
+            if(publicKeyX.Length != publicKeyY.Length)
             {
                 return false;
             }

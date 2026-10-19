@@ -1333,20 +1333,28 @@ public static class Jws
     }
 
 
-    //Decodes a base64url segment of an untrusted compact JWS. A segment the injected decoder rejects
-    //returns DecodedSegment.Malformed rather than letting the decoder's exception escape; cancellation
-    //is propagated.
+    /// <summary>
+    /// Decodes a base64url segment of an untrusted compact JWS (RFC 7515 section 7.1): an empty segment, which no protected
+    /// header or signature is, or one the injected decoder refuses as no base64url text, its <see cref="FormatException"/>, is
+    /// <see cref="DecodedSegment.Malformed"/>. Any other exception - of the decoder beyond its refusal, of the allocator,
+    /// cancellation among them - is a fault and surfaces as one.
+    /// </summary>
+    /// <param name="base64UrlDecoder">The decoder.</param>
+    /// <param name="segment">The segment.</param>
+    /// <param name="pool">The pool the bytes are rented from.</param>
+    /// <returns>The decoded segment, which the caller disposes.</returns>
     private static DecodedSegment TryDecodeSegment(DecodeDelegate base64UrlDecoder, string segment, BaseMemoryPool pool)
     {
+        if(segment.Length == 0)
+        {
+            return DecodedSegment.Malformed;
+        }
+
         try
         {
             return DecodedSegment.Decoded(base64UrlDecoder(segment, pool));
         }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch
+        catch(FormatException)
         {
             return DecodedSegment.Malformed;
         }
@@ -1430,6 +1438,10 @@ public static class Jws
     }
 
 
+    /// <summary>The members of a JWT part as the protected header of a JWS message holds them: the part itself when it is a read-only member dictionary, a copy of a mutable one, and none for a part of another shape.</summary>
+    /// <typeparam name="TJwtPart">The JWT part's type.</typeparam>
+    /// <param name="header">The part.</param>
+    /// <returns>The members.</returns>
     private static IReadOnlyDictionary<string, object?> BuildProtectedHeaderDictionary<TJwtPart>(TJwtPart header)
     {
         if(header is IReadOnlyDictionary<string, object?> dict)

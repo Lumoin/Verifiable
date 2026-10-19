@@ -26,6 +26,7 @@ internal sealed class JoseTokenClassifierJsonTests
     public TestContext TestContext { get; set; } = null!;
 
 
+    /// <summary>Deserializes a JOSE header's UTF-8 JSON bytes to its members, a present <c>null</c> kept as a member with no value.</summary>
     private static Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>> HeaderDeserializer
     {
         get;

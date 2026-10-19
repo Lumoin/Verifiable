@@ -30,6 +30,9 @@ internal sealed class ManagedCertificate
     /// <summary>The subject key identifier extension (RFC 5280 §4.2.1.2).</summary>
     private const string SubjectKeyIdentifierOid = WellKnownOids.SubjectKeyIdentifierExtension;
 
+    /// <summary>The octet length of an Ed25519 public key (RFC 8032 section 5.1.5).</summary>
+    private const int Ed25519PublicKeyOctetCount = 32;
+
 
     /// <summary>Creates the parse of a certificate from the fields <see cref="Parse"/> read.</summary>
     /// <param name="encoded">The full DER encoding.</param>
@@ -194,14 +197,21 @@ internal sealed class ManagedCertificate
 
     /// <summary>
     /// Parses the fields the managed CMS and OCSP verifiers need from an encoded certificate, rejecting shapes
-    /// RFC 5280 does not admit for the fields this parse walks (no new field is extracted by these checks —
-    /// they only tighten fields already read): the issuer and subject <c>Name</c> fields must each be a
-    /// SEQUENCE (§4.1.2.4); a present <c>[0]</c> EXPLICIT version wrapper must contain exactly one INTEGER
-    /// valued 0, 1, or 2 (§4.1.2.1); and the <c>tbsCertificate.signature</c> <c>AlgorithmIdentifier</c> must
-    /// begin with an OBJECT IDENTIFIER (§4.1.2.3/§4.1.1.2).
+    /// RFC 5280 section 4.1 does not admit for every field this parse walks (no new field is extracted by these
+    /// checks — they only tighten fields already read): a present <c>[0]</c> EXPLICIT version wrapper must contain
+    /// exactly one INTEGER valued 0, 1, or 2 (§4.1.2.1); each <c>AlgorithmIdentifier</c> is an OBJECT IDENTIFIER
+    /// followed by at most one parameters value (§4.1.1.2), and the outer <c>signatureAlgorithm</c> is the very
+    /// <c>tbsCertificate.signature</c> (§4.1.1.2: "MUST contain the same algorithm identifier"); the issuer and
+    /// subject <c>Name</c> fields are each an <c>RDNSequence</c> of non-empty <c>SET OF AttributeTypeAndValue</c>, each
+    /// an OBJECT IDENTIFIER and one value (§4.1.2.4); and the <c>SubjectPublicKeyInfo</c> is exactly an
+    /// <c>AlgorithmIdentifier</c> and a BIT STRING (§4.1.2.7), with no field after them, its parameters those of its
+    /// algorithm: a named curve for an elliptic-curve key (RFC 5480 section 2.1.1), <c>NULL</c> for an RSA key (RFC 3279
+    /// section 2.3.1), absent for an Ed25519 key (RFC 8410 section 3: "the parameters MUST be absent") and for an ML-DSA
+    /// key, and the key's BIT STRING whole octets for each of those.
     /// </summary>
     /// <param name="encoded">The DER-encoded certificate.</param>
     /// <returns>The parsed certificate.</returns>
+    /// <exception cref="AsnContentException">The encoding is no DER certificate of the shape RFC 5280 section 4.1 admits.</exception>
     public static ManagedCertificate Parse(ReadOnlyMemory<byte> encoded)
     {
         var certificateReader = new AsnReader(encoded, AsnEncodingRules.DER);
@@ -227,8 +237,10 @@ internal sealed class ManagedCertificate
         }
 
         ReadOnlyMemory<byte> serialNumber = tbs.ReadIntegerBytes();
-        AsnReader tbsSignatureAlgorithm = tbs.ReadSequence();          //signature AlgorithmIdentifier (RFC 5280 §4.1.2.3)
-        _ = tbsSignatureAlgorithm.ReadObjectIdentifier();              //AlgorithmIdentifier ::= SEQUENCE { algorithm OBJECT IDENTIFIER, ... } (§4.1.1.2)
+
+        //signature AlgorithmIdentifier (RFC 5280 §4.1.2.3), its encoding kept for the outer signatureAlgorithm to equal.
+        var tbsSignatureAlgorithm = tbs.ReadEncodedValue();
+        _ = ReadAlgorithmIdentifier(new AsnReader(tbsSignatureAlgorithm, AsnEncodingRules.DER));
         ReadOnlyMemory<byte> issuer = ReadNameOrThrow(tbs);            //issuer Name (raw DER, RFC 5280 §4.1.2.4)
         AsnReader validity = tbs.ReadSequence();
         DateTimeOffset notBefore = ReadTime(validity);
@@ -241,8 +253,15 @@ internal sealed class ManagedCertificate
         (ReadOnlyMemory<byte> subjectKeyIdentifier, IReadOnlyList<string> extendedKeyUsageOids) = ParseExtensions(tbs);
         tbs.ThrowIfNotEmpty();
 
-        AsnReader signatureAlgorithm = certificateSequence.ReadSequence();
-        string signatureAlgorithmOid = signatureAlgorithm.ReadObjectIdentifier();
+        //RFC 5280 §4.1.1.2: "This field MUST contain the same algorithm identifier as the signature field in the sequence
+        //tbsCertificate", compared as the DER encodings they are.
+        var signatureAlgorithm = certificateSequence.ReadEncodedValue();
+        if(!signatureAlgorithm.Span.SequenceEqual(tbsSignatureAlgorithm.Span))
+        {
+            throw new AsnContentException("The signatureAlgorithm is the tbsCertificate's signature algorithm identifier (RFC 5280 §4.1.1.2).");
+        }
+
+        var signatureAlgorithmOid = ReadAlgorithmIdentifier(new AsnReader(signatureAlgorithm, AsnEncodingRules.DER));
         if(!certificateSequence.TryReadPrimitiveBitString(out _, out ReadOnlyMemory<byte> signatureValue))
         {
             throw new AsnContentException("A Certificate must close with its signatureValue BIT STRING (RFC 5280 §4.1.1).");
@@ -314,8 +333,9 @@ internal sealed class ManagedCertificate
 
 
     /// <summary>
-    /// Reads an RFC 5280 §4.1.2.4 <c>Name</c> — a <c>RDNSequence</c>, itself a SEQUENCE — as its raw encoded
-    /// DER, rejecting any other shape before consuming it.
+    /// Reads an RFC 5280 §4.1.2.4 <c>Name</c> as its raw encoded DER, having walked it whole: an <c>RDNSequence</c>, a
+    /// SEQUENCE OF <c>RelativeDistinguishedName</c>, each a non-empty <c>SET OF AttributeTypeAndValue</c> in DER order, each
+    /// a SEQUENCE of an attribute type OBJECT IDENTIFIER and exactly one value, rejecting any other shape.
     /// </summary>
     /// <param name="tbs">The reader positioned at the <c>Name</c> field.</param>
     /// <returns>The <c>Name</c>'s raw DER encoding (tag and length included).</returns>
@@ -326,49 +346,149 @@ internal sealed class ManagedCertificate
             throw new AsnContentException("A Name is an RDNSequence, encoded as a SEQUENCE (RFC 5280 §4.1.2.4).");
         }
 
-        return tbs.ReadEncodedValue();
+        var name = tbs.ReadEncodedValue();
+        var relativeDistinguishedNames = new AsnReader(name, AsnEncodingRules.DER).ReadSequence();
+
+        while(relativeDistinguishedNames.HasData)
+        {
+            var attributes = relativeDistinguishedNames.ReadSetOf();
+
+            if(!attributes.HasData)
+            {
+                throw new AsnContentException("A RelativeDistinguishedName is a SET SIZE (1..MAX) OF AttributeTypeAndValue (RFC 5280 §4.1.2.4).");
+            }
+
+            while(attributes.HasData)
+            {
+                var attribute = attributes.ReadSequence();
+                _ = attribute.ReadObjectIdentifier();
+                _ = attribute.ReadEncodedValue();
+                attribute.ThrowIfNotEmpty();
+            }
+        }
+
+        return name;
     }
 
 
     /// <summary>
-    /// Parses the subject public key info: for an elliptic-curve key, the curve and the uncompressed public
-    /// point; for an RSA key, the modulus and exponent; for an ML-DSA key, the parameter-set identifier and
-    /// the raw key; the raw BIT STRING content is captured regardless of the key algorithm.
+    /// Reads an <c>AlgorithmIdentifier</c> (RFC 5280 §4.1.1.2: <c>SEQUENCE { algorithm OBJECT IDENTIFIER, parameters ANY
+    /// DEFINED BY algorithm OPTIONAL }</c>) whose parameters this parse does not interpret: the identifier, then at most one
+    /// parameters value, and nothing after it.
     /// </summary>
+    /// <param name="reader">The reader positioned at the <c>AlgorithmIdentifier</c>.</param>
+    /// <returns>The algorithm's object identifier.</returns>
+    private static string ReadAlgorithmIdentifier(AsnReader reader)
+    {
+        var algorithm = reader.ReadSequence();
+        reader.ThrowIfNotEmpty();
+        var algorithmOid = algorithm.ReadObjectIdentifier();
+
+        if(algorithm.HasData)
+        {
+            _ = algorithm.ReadEncodedValue();
+        }
+
+        algorithm.ThrowIfNotEmpty();
+
+        return algorithmOid;
+    }
+
+
+    /// <summary>
+    /// Reads a subject public key's BIT STRING as the whole octets its key algorithm's encoding is, refusing one with unused
+    /// bits.
+    /// </summary>
+    /// <param name="subjectPublicKeyInfo">The reader positioned at the <c>subjectPublicKey</c>.</param>
+    /// <returns>The key's octets.</returns>
+    private static byte[] ReadWholeOctetKey(AsnReader subjectPublicKeyInfo)
+    {
+        var key = subjectPublicKeyInfo.ReadBitString(out var unusedBitCount);
+
+        if(unusedBitCount != 0)
+        {
+            throw new AsnContentException("A subject public key of this algorithm is whole octets: its BIT STRING carries no unused bits.");
+        }
+
+        return key;
+    }
+
+
+    /// <summary>
+    /// Parses the subject public key info (RFC 5280 §4.1.2.7), exactly an <c>AlgorithmIdentifier</c> and the
+    /// <c>subjectPublicKey</c> BIT STRING, with no field after them: for an elliptic-curve key, the named curve
+    /// (RFC 5480 section 2.1.1) and the public point; for an RSA key, <c>NULL</c> parameters (RFC 3279 section 2.3.1) and the
+    /// modulus and exponent; for an Ed25519 key, absent parameters (RFC 8410 section 3) and the 32-octet key; for an ML-DSA key,
+    /// absent parameters and the raw key; for another algorithm, at most one parameters value this parse does not interpret.
+    /// The raw BIT STRING content is captured regardless of the key algorithm.
+    /// </summary>
+    /// <param name="subjectPublicKeyInfo">The reader of the <c>SubjectPublicKeyInfo</c> SEQUENCE's content.</param>
+    /// <returns>The parsed key.</returns>
     private static ParsedPublicKey ParseSubjectPublicKeyInfo(AsnReader subjectPublicKeyInfo)
     {
         AsnReader algorithm = subjectPublicKeyInfo.ReadSequence();
         string algorithmOid = algorithm.ReadObjectIdentifier();
+        ParsedPublicKey parsed;
 
         if(string.Equals(algorithmOid, EcPublicKeyOid, StringComparison.Ordinal))
         {
             string curveOid = algorithm.ReadObjectIdentifier();
-            byte[] point = subjectPublicKeyInfo.ReadBitString(out _);
+            algorithm.ThrowIfNotEmpty();
+            var point = ReadWholeOctetKey(subjectPublicKeyInfo);
 
-            return new ParsedPublicKey(algorithmOid, CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, point);
+            parsed = new ParsedPublicKey(algorithmOid, CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, point);
         }
-
-        if(string.Equals(algorithmOid, RsaEncryptionOid, StringComparison.Ordinal))
+        else if(string.Equals(algorithmOid, RsaEncryptionOid, StringComparison.Ordinal))
         {
+            algorithm.ReadNull();
+            algorithm.ThrowIfNotEmpty();
+
             //The subjectPublicKey BIT STRING wraps RSAPublicKey ::= SEQUENCE { modulus, publicExponent }.
-            byte[] rsaPublicKey = subjectPublicKeyInfo.ReadBitString(out _);
+            var rsaPublicKey = ReadWholeOctetKey(subjectPublicKeyInfo);
             (byte[] modulus, byte[] exponent) = RsaPublicKeyEncoding.Decode(rsaPublicKey);
 
-            return new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent, string.Empty, ReadOnlyMemory<byte>.Empty, rsaPublicKey);
+            parsed = new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent, string.Empty, ReadOnlyMemory<byte>.Empty, rsaPublicKey);
         }
+        else if(string.Equals(algorithmOid, WellKnownOids.EdDSA25519, StringComparison.Ordinal))
+        {
+            //RFC 8410 section 3: "For all of the OIDs, the parameters MUST be absent." Section 4: the key is the 32-octet
+            //encoding of RFC 8032.
+            algorithm.ThrowIfNotEmpty();
+            var ed25519PublicKey = ReadWholeOctetKey(subjectPublicKeyInfo);
 
-        if(IsMlDsaOid(algorithmOid))
+            if(ed25519PublicKey.Length != Ed25519PublicKeyOctetCount)
+            {
+                throw new AsnContentException("An Ed25519 subject public key is 32 octets (RFC 8410 section 4, RFC 8032 section 5.1.5).");
+            }
+
+            parsed = new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, ed25519PublicKey);
+        }
+        else if(IsMlDsaOid(algorithmOid))
         {
             //An ML-DSA SubjectPublicKeyInfo carries the raw FIPS 204 public key directly in the BIT STRING,
             //with absent AlgorithmIdentifier parameters; the identifier itself pins the parameter set.
-            byte[] mlDsaPublicKey = subjectPublicKeyInfo.ReadBitString(out _);
+            algorithm.ThrowIfNotEmpty();
+            var mlDsaPublicKey = ReadWholeOctetKey(subjectPublicKeyInfo);
 
-            return new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, algorithmOid, mlDsaPublicKey, mlDsaPublicKey);
+            parsed = new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, algorithmOid, mlDsaPublicKey, mlDsaPublicKey);
+        }
+        else
+        {
+            if(algorithm.HasData)
+            {
+                _ = algorithm.ReadEncodedValue();
+            }
+
+            algorithm.ThrowIfNotEmpty();
+            var unrecognisedKeyBits = subjectPublicKeyInfo.ReadBitString(out _);
+
+            parsed = new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, unrecognisedKeyBits);
         }
 
-        byte[] unrecognisedKeyBits = subjectPublicKeyInfo.ReadBitString(out _);
+        //RFC 5280 §4.1.2.7: SubjectPublicKeyInfo ::= SEQUENCE { algorithm AlgorithmIdentifier, subjectPublicKey BIT STRING }.
+        subjectPublicKeyInfo.ThrowIfNotEmpty();
 
-        return new ParsedPublicKey(algorithmOid, EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, unrecognisedKeyBits);
+        return parsed;
     }
 
 

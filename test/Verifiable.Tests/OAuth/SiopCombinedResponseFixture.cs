@@ -122,7 +122,7 @@ internal static class SiopCombinedResponseFixture
     /// <param name="pool">The pool the transaction rents transient buffers from.</param>
     /// <param name="cancellationToken">Cancels the transaction.</param>
     /// <returns>The endpoint's response and the relying party's terminal flow state.</returns>
-    public static async Task<(ServerHttpResponse Response, FlowState State)> PostCombinedResponseAsync(
+    public static async Task<SiopCombinedResponseOutcome> PostCombinedResponseAsync(
         TestHostShell host,
         string serializedSdJwt,
         PrivateKeyMemory holderPrivateKey,
@@ -155,7 +155,7 @@ internal static class SiopCombinedResponseFixture
     /// <param name="pool">The pool the transaction rents transient buffers from.</param>
     /// <param name="cancellationToken">Cancels the transaction.</param>
     /// <returns>The endpoint's response and the relying party's terminal flow state.</returns>
-    public static async Task<(ServerHttpResponse Response, FlowState State)> PostCombinedResponseWithKeyBindingIssuedAtAsync(
+    public static async Task<SiopCombinedResponseOutcome> PostCombinedResponseWithKeyBindingIssuedAtAsync(
         TestHostShell host,
         string serializedSdJwt,
         PrivateKeyMemory holderPrivateKey,
@@ -175,6 +175,37 @@ internal static class SiopCombinedResponseFixture
 
 
     /// <summary>
+    /// The combined response of <see cref="PostCombinedResponseAsync"/> whose presentation carries the Key Binding JWT the Wallet
+    /// wrote as <paramref name="compactKeyBindingJwt"/>, whatever it is, appended to the stored credential by
+    /// <see cref="SdJwtVpFixture.PresentWithKeyBindingJwt"/>: a row deciding the Key Binding JWT's own bytes, a malformed one
+    /// among them, writes them at the Wallet, before the presentation is composed.
+    /// </summary>
+    /// <param name="host">The hosted relying party.</param>
+    /// <param name="serializedSdJwt">The stored credential the wallet presents.</param>
+    /// <param name="nonce">The nonce the relying party provides and the ID Token is bound to.</param>
+    /// <param name="compactKeyBindingJwt">The Key Binding JWT the Wallet wrote.</param>
+    /// <param name="timeProvider">The clock the ID Token reads its timestamps from.</param>
+    /// <param name="pool">The pool the transaction rents transient buffers from.</param>
+    /// <param name="cancellationToken">Cancels the transaction.</param>
+    /// <returns>The endpoint's response and the relying party's terminal flow state.</returns>
+    public static async Task<SiopCombinedResponseOutcome> PostCombinedResponseWithKeyBindingJwtAsync(
+        TestHostShell host,
+        string serializedSdJwt,
+        string nonce,
+        string compactKeyBindingJwt,
+        TimeProvider timeProvider,
+        BaseMemoryPool pool,
+        CancellationToken cancellationToken) =>
+        await PostCombinedResponseOfAsync(
+            host,
+            nonce,
+            _ => ValueTask.FromResult(SdJwtVpFixture.PresentWithKeyBindingJwt(serializedSdJwt, compactKeyBindingJwt, pool)),
+            timeProvider,
+            pool,
+            cancellationToken).ConfigureAwait(false);
+
+
+    /// <summary>
     /// Registers the relying party, prepares the transaction, mints the ID Token, has <paramref name="present"/> write the
     /// key-bound presentation, POSTs both plus <c>state</c> to the response endpoint and answers the endpoint's response with the
     /// verifier's terminal flow state.
@@ -186,7 +217,7 @@ internal static class SiopCombinedResponseFixture
     /// <param name="pool">The pool the transaction rents transient buffers from.</param>
     /// <param name="cancellationToken">Cancels the transaction.</param>
     /// <returns>The endpoint's response and the relying party's terminal flow state.</returns>
-    private static async Task<(ServerHttpResponse Response, FlowState State)> PostCombinedResponseOfAsync(
+    private static async Task<SiopCombinedResponseOutcome> PostCombinedResponseOfAsync(
         TestHostShell host,
         string nonce,
         Func<CancellationToken, ValueTask<string>> present,
@@ -219,6 +250,12 @@ internal static class SiopCombinedResponseFixture
             [],
             cancellationToken).ConfigureAwait(false);
 
-        return (response, host.GetFlowState(requestHandle).State);
+        return new SiopCombinedResponseOutcome(response, host.GetFlowState(requestHandle).State);
     }
 }
+
+
+/// <summary>The response endpoint's answer to a Self-Issued OpenID Provider v2 Section 12 combined response and the relying party's terminal flow state.</summary>
+/// <param name="Response">The endpoint's response.</param>
+/// <param name="State">The relying party's terminal flow state.</param>
+internal sealed record SiopCombinedResponseOutcome(ServerHttpResponse Response, FlowState State);

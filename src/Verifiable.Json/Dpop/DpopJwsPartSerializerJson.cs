@@ -76,7 +76,7 @@ public static class DpopJwsPartSerializerJson
     /// <returns>The claims as an ordinal property dictionary; an absent conditional claim is omitted.</returns>
     private static Dictionary<string, object?> SerializePayload(DpopProofClaims claims)
     {
-        Dictionary<string, object?> dictionary = new(StringComparer.Ordinal)
+        var dictionary = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Htm] = claims.Htm,
             [WellKnownJwtClaimNames.Htu] = claims.Htu,

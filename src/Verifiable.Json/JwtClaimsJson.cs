@@ -74,8 +74,14 @@ public static class JwtClaimsJson
     }
 
 
-    //Deserializes a from_prior JWT segment's UTF-8 JSON object, translating System.Text.Json's JsonException
-    //(and a JSON-null result) into FormatException so no STJ type escapes this leaf.
+    /// <summary>
+    /// Deserializes a <c>from_prior</c> JWT segment's UTF-8 JSON object, translating System.Text.Json's <c>JsonException</c> (and
+    /// a JSON <c>null</c> result) into <see cref="FormatException"/>, so no System.Text.Json type escapes this leaf.
+    /// </summary>
+    /// <param name="json">The segment's UTF-8 JSON bytes.</param>
+    /// <param name="segment">The segment's name, for the refusal's message.</param>
+    /// <returns>The members.</returns>
+    /// <exception cref="FormatException">The bytes are no JSON object.</exception>
     private static Dictionary<string, object?> DeserializeObject(System.ReadOnlySpan<byte> json, string segment)
     {
         Dictionary<string, object?>? value;

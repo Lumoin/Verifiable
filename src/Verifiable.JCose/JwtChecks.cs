@@ -251,6 +251,9 @@ public static class JwtChecks
 
     //Private core implementations — shared by all four extension blocks.
 
+    /// <summary>Whether the header's <c>alg</c> is <c>none</c>; the core every extension block of the checks shares.</summary>
+    /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
+    /// <returns><see langword="true"/> when it holds.</returns>
     private static bool IsAlgNoneCore(IReadOnlyDictionary<string, object?> header)
     {
         if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? value) || value is not string alg)
@@ -261,6 +264,9 @@ public static class JwtChecks
         return WellKnownJwaValues.IsNone(alg);
     }
 
+    /// <summary>Whether the header carries a non-empty <c>alg</c> other than <c>none</c>.</summary>
+    /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
+    /// <returns><see langword="true"/> when it holds.</returns>
     private static bool HasValidAlgCore(IReadOnlyDictionary<string, object?> header)
     {
         return header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? value)
@@ -269,6 +275,9 @@ public static class JwtChecks
             && !WellKnownJwaValues.IsNone(alg);
     }
 
+    /// <summary>Whether the header carries a non-empty <c>kty</c>.</summary>
+    /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
+    /// <returns><see langword="true"/> when it holds.</returns>
     private static bool HasKtyCore(IReadOnlyDictionary<string, object?> header)
     {
         return header.TryGetValue(WellKnownJwkMemberNames.Kty, out object? value)
@@ -276,6 +285,9 @@ public static class JwtChecks
             && !string.IsNullOrEmpty(kty);
     }
 
+    /// <summary>Whether the header's embedded EC key carries a non-empty <c>crv</c>, <c>x</c> and <c>y</c>.</summary>
+    /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
+    /// <returns><see langword="true"/> when it holds.</returns>
     private static bool HasRequiredEcFieldsCore(IReadOnlyDictionary<string, object?> header)
     {
         return header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crv)
@@ -286,6 +298,9 @@ public static class JwtChecks
             && y is string yStr && !string.IsNullOrEmpty(yStr);
     }
 
+    /// <summary>Whether the header's <c>alg</c> and its EC key's <c>crv</c> are a combination RFC 7518 section 3.4 defines.</summary>
+    /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
+    /// <returns><see langword="true"/> when it holds.</returns>
     private static bool IsValidEcAlgCrvCombinationCore(IReadOnlyDictionary<string, object?> header)
     {
         if(!header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) || crvValue is not string crv)
@@ -306,6 +321,9 @@ public static class JwtChecks
             || (WellKnownJwaValues.IsEs256K(alg) && WellKnownCurveValues.IsSecp256k1(crv));
     }
 
+    /// <summary>Whether the header's embedded OKP key carries a non-empty <c>crv</c>.</summary>
+    /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
+    /// <returns><see langword="true"/> when it holds.</returns>
     private static bool HasRequiredOkpFieldsCore(IReadOnlyDictionary<string, object?> header)
     {
         return header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crv)
@@ -313,6 +331,9 @@ public static class JwtChecks
             && !string.IsNullOrEmpty(crvStr);
     }
 
+    /// <summary>Whether the header's <c>alg</c> and its OKP key's <c>crv</c> are a combination RFC 8037 defines.</summary>
+    /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
+    /// <returns><see langword="true"/> when it holds.</returns>
     private static bool IsValidOkpAlgCrvCombinationCore(IReadOnlyDictionary<string, object?> header)
     {
         if(!header.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) || crvValue is not string crv)
@@ -337,6 +358,9 @@ public static class JwtChecks
         return false;
     }
 
+    /// <summary>Whether the header's embedded RSA key carries its modulus and exponent of a supported key size.</summary>
+    /// <param name="header">The JWS header's members, a present <c>null</c> as a member with no value.</param>
+    /// <returns><see langword="true"/> when it holds.</returns>
     private static bool HasValidRsaFieldsCore(IReadOnlyDictionary<string, object?> header)
     {
         //RSA-2048: 256 bytes → Base64Url length ≈ 342 characters.

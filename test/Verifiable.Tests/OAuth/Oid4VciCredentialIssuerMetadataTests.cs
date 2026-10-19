@@ -721,6 +721,9 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     private static JwtPayloadSerializer AppendPayloadSerializer { get; } = static payload => AppendDictionary(payload);
 
 
+    /// <summary>Writes a JOSE part's members as JSON through the <see cref="JsonAppender"/> firewall walker.</summary>
+    /// <param name="dictionary">The members.</param>
+    /// <returns>The UTF-8 JSON bytes.</returns>
     private static byte[] AppendDictionary(IReadOnlyDictionary<string, object?> dictionary)
     {
         System.Text.StringBuilder sb = JsonAppender.Rent();

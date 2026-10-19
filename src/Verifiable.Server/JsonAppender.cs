@@ -176,7 +176,7 @@ public static class JsonAppender
 
         _ = sb.Append('{');
         bool first = true;
-        foreach(KeyValuePair<string, TValue> entry in dict)
+        foreach(var entry in dict)
         {
             if(!first)
             {

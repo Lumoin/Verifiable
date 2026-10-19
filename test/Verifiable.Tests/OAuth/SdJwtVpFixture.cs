@@ -426,6 +426,25 @@ internal static class SdJwtVpFixture
 
 
     /// <summary>
+    /// Composes the presentation of a serialized SD-JWT VC (issued without a Key Binding JWT) carrying the Key Binding JWT the
+    /// Wallet wrote as <paramref name="compactKeyBindingJwt"/>, whatever its bytes: the stored credential's own serialization,
+    /// then the Key Binding JWT after its last separator (RFC 9901 section 4), so a row deciding a malformed Key Binding JWT has the
+    /// Wallet write it before the presentation is composed, never alter a composed one.
+    /// </summary>
+    /// <param name="sdJwtWithoutKb">The issued SD-JWT VC, serialized without a Key Binding JWT, ending in its separator.</param>
+    /// <param name="compactKeyBindingJwt">The Key Binding JWT the Wallet wrote.</param>
+    /// <param name="pool">The pool the parse and re-serialization rent transient buffers from.</param>
+    /// <returns>The presentation.</returns>
+    public static string PresentWithKeyBindingJwt(string sdJwtWithoutKb, string compactKeyBindingJwt, BaseMemoryPool pool)
+    {
+        using var token = SdJwtSerializer.ParseToken(
+            sdJwtWithoutKb, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, pool, TestSalts.TestSaltTag);
+
+        return SdJwtSerializer.GetSdJwtForHashing(token, TestSetup.Base64UrlEncoder) + compactKeyBindingJwt;
+    }
+
+
+    /// <summary>
     /// Writes a Key Binding JWT by hand and signs it once (RFC 9901 section 4.3): the protected header the library's issuance
     /// writes, <c>typ</c> <c>kb+jwt</c> and the holder key's <c>alg</c>; the claims set <paramref name="nonce"/>,
     /// <paramref name="audience"/> as <c>aud</c>, the <c>sd_hash</c> over <paramref name="sdJwtForHashing"/> and, unless

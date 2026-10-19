@@ -167,6 +167,10 @@ internal sealed class SiopRequestUriFlowTests
     }
 
 
+    /// <summary>The string value of a Request Object claim, asserting the claim is present.</summary>
+    /// <param name="payload">The Request Object's claims.</param>
+    /// <param name="claim">The claim's name.</param>
+    /// <returns>The string.</returns>
     private static string GetString(Dictionary<string, object?> payload, string claim)
     {
         Assert.IsTrue(payload.TryGetValue(claim, out object? value),

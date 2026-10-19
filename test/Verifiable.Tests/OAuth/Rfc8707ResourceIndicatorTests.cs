@@ -455,7 +455,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public void JarResourceClaimWithMixedEmptyAndValidEntriesProjectsToAMalformedIndicator()
     {
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object?> claims = new()
+        var claims = new Dictionary<string, object?>()
         {
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,

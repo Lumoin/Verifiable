@@ -193,8 +193,8 @@ public static class JarmResponseValidation
         IReadOnlyDictionary<string, object?>? parameters = null;
         if(allChecksPassed)
         {
-            Dictionary<string, object?> responseParameters = new(claims.Count, StringComparer.Ordinal);
-            foreach(KeyValuePair<string, object?> claim in claims)
+            var responseParameters = new Dictionary<string, object?>(claims.Count, StringComparer.Ordinal);
+            foreach(var claim in claims)
             {
                 if(!WellKnownJwtClaimNames.IsIss(claim.Key)
                     && !WellKnownJwtClaimNames.IsAud(claim.Key)
@@ -220,8 +220,10 @@ public static class JarmResponseValidation
     }
 
 
-    //The aud claim is a string or an array of strings; deserializers materialise the
-    //array shape as an object sequence.
+    /// <summary>Whether an <c>aud</c> claim, a string or an array of strings the deserializer materialises as an object sequence, names the client.</summary>
+    /// <param name="audValue">The claim's value, which may be none.</param>
+    /// <param name="expectedClientId">The client identifier.</param>
+    /// <returns><see langword="true"/> when the audience names it.</returns>
     private static bool AudienceContains(object? audValue, string expectedClientId) => audValue switch
     {
         string single => string.Equals(single, expectedClientId, StringComparison.Ordinal),

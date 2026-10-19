@@ -80,6 +80,10 @@ internal static class JwtClaimReaders
     }
 
 
+    /// <summary>Reads a claim value the JSON layer boxed as an integer, of any of its integral boxings, as a 64-bit integer.</summary>
+    /// <param name="value">The claim's value, which may be none.</param>
+    /// <param name="result">The integer, or zero when the value is no integer a 64-bit integer holds.</param>
+    /// <returns><see langword="true"/> when the value is such an integer.</returns>
     public static bool TryToInt64(object? value, out long result)
     {
         switch(value)

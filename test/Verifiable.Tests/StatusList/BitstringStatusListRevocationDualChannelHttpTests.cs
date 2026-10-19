@@ -264,9 +264,15 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
     private static ReadOnlySpan<byte> SerializeCredential(VerifiableCredential credential) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
 
+    /// <summary>Serializes a credential JWS header's members to UTF-8 JSON.</summary>
+    /// <param name="header">The header's members.</param>
+    /// <returns>The UTF-8 JSON bytes.</returns>
     private static ReadOnlySpan<byte> SerializeCredentialHeader(Dictionary<string, object?> header) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(header, CredentialSecuringMaterial.JsonOptions);
 
+    /// <summary>Deserializes a credential JWS header's UTF-8 JSON bytes to its members, a present <c>null</c> kept as a member with no value.</summary>
+    /// <param name="headerBytes">The header's UTF-8 JSON bytes.</param>
+    /// <returns>The members, or <see langword="null"/> for a JSON <c>null</c>.</returns>
     private static Dictionary<string, object?>? DeserializeCredentialHeader(ReadOnlySpan<byte> headerBytes) =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
 

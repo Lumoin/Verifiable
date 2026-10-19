@@ -256,7 +256,7 @@ internal sealed class UserInfoEndpointTests
 
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+            TimeProvider.GetUtcNow(), jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
         string oversizedProof = proof + new string('A', Jws.DefaultMaxJwsLength);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
@@ -966,7 +966,7 @@ internal sealed class UserInfoEndpointTests
         string nonce = await ObtainResourceNonceAsync(host, material, boundAccessToken).ConfigureAwait(false);
         string proof = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, "POST", userInfoUrl.ToString(), boundAccessToken, nonce, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
             host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
@@ -1004,7 +1004,7 @@ internal sealed class UserInfoEndpointTests
         string nonce = await ObtainResourceNonceAsync(host, material, boundAccessToken).ConfigureAwait(false);
         string proof = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, "GET", userInfoUrl.ToString(), boundAccessToken, nonce, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
             host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof, httpMethod: HttpMethod.Get).ConfigureAwait(false);
@@ -1084,7 +1084,7 @@ internal sealed class UserInfoEndpointTests
 
         string proofWithoutNonce = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, "POST", userInfoUrl.ToString(), boundAccessToken, nonce: null, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
             host, material, boundAccessToken, scheme: "DPoP", dpopProof: proofWithoutNonce).ConfigureAwait(false);
@@ -1117,7 +1117,7 @@ internal sealed class UserInfoEndpointTests
 
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, htm, presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+            TimeProvider.GetUtcNow(), jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
     }
@@ -1157,7 +1157,7 @@ internal sealed class UserInfoEndpointTests
         };
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, "POST", htu, presentation.AccessToken, presentation.Nonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+            TimeProvider.GetUtcNow(), jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
     }
@@ -1180,7 +1180,7 @@ internal sealed class UserInfoEndpointTests
 
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, "POST", presentation.UserInfoUrl, "another-access-token", presentation.Nonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+            TimeProvider.GetUtcNow(), jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
     }
@@ -1207,7 +1207,7 @@ internal sealed class UserInfoEndpointTests
 
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
-            TimeProvider.GetUtcNow().AddMinutes(offsetMinutes), TestContext.CancellationToken).ConfigureAwait(false);
+            TimeProvider.GetUtcNow().AddMinutes(offsetMinutes), jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
     }
@@ -1229,8 +1229,8 @@ internal sealed class UserInfoEndpointTests
 
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken,
-            alterHeader: header => header["typ"] = "JWT").ConfigureAwait(false);
+            TimeProvider.GetUtcNow(),
+            jti: null, alterHeader: header => header["typ"] = "JWT", TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
     }
@@ -1255,8 +1255,8 @@ internal sealed class UserInfoEndpointTests
 
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken,
-            alterHeader: header => header["alg"] = "RS256").ConfigureAwait(false);
+            TimeProvider.GetUtcNow(),
+            jti: null, alterHeader: header => header["alg"] = "RS256", TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
     }
@@ -1280,7 +1280,7 @@ internal sealed class UserInfoEndpointTests
 
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken, jti: string.Empty).ConfigureAwait(false);
+            TimeProvider.GetUtcNow(), jti: string.Empty, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
     }
@@ -1306,7 +1306,7 @@ internal sealed class UserInfoEndpointTests
         string proof = await ResourceDpopProofs.BuildAsync(
             new DpopKey(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256),
             "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+            TimeProvider.GetUtcNow(), jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "invalid_token").ConfigureAwait(false);
     }
@@ -1343,7 +1343,7 @@ internal sealed class UserInfoEndpointTests
         };
         string proof = await ResourceDpopProofs.BuildAsync(
             presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentedNonce,
-            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+            TimeProvider.GetUtcNow(), jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         await AssertProofRefusedAsync(presentation, proof, "use_dpop_nonce", isFreshNonceExpected: true).ConfigureAwait(false);
     }
@@ -1373,7 +1373,7 @@ internal sealed class UserInfoEndpointTests
         string nonce = await ObtainResourceNonceAsync(host, material, boundAccessToken).ConfigureAwait(false);
         string proof = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, "POST", userInfoUrl.ToString(), boundAccessToken, nonce, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage first = await SendUserInfoOverWireAsync(
             host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
@@ -1442,7 +1442,7 @@ internal sealed class UserInfoEndpointTests
         string nonce = await ObtainResourceNonceAsync(host, material, boundAccessToken).ConfigureAwait(false);
         string proof = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, "POST", userInfoUrl.ToString(), boundAccessToken, nonce, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken, jti: tokenEndpointProofJti).ConfigureAwait(false);
+            jti: tokenEndpointProofJti, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage atUserInfo = await SendUserInfoOverWireAsync(
             host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
@@ -1484,7 +1484,7 @@ internal sealed class UserInfoEndpointTests
         string proofJti = Guid.NewGuid().ToString("N");
         string proof = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, "POST", userInfoUrl.ToString(), boundAccessToken, nonce, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken, jti: proofJti).ConfigureAwait(false);
+            jti: proofJti, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Each request's first look-up of this proof's jti reads the store, then waits until the other
         //request has read it too, so both have read "not seen" before either records the jti: the
@@ -1580,7 +1580,7 @@ internal sealed class UserInfoEndpointTests
         };
         string proof = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, "POST", htu, boundAccessToken, nonce, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
             host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
@@ -1617,16 +1617,15 @@ internal sealed class UserInfoEndpointTests
         string nonce = await ObtainResourceNonceAsync(host, material, boundAccessToken).ConfigureAwait(false);
         string proof = await ResourceDpopProofs.BuildAsync(
             fixture.DpopKey, "POST", userInfoUrl.ToString(), boundAccessToken, nonce, TimeProvider.GetUtcNow(),
-            TestContext.CancellationToken,
-            alterHeader: header =>
+            jti: null, alterHeader: header =>
             {
-                Dictionary<string, object?> jwk = new(Assert.IsInstanceOfType<Dictionary<string, object?>>(header["jwk"]), StringComparer.Ordinal)
+                var jwk = new Dictionary<string, object?>(Assert.IsInstanceOfType<Dictionary<string, object?>>(header["jwk"]), StringComparer.Ordinal)
                 {
                     ["kid"] = "client-dpop-key-1",
                     ["alg"] = "ES256"
                 };
                 header["jwk"] = jwk;
-            }).ConfigureAwait(false);
+            }, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
             host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
@@ -1744,7 +1743,7 @@ internal sealed class UserInfoEndpointTests
             string nonce = await ObtainResourceNonceAsync(host, material, presentedToken).ConfigureAwait(false);
             proof = await ResourceDpopProofs.BuildAsync(
                 fixture.DpopKey, "POST", userInfoUrl.ToString(), presentedToken, nonce, TimeProvider.GetUtcNow(),
-                TestContext.CancellationToken).ConfigureAwait(false);
+                jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(

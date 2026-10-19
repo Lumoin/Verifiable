@@ -146,12 +146,16 @@ public static class SdJwtVpTokenVerification
     /// <returns>
     /// On success the presentation's contents and the facts of its checks (<see cref="VpTokenParsed"/>), each check's result
     /// carried as it came out, a failed one among them; on failure the defect of a presentation no conformant Wallet produces
-    /// (<see cref="SdJwtPresentationDefect"/>): an issuer-signed payload that is not
-    /// well-formed or repeats a claim name, a <c>status</c> claim whose value does not meet Token Status List Section 6.1/6.2, a
+    /// (<see cref="SdJwtPresentationDefect"/>): a compact serialization the wire format's parse refuses, or a JWT of it that is
+    /// not three segments or whose payload segment is no base64url text, an issuer-signed payload that is not one JSON object
+    /// naming each claim once and naming Unicode text throughout, a <c>status</c> claim, found by its decoded name, whose value
+    /// does not meet Token Status List Section 6.1/6.2, a <c>cnf.jwk</c> stating no public key the library reconstructs, a
     /// KB-JWT payload that is not one JSON object naming each claim once and naming Unicode text throughout, or a KB-JWT <c>iat</c>
     /// that is no NumericDate (RFC 7519 Section 2), which is told from an omitted <c>iat</c>, answered as
     /// <see cref="VpTokenParsed.KbJwtIat"/> <see langword="null"/> for the key-binding checks to refuse. Each refusal is a
-    /// Wallet-attributable malformed presentation the executor routes as such.
+    /// Wallet-attributable malformed presentation the executor routes as such. Only the refusals of the presentation's own
+    /// readings are answered so: a failure of the issuer-key resolver, of the trust-evidence resolver, of the digest, of the
+    /// decoder beyond its refusal or of the allocator is a fault and surfaces as one.
     /// </returns>
     public static async ValueTask<Result<VpTokenParsed, SdJwtPresentationDefect>> VerifyAsync(
         string vpToken,
@@ -182,11 +186,17 @@ public static class SdJwtVpTokenVerification
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        //Parse the SD-JWT wire format into issuer JWS, disclosures, and KB-JWT. The token owns a
-        //pooled salt buffer per disclosure, so it is disposed on every exit from this method;
-        //everything the returned VpTokenParsed carries is a detached CLR value (claim values come
-        //from the parse's own object graph, keys are CredentialPath, the rest are strings).
-        using SdToken<string> token = parseSdJwtToken(vpToken);
+        //Parse the SD-JWT wire format into issuer JWS, disclosures, and KB-JWT: the presentation's input boundary, where the
+        //parse's refusal of the wire format, its FormatException, is a presentation no conformant Wallet produces. The token
+        //owns a pooled salt buffer per disclosure, so it is disposed on every exit from this method; everything the returned
+        //VpTokenParsed carries is a detached CLR value (claim values come from the parse's own object graph, keys are
+        //CredentialPath, the rest are strings).
+        if(ParsedOrNone(vpToken, parseSdJwtToken) is not { } parsedToken)
+        {
+            return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.CompactSerializationMalformed);
+        }
+
+        using SdToken<string> token = parsedToken;
 
         //Decode the issuer JWT payload and extract all fields synchronously
         //before any await boundaries (ReadOnlySpan cannot cross await).
@@ -198,17 +208,23 @@ public static class SdJwtVpTokenVerification
         StatusClaim? credentialStatus;
 
         {
-            string[] issuerParts = token.IssuerSigned.Split('.');
-            using IMemoryOwner<byte> issuerPayloadBytes = decoder(issuerParts[1], pool);
+            //RFC 7515 section 7.1: a compact JWS is three segments; a payload segment the decoder refuses as no base64url text
+            //is a presentation no conformant Wallet produces. Any other failure of the decoder or of the allocator is a fault.
+            using var issuerPayloadBytes = PayloadOrNone(token.IssuerSigned, decoder, pool);
+
+            if(issuerPayloadBytes is null)
+            {
+                return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.CompactSerializationMalformed);
+            }
+
             ReadOnlySpan<byte> issuerPayload = issuerPayloadBytes.Memory.Span;
 
-            //A claim name that repeats — at the top level or nested, e.g. inside "cnf.jwk" — is refused
-            //before any claim is read: the span scanner below resolves a repeated name to its FIRST
-            //occurrence while a serializer-based reader keeps the LAST, so a signed payload carrying the
-            //same claim twice shows one verifier one value and another verifier a different one — the
-            //validate-one/act-on-another smuggling class JarVerification refuses on the Request Object for
-            //the same reason. No conformant Issuer emits a duplicate claim, so the presentation is malformed.
-            if(!JwkJsonReader.IsWellFormedJsonDocument(issuerPayload))
+            //The claims set is read as the one JSON object it is, by the library's one reading of a JSON object's members, before
+            //any claim is read: a claim name that repeats, at the top level or nested, e.g. inside "cnf.jwk", shows one verifier
+            //one value and another verifier a different one, the validate-one/act-on-another smuggling class JarVerification
+            //refuses on the Request Object for the same reason, and a name or a string naming no Unicode text is read by no two
+            //readers alike (RFC 8259 sections 4 and 8.2). No conformant Issuer emits either, so the presentation is malformed.
+            if(JwkJsonReader.ReadTopLevelMembers(issuerPayload) is not JsonTopLevelMembers issuerClaims)
             {
                 return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.IssuerPayloadNotOneObject);
             }
@@ -229,21 +245,17 @@ public static class SdJwtVpTokenVerification
             //which answers the whole claim rather than the status_list member alone: the mechanisms
             //the issuer named, plus the reference when status_list is one of them.
             //
-            //The claim's EXISTENCE is a member probe on the payload, kept apart from its content: an
-            //absent member is the not-status-checked case, while a member whose value is an empty
-            //object or is not an object at all yields the same empty content slice and is a present
-            //claim that fails Section 6.1's "MUST specify a JSON Object that contains at least one
-            //reference to a status mechanism". Every present claim therefore reaches the reader, whose
-            //refusal — no member, a repeated member, or a status_list that does not meet Section 6.2 —
-            //is a malformed presentation at this seat's own parse boundary rather than a silent
-            //degradation to "not referenced".
+            //The claim's EXISTENCE and its content are read from the members of the claims set, each name decoded once (RFC 8259
+            //sections 7 and 8.3), so a status claim whose name is written with an escape is the status claim: an absent member is
+            //the not-status-checked case, while a member whose value is not an object is a present claim that fails Section 6.1's
+            //"MUST specify a JSON Object that contains at least one reference to a status mechanism". Every present object
+            //reaches the reader, whose refusal - no member, a repeated member, or a status_list that does not meet Section 6.2 -
+            //is a malformed presentation at this seat's own parse boundary rather than a silent degradation to "not referenced".
             credentialStatus = null;
-            if(JwkJsonReader.ContainsKey(issuerPayload, WellKnownJwtClaimNames.StatusUtf8))
+            if(issuerClaims.Members.FirstOrDefault(static member => WellKnownJwtClaimNames.IsStatus(member.Name)) is { } statusMember)
             {
-                ReadOnlySpan<byte> statusObject = JwkJsonReader.ExtractObjectContent(
-                    issuerPayload, WellKnownJwtClaimNames.StatusUtf8);
-
-                if(!StatusClaimReader.TryRead(statusObject, out StatusClaim? statusClaim))
+                if(statusMember.Kind is not JsonTopLevelValueKind.Object
+                    || !StatusClaimReader.TryRead(Encoding.UTF8.GetBytes(statusMember.Text), out var statusClaim))
                 {
                     return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.StatusClaimMalformed);
                 }
@@ -288,14 +300,19 @@ public static class SdJwtVpTokenVerification
         IReadOnlyList<string>? kbTransactionDataHashes = null;
         string? kbTransactionDataHashesAlg = null;
 
-        if(token.HasKeyBinding && jwkDict is not null)
+        if(token.KeyBinding is { } keyBinding && jwkDict is not null)
         {
             //Extract KB-JWT payload fields synchronously before signature verification.
             string? claimedSdHash;
 
             {
-                string[] kbParts = token.KeyBinding!.Split('.');
-                using IMemoryOwner<byte> kbPayloadBytes = decoder(kbParts[1], pool);
+                using var kbPayloadBytes = PayloadOrNone(keyBinding, decoder, pool);
+
+                if(kbPayloadBytes is null)
+                {
+                    return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.CompactSerializationMalformed);
+                }
+
                 ReadOnlySpan<byte> kbPayload = kbPayloadBytes.Memory.Span;
 
                 //The KB-JWT's claims set is read as the one JSON object it is, as the issuer-signed payload is: one repeating a
@@ -326,16 +343,19 @@ public static class SdJwtVpTokenVerification
                     kbPayload, "transaction_data_hashes_alg"u8);
             }
 
-            //Reconstruct the holder's public key from the JWK dictionary.
-            var (algorithm, purpose, scheme, keyBytesOwner) =
-                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-                    jwkDict, pool, decoder);
-            Tag holderTag = Tag.Create(algorithm).With(purpose).With(scheme);
-            using PublicKeyMemory holderPublicKey = new(keyBytesOwner, holderTag);
+            //Reconstruct the holder's public key from the JWK dictionary (RFC 7800 section 3.2). The reconstruction's own refusal
+            //of the key, and the decoder's refusal of a member as no base64url text, are a presentation no conformant Issuer
+            //signs; a fault of the decoder or of the allocator surfaces as one.
+            using var holderPublicKey = ConfirmationKeyOrNone(jwkDict, decoder, pool);
+
+            if(holderPublicKey is null)
+            {
+                return Result.Failure<VpTokenParsed, SdJwtPresentationDefect>(SdJwtPresentationDefect.ConfirmationKeyNotAPublicKey);
+            }
 
             //Verify KB-JWT signature against the holder key from cnf.
             kbJwtSignatureValid = await Jws.VerifyAsync(
-                token.KeyBinding!, decoder,
+                keyBinding, decoder,
                 pool,
                 holderPublicKey, cancellationToken).ConfigureAwait(false);
 
@@ -486,5 +506,69 @@ public static class SdJwtVpTokenVerification
             MinimumDisclosureSaltLengthBytes = minimumSaltLength,
             SaltReused = saltReused
         });
+    }
+
+
+    /// <summary>
+    /// The token the parse of the SD-JWT wire format reads, or <see langword="null"/> when the parse refuses the wire format, its
+    /// <see cref="FormatException"/> (<c>SdJwtSerializer.ParseToken</c>'s contract for every wire-shape rejection). Any other
+    /// exception is a fault of the parse and surfaces as one.
+    /// </summary>
+    /// <param name="vpToken">The presentation's compact serialization.</param>
+    /// <param name="parseSdJwtToken">The parse of the wire format.</param>
+    /// <returns>The token, which the caller disposes, or <see langword="null"/>.</returns>
+    private static SdToken<string>? ParsedOrNone(string vpToken, ParseSdJwtTokenDelegate parseSdJwtToken)
+    {
+        try
+        {
+            return parseSdJwtToken(vpToken);
+        }
+        catch(FormatException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// The decoded payload of a compact JWS (RFC 7515 section 7.1) the presentation carries, or <see langword="null"/> when the
+    /// JWS is not three segments, its payload segment is empty, which no JWT's claims set is, or the decoder refuses the segment
+    /// as no base64url text; any other failure of the decoder or of the allocator is a fault and surfaces as one.
+    /// </summary>
+    /// <param name="compactJws">The Issuer-signed JWT or the Key Binding JWT.</param>
+    /// <param name="decoder">The base64url decoder.</param>
+    /// <param name="pool">The pool the bytes are rented from.</param>
+    /// <returns>The payload's bytes, which the caller disposes, or <see langword="null"/>.</returns>
+    private static IMemoryOwner<byte>? PayloadOrNone(string compactJws, DecodeDelegate decoder, BaseMemoryPool pool)
+    {
+        var segments = compactJws.Split('.');
+
+        return segments is [_, { Length: > 0 } payload, _] ? JwsSegmentDecoding.DecodedOrNone(payload, decoder, pool) : null;
+    }
+
+
+    /// <summary>
+    /// The holder's public key the Issuer-signed JWT's <c>cnf.jwk</c> states (RFC 7800 section 3.2), or <see langword="null"/>
+    /// when the library's reconstruction of the key refuses it (<see cref="JwkPublicKeyException"/>, or
+    /// <see cref="RsaPublicKeyException"/> for an RSA key's parameters) or the decoder refuses one of its members as no base64url
+    /// text (its <see cref="FormatException"/>). Any other failure, of the decoder beyond its refusal or of the allocator, is a
+    /// fault and surfaces as one.
+    /// </summary>
+    /// <param name="jwk">The <c>cnf.jwk</c> members.</param>
+    /// <param name="decoder">The base64url decoder.</param>
+    /// <param name="pool">The pool the key material is rented from.</param>
+    /// <returns>The key, which the caller disposes, or <see langword="null"/>.</returns>
+    private static PublicKeyMemory? ConfirmationKeyOrNone(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool)
+    {
+        try
+        {
+            var (algorithm, purpose, scheme, keyBytesOwner) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, pool, decoder);
+
+            return new PublicKeyMemory(keyBytesOwner, Tag.Create(algorithm).With(purpose).With(scheme));
+        }
+        catch(Exception exception) when(exception is JwkPublicKeyException or RsaPublicKeyException or FormatException)
+        {
+            return null;
+        }
     }
 }

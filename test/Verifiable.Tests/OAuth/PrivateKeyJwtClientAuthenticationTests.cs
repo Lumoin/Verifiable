@@ -1542,7 +1542,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         using JsonDocument document = JsonDocument.Parse(
             payload.ToArray(), new JsonDocumentOptions { AllowDuplicateProperties = true });
 
-        Dictionary<string, object?> claims = [];
+        var claims = new Dictionary<string, object?>();
         foreach(JsonProperty member in document.RootElement.EnumerateObject())
         {
             object value = member.Value.ValueKind switch

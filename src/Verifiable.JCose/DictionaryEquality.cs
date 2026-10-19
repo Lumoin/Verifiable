@@ -36,9 +36,9 @@ public static class DictionaryEquality
             return false;
         }
 
-        foreach(KeyValuePair<string, TValue> kvp in left)
+        foreach(var kvp in left)
         {
-            if(!right.TryGetValue(kvp.Key, out TValue? value) || !Equals(kvp.Value, value))
+            if(!right.TryGetValue(kvp.Key, out var value) || !Equals(kvp.Value, value))
             {
                 return false;
             }
@@ -62,7 +62,7 @@ public static class DictionaryEquality
         }
 
         var hash = new HashCode();
-        foreach(KeyValuePair<string, TValue> kvp in dictionary.OrderBy(x => x.Key, StringComparer.Ordinal))
+        foreach(var kvp in dictionary.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             hash.Add(kvp.Key);
             hash.Add(kvp.Value);

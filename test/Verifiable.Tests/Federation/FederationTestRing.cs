@@ -334,7 +334,7 @@ verificationDelegate,
         ArgumentNullException.ThrowIfNull(subject);
         ArgumentException.ThrowIfNullOrEmpty(markId);
 
-        Dictionary<string, object?> headerDict = new(StringComparer.Ordinal)
+        var headerDict = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkJwt,
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
@@ -353,7 +353,7 @@ verificationDelegate,
             headerDict[WellKnownJwkMemberNames.Kid] = issuer.Kid;
         }
 
-        Dictionary<string, object?> payloadDict = new(StringComparer.Ordinal)
+        var payloadDict = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = issuer.Identifier.Value,
             [WellKnownJwtClaimNames.Sub] = subject.Identifier.Value,
@@ -395,14 +395,14 @@ verificationDelegate,
         ArgumentNullException.ThrowIfNull(issuer);
         ArgumentException.ThrowIfNullOrEmpty(markId);
 
-        Dictionary<string, object?> headerDict = new(StringComparer.Ordinal)
+        var headerDict = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkDelegationJwt,
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
             [WellKnownJwkMemberNames.Kid] = owner.Kid,
         };
 
-        Dictionary<string, object?> payloadDict = new(StringComparer.Ordinal)
+        var payloadDict = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJwtClaimNames.Iss] = owner.Identifier.Value,
             [WellKnownJwtClaimNames.Sub] = issuer.Identifier.Value,
@@ -464,7 +464,7 @@ verificationDelegate,
         Dictionary<string, object?> payloadDict,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, object?> headerDict = new(StringComparer.Ordinal)
+        var headerDict = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt,
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
@@ -504,6 +504,12 @@ verificationDelegate,
     }
 
 
+    /// <summary>The registered claims every statement the ring mints carries: <c>iss</c>, <c>sub</c>, <c>iat</c> and <c>exp</c>, the dates in whole seconds.</summary>
+    /// <param name="issuer">The statement's issuer.</param>
+    /// <param name="subject">The statement's subject.</param>
+    /// <param name="issuedAt">The instant the statement is issued at.</param>
+    /// <param name="expiresAt">The instant the statement expires at.</param>
+    /// <returns>The claims.</returns>
     private static Dictionary<string, object?> BuildPayloadCore(
         string issuer,
         string subject,

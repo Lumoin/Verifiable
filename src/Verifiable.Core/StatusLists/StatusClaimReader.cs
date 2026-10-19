@@ -1,4 +1,6 @@
 using System.Collections.Frozen;
+using System.Globalization;
+using System.Text;
 using Verifiable.JCose;
 
 namespace Verifiable.Core.StatusLists;
@@ -10,10 +12,9 @@ namespace Verifiable.Core.StatusLists;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Operates directly on the UTF-8 bytes of the already-sliced <c>status</c> claim object with no
-/// serializer and no re-encode of the payload: what it allocates is the claim it returns — the
-/// mechanism-name set, the <c>uri</c> string, and the carrier itself — and nothing per byte scanned.
-/// It reads over <see cref="JwkJsonReader"/> (the
+/// Reads the UTF-8 JSON text of the <c>status</c> claim's object value with no serializer, through
+/// the library's one reading of a JSON object's members, every name decoded once, so no spelling of a
+/// name hides it. It reads over <see cref="JwkJsonReader"/> (the
 /// JOSE-tier span primitives) in the same style as
 /// <c>Verifiable.Core.Did.Methods.Peer.PeerDidServiceReader.TryRead</c> reading a peer DID service
 /// block: this lives in <c>Verifiable.Core</c>, which both
@@ -43,86 +44,61 @@ namespace Verifiable.Core.StatusLists;
 public static class StatusClaimReader
 {
     /// <summary>
-    /// Reads an already-sliced <c>status</c> claim object into its mechanism set and, when the
+    /// Reads a <c>status</c> claim's object value into its mechanism set and, when the
     /// <see cref="StatusMechanismNames.StatusList"/> mechanism is a top-level member, its decoded
-    /// reference.
+    /// reference, through the library's one reading of a JSON object's members
+    /// (<see cref="JwkJsonReader.ReadTopLevelMembers"/>): every member name and string value is read
+    /// decoded once (RFC 8259 sections 7 and 8.3), so a mechanism, <c>status_list</c>, <c>uri</c> or
+    /// <c>idx</c> name written with an escape is the name it decodes to.
     /// </summary>
     /// <param name="statusObjectUtf8Json">
-    /// The UTF-8 JSON bytes between the braces of the <c>status</c> claim's object value. An empty
-    /// span carries no member and is refused — which is the answer a caller wants for a claim that IS
-    /// present but whose value is <c>{}</c> or is not an object at all, both of which slice to
-    /// nothing. A caller whose token carries no <c>status</c> member does not call this reader; it
-    /// establishes that by probing the member's presence, never by the emptiness of this span.
+    /// The UTF-8 JSON text of the <c>status</c> claim's value, braces included, as the claims set
+    /// carrying it writes it. A value that is no JSON object, or an object carrying no member, is
+    /// refused. A caller whose token carries no <c>status</c> member does not call this reader; it
+    /// establishes that from the members of the claims set it read.
     /// </param>
     /// <param name="claim">On success, the claim as read; otherwise <see langword="null"/>.</param>
     /// <returns>
-    /// <see langword="true"/> when the object carries at least one top-level member (Section 6.1),
-    /// no top-level member name repeats, and any <c>status_list</c> member conforms to Section 6.2;
-    /// <see langword="false"/> otherwise — never throws on this untrusted input.
+    /// <see langword="true"/> when the value is one JSON object carrying at least one top-level member
+    /// (Section 6.1), repeating no member name at any depth and naming Unicode text throughout, and any
+    /// <c>status_list</c> member is an object whose <c>uri</c> is a string conforming to RFC 3986 and whose
+    /// <c>idx</c> is a non-negative integer (Section 6.2); <see langword="false"/> otherwise — never throws
+    /// on this untrusted input.
     /// </returns>
     /// <remarks>
     /// Only top-level members are mechanisms: a <c>status_list</c> object nested inside another
     /// mechanism's value is that mechanism's own content and is neither named in
-    /// <see cref="StatusClaim.Mechanisms"/> nor read as the reference. A repeated top-level member
-    /// name is refused outright, the same posture <see cref="JwkJsonReader.IsWellFormedJsonDocument"/>
-    /// exists for elsewhere: a duplicate lets a producer show one reader one mechanism and another
-    /// reader a different one.
+    /// <see cref="StatusClaim.Mechanisms"/> nor read as the reference. A repeated member name is
+    /// refused outright: a duplicate lets a producer show one reader one mechanism and another reader a
+    /// different one.
     /// </remarks>
     public static bool TryRead(ReadOnlySpan<byte> statusObjectUtf8Json, out StatusClaim? claim)
     {
         claim = null;
 
-        int pos = 0;
-        while(pos < statusObjectUtf8Json.Length
-            && statusObjectUtf8Json[pos] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
-        {
-            pos++;
-        }
-
-        bool isWellFormed = pos < statusObjectUtf8Json.Length && statusObjectUtf8Json[pos] == (byte)'{'
-            ? JwkJsonReader.IsWellFormedJsonDocument(statusObjectUtf8Json)
-            : JwkJsonReader.IsWellFormedJsonObjectContent(statusObjectUtf8Json);
-
-        if(!isWellFormed)
+        if(JwkJsonReader.ReadTopLevelMembers(statusObjectUtf8Json) is not JsonTopLevelMembers { Members.Count: > 0 } members)
         {
             return false;
         }
 
-        List<string> memberNames = JwkJsonReader.GetTopLevelKeyNames(statusObjectUtf8Json);
-        if(memberNames.Count == 0)
-        {
-            return false;
-        }
-
-        //The duplicate scan above already established that the names are distinct, so the member
-        //names go straight into the ordinal set the claim stores — there is no intermediate
-        //deduplicating set between the scan and the carrier.
-        FrozenSet<string> mechanisms = memberNames.ToFrozenSet(StringComparer.Ordinal);
+        //The reader answers members only for an object repeating no name, so the decoded names go straight into the ordinal set
+        //the claim stores.
+        FrozenSet<string> mechanisms = members.Members.Select(static member => member.Name).ToFrozenSet(StringComparer.Ordinal);
 
         StatusListReference? statusList = null;
-        if(mechanisms.Contains(StatusMechanismNames.StatusList))
+        if(members.Members.FirstOrDefault(static member => string.Equals(member.Name, StatusMechanismNames.StatusList, StringComparison.Ordinal)) is { } statusListMember)
         {
-            ReadOnlySpan<byte> statusListObject = JwkJsonReader.ExtractObjectContent(
-                statusObjectUtf8Json, WellKnownJwtClaimNames.StatusListUtf8);
-            if(statusListObject.IsEmpty)
+            if(statusListMember.Kind is not JsonTopLevelValueKind.Object
+                || JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(statusListMember.Text)) is not JsonTopLevelMembers reference
+                || reference.Find(StatusListMemberNames.Uri) is not JsonMemberString { Text: var uri }
+                || !StatusListReference.IsConformingUri(uri)
+                || reference.Find(StatusListMemberNames.Index) is not JsonMemberNumber { Spelling: var indexSpelling }
+                || !int.TryParse(indexSpelling, NumberStyles.None, CultureInfo.InvariantCulture, out var index))
             {
                 return false;
             }
 
-            string? uri = JwkJsonReader.ExtractStringValue(statusListObject, StatusListMemberNames.UriUtf8);
-            if(uri is null || !StatusListReference.IsConformingUri(uri))
-            {
-                return false;
-            }
-
-            if(!JwkJsonReader.TryExtractLongValue(statusListObject, StatusListMemberNames.IndexUtf8, out long index)
-                || index < 0
-                || index > int.MaxValue)
-            {
-                return false;
-            }
-
-            statusList = new StatusListReference((int)index, uri);
+            statusList = new StatusListReference(index, uri);
         }
 
         claim = new StatusClaim(statusList, mechanisms);

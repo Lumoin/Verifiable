@@ -108,7 +108,7 @@ public static class JweMessageExtensions
 
         //RFC 7516 section 4.1.2: the content encryption algorithm is a string header parameter; a header member held
         //with no value or with another kind names no algorithm to encrypt with.
-        if(!unencryptedJwe.Header.TryGetValue(WellKnownJoseHeaderNames.Enc, out object? encryptionAlgorithmValue)
+        if(!unencryptedJwe.Header.TryGetValue(WellKnownJoseHeaderNames.Enc, out var encryptionAlgorithmValue)
             || encryptionAlgorithmValue is not string encryptionAlgorithm)
         {
             throw new ArgumentException("The header must carry the enc parameter as a string.", nameof(unencryptedJwe));

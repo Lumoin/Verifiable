@@ -262,6 +262,10 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
     }
 
 
+    /// <summary>The string value of a Request Object claim, asserting the claim is present.</summary>
+    /// <param name="claims">The Request Object's claims.</param>
+    /// <param name="claim">The claim's name.</param>
+    /// <returns>The string.</returns>
     private static string GetString(IReadOnlyDictionary<string, object?> claims, string claim)
     {
         Assert.IsTrue(claims.TryGetValue(claim, out object? value),

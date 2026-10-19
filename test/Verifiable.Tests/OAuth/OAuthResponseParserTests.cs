@@ -481,6 +481,7 @@ internal sealed class OAuthResponseParsersTests
         Assert.AreEqual("RFC 6749 §5.2", pe.Support.SpecificationReference);
     }
 
+    /// <summary>RFC 6749 section 5.1: <c>access_token</c> is REQUIRED; a token response omitting it is refused as a required member absent, naming it.</summary>
     [TestMethod]
     public void ParseTokenResponseRefusesAnAbsentAccessTokenAsAbsent()
     {

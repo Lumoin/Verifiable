@@ -86,14 +86,28 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `SiopFlowFailed.PresentationDefect` and `SiopVerifierFlowFailedState.PresentationDefect`; the Wallet is answered the generic
   malformed description. Awaiting the owner's word.
 - `JwkCertificateChain.DefectOf` and `JwkCertificateChainDefect` (`Verifiable.JCose`, public): a JWK's `x5c` read as RFC 7517
-  section 4.7 has it - each element base64 (not base64url) text of a DER X.509 certificate (RFC 5280 section 4.1), the first
-  certificate's subject public key the key the JWK's other members represent, for EC P-256/P-384/P-521, RSA, Ed25519 and
-  ML-DSA keys - answering the defect, `NotBase64Text`, `NotACertificate` or `FirstCertificateNotOfTheKey`, or none. The
-  certification of each certificate by the next is a matter of trust in the chain, which it does not judge. Awaiting the
-  owner's word.
+  section 4.7 has it - each element base64 (not base64url) text, no character outside the alphabet and so no whitespace or line
+  break (RFC 4648 section 3.3), of a DER X.509 certificate read structurally as far as the library's certificate parse reads
+  one (RFC 5280 section 4.1, RFC 8410 section 3), the first certificate's subject public key the key the JWK's other members
+  represent, for EC keys on P-256, P-384, P-521, secp256k1 and the five brainpool r1 curves whose coordinates are of the curve's
+  width and name a point of it, RSA, Ed25519 and ML-DSA keys - answering the defect, `NotBase64Text`, `NotACertificate`,
+  `FirstCertificateNotOfTheKey` (an established mismatch) or `KeyComparisonUnsupported` (a key of a type, curve or algorithm
+  the judgement compares none of, a judgement not made), or none. The certification of each certificate by the next is a
+  matter of trust in the chain, which it does not judge. Awaiting the owner's word.
 - `DpopProofMemberDefect.RepeatedKeyOperation`, `KeyOperationsInconsistentWithUse` and `CertificateNotOfTheKey`: an embedded
-  `jwk` naming a `key_ops` operation twice, carrying `use` and `key_ops` that do not convey consistent information, or an
-  `x5c` whose first certificate is of another key (RFC 7517 sections 4.3 and 4.7).
+  `jwk` naming a `key_ops` operation twice, carrying `use` and `key_ops` established not to convey consistent information, or
+  an `x5c` whose first certificate is established to be of another key (RFC 7517 sections 4.3 and 4.7); beside them
+  `KeyOperationsRelationToUseUnestablished` and `CertificateKeyRelationUnestablished`, a `use` or an operation outside the
+  registered vocabulary, or a key the certificate judgement compares none of, whose relation is not established - a judgement
+  not made, never an established inconsistency or mismatch. Awaiting the owner's word.
+- `SdJwtPresentationDefect.CompactSerializationMalformed` and `ConfirmationKeyNotAPublicKey`: a presentation the wire format's
+  parse refuses, or an Issuer-signed JWT or Key Binding JWT that is not three segments or carries a payload segment that is no
+  base64url text; and a `cnf.jwk` stating no public key the library reconstructs. Awaiting the owner's word.
+- `JwkPublicKeyException` and `JwkPublicKeyFailureKind` (`Verifiable.JCose`, public): the typed refusal of
+  `CryptoFormatConversions.DefaultJwkToAlgorithmConverter` - `MemberAbsent`, `UnsupportedKeyType`,
+  `UnsupportedCurveOrAlgorithm`, `NotAPointOfTheCurve` - an `ArgumentException`, so a caller catching that keeps catching it,
+  while a caller telling the reconstruction's refusal from a fault of the decoder or allocator it supplied catches this type.
+  Awaiting the owner's word.
 - `WellKnownJwkValues` `key_ops` values (`KeyOpsSign`, `KeyOpsVerify`, `KeyOpsEncrypt`, `KeyOpsDecrypt`, `KeyOpsWrapKey`,
   `KeyOpsUnwrapKey`, `KeyOpsDeriveKey`, `KeyOpsDeriveBits`, each with its UTF-8 form and recognition) and
   `WellKnownJwkMemberNames.IsPub`.
@@ -112,7 +126,27 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `JwsPartDocumentRefusal`, `DpopProofPartRefused<TPart>`, `DpopProofMemberRefusal`, `DpopProofMember`,
   `KeyAttestationProofUse`, `ReplayRecordRetention` and its two cases, `OAuthRequiredMemberAbsent` and the SD-JWT
   verification's `SdJwtPresentationDefect` with its carriage onto the failed states, `JwkCertificateChain` and
-  `JwkCertificateChainDefect`, and the changed public signatures this release's nullable propagation brings (below).
+  `JwkCertificateChainDefect`, and the changed public signatures this release's nullable propagation brings (below). Added
+  to that list: `SdJwtPresentationDefect.CompactSerializationMalformed` and `ConfirmationKeyNotAPublicKey` (recommended with
+  the defect enum: approve, the typed carriage needing a structure case); `JwkCertificateChainDefect.KeyComparisonUnsupported`,
+  `DpopProofMemberDefect.KeyOperationsRelationToUseUnestablished` and `CertificateKeyRelationUnestablished` (the review
+  recommends the distinction from an established mismatch or inconsistency; names the owner's); `JwkPublicKeyException` and
+  `JwkPublicKeyFailureKind`; and the shape of `JwsPartRefusal`, `JwsPartDocumentRefusal` and `DpopProofMemberRefusal`, no
+  longer positional records - their facts are get-only properties set by one construction, `JwsPartRefusal.Part` abstract and
+  `DpopProofMemberRefusal.Part` derived from its member, so no initializer or `with` expression makes them disagree; their
+  generated `Deconstruct` methods and `init` accessors are gone (the review recommends immutable dependent facts; the change
+  is a public-shape change). The public optional-parameter signatures changed by the nullable propagation are kept as they are,
+  each for the owner's ruling, none required by a fix: `JarExtensions.SignJarAsync(..., IReadOnlyDictionary<string, object?>?
+  additionalHeaderClaims = null, CancellationToken cancellationToken = default)` (1 library caller, 16 test references) and
+  `BuildUnsignedJarCompact(..., IReadOnlyDictionary<string, object?>? additionalHeaderClaims = null)` (1 library caller, 1
+  test); `DidCommEncryptedExtensions.UnpackAnoncryptAsync` (both overloads) and `UnpackAuthcryptAsync` (both overloads),
+  `..., JwtClaimsDeserializer? fromPriorPayloadDeserializer = null, Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string,
+  object?>>? fromPriorHeaderDeserializer = null, DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
+  CancellationToken cancellationToken = default`; `DidCommSignedExtensions.UnpackSignedAsync(..., JwtClaimsDeserializer?
+  fromPriorPayloadDeserializer = null, Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object?>>?
+  fromPriorHeaderDeserializer = null, CancellationToken cancellationToken = default)` (3 library, 3 test references); and
+  `JwsSignatureComponent(string, IReadOnlyDictionary<string, object?>, Signature, IReadOnlyDictionary<string, object?>?
+  unprotectedHeader = null)` (7 library, 7 test references).
   Recommendations recorded with the review for the owner: approve `JwsPart`, `JwsPartRefusal` and `JwsPartDocumentRefusal` as
   the common JCose concept, subject to naming; keep `DpopProofMemberRefusal`, `DpopProofMember`, `DpopProofPartRefused<TPart>`
   and the derived `Place` in OAuth's DPoP area, the mapping exhaustive; the new member-defect values as extensions of the
@@ -212,7 +246,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `FormatException`. An omitted KB-JWT `iat` is carried as absent; the OID4VP verifier's key-binding checks refuse it, and the
   SIOPv2 section 12 combined response now judges the KB-JWT's `iat` by the same checks (`CheckKbJwtIatNotInFuture`,
   `CheckKbJwtIatNotTooOld`) among its binding, where it accepted a KB-JWT omitting it or stating any instant. The HAIP and SIOP
-  verifier executors answer the defect on their malformed route and carry it to the failed state. The KB-JWT's `nonce`, `aud`
+  verifier executors answer the defect on their malformed route and carry it to the failed state. The reading answers its own
+  refusals as defects at the input boundary - the wire format's parse refusing the compact serialization, a JWT of it that is
+  not three segments or whose payload segment the decoder refuses as no base64url text (`CompactSerializationMalformed`), a
+  `cnf.jwk` the key reconstruction refuses (`ConfirmationKeyNotAPublicKey`) - so neither executor catches `FormatException`
+  around the SD-JWT verification any more: a failure of the issuer-key resolver, the trust-evidence resolver, the digest, the
+  decoder beyond its refusal or the allocator surfaces as a fault, where a `FormatException` of any of them was answered as a
+  malformed presentation. The mdoc and SD-CWT verifications keep their `FormatException` refusal, caught around each alone.
+  The issuer-signed payload is read by the strict members reading, so one holding a string naming no Unicode text is
+  `IssuerPayloadNotOneObject` too, and its `status` claim, and within it the `status_list` mechanism and its `uri` and `idx`, are
+  found by their decoded names (RFC 8259 section 8.3): an escaped `status` is the status claim, refused or resolved by its
+  content, where it read as no status claim. `StatusClaimReader.TryRead` reads the claim's object value, braces included,
+  through the same reading. The SIOP rows proving the KB-JWT `iat` judgement are dispatcher-level signed-token tests
+  (`Server.DispatchAsync` through the test host), not HTTP transport tests, and their windows are the fixture's - the five-minute
+  defaults of `ValidationContext.ClockSkew` and `KbJwtMaxAge` and the FAPI profile's 60-second future skew - not boundary proofs
+  of every configurable policy. The KB-JWT's `nonce`, `aud`
   and `sd_hash`, and the Self-Issued ID Token's `iss`, `sub`, `aud`, `nonce` and `sub_jwk`, are still read by the older text
   scans beside the members reading the dates come from: those extractors are not part of the members-reading migration and
   remain library work.
@@ -223,18 +271,44 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   JWS and JAdES header and unprotected-header parameters and delegates, the DIDComm `from_prior` header deserializers, the
   security event token part deserializer and `SecurityEventTokenParsing.Parse`, `ClientAssertionClaimRules`'s and
   `ClientAssertionHeaderRules`' readings, `JarVerified.Claims`, `JarmResponseValidationResult.Parameters`,
-  `ValidationContext.TokenClaims` and `JwsCredentialVerificationResult.Header`. `DictionaryEquality` and
-  `JsonAppender.AppendObject` are generic over the value type. A reader of a value no longer receives a non-null claim it must
-  then cast without a check; a `null` member is a member with no value, and the readings that require a value refuse it as
-  they refuse any value of another kind.
+  `ValidationContext.TokenClaims` and `JwsCredentialVerificationResult.Header`. A reader of a value no longer receives a
+  non-null claim it must then cast without a check; a `null` member is a member with no value, and the readings that require a
+  value refuse it as they refuse any value of another kind. These nullable annotations leave the CLR signatures as they were,
+  so a compiled host binds unchanged, but they are source-breaking for a host building with warnings as errors: passing a
+  non-nullable dictionary or delegate into the revised contracts, or treating a returned value as non-null, needs a host edit.
+  Distinct from them, three public methods across two helpers change their CLR signature, and a host compiled against the
+  previous release must be rebuilt: `DictionaryEquality.DictionariesEqual<TValue>` and
+  `DictionaryEquality.GetDictionaryHashCode<TValue>`, and `JsonAppender.AppendObject<TValue>`, each now generic over the
+  dictionary's value type where it took a `Dictionary<string, object>` or `IReadOnlyDictionary<string, object>`.
 - `JwkJsonReader`'s JWK Set selections answer a set carrying no `keys` member, or one whose `keys` is no array, as
   `MalformedDocument` (RFC 7517 section 5: the member is REQUIRED and its value an array); an empty `keys` array stays a set
-  with no key the selection matches. `JsonTopLevelMember.ArrayElements` judges the whole array as Unicode text, a literal
+  with no key the selection matches. Every selection - by key identifier and as the sole key, filtered by `use` or not - finds
+  `keys` and `kid` by their decoded names (RFC 8259 section 8.3), refuses a set holding an element that is no object wherever
+  it stands as `MalformedDocument`, never selecting from the part of the array ahead of it, and hands the selected key's members
+  out by their decoded names: the unfiltered `SelectKeyByKeyId(ReadOnlySpan<byte>, string?)` and `SelectSoleKey(ReadOnlySpan<byte>)`
+  read an escaped `keys` or `kid` as the plain name, where they answered `MalformedDocument` or `NoMatch`, stop no longer at the
+  first non-object element, and key `Members` by decoded name, where they keyed it by the document's spelling. `JsonTopLevelMember.ArrayElements` judges the whole array as Unicode text, a literal
   unpaired surrogate in the text it is read from among what it refuses, before any element is read.
 - An embedded DPoP `jwk` is judged by RFC 7517 sections 4.3 and 4.7 as a whole once its members are read: `key_ops` naming no
   operation twice, `use` and `key_ops` consistent where both are carried, and `x5c` a chain of DER certificates whose first is
-  of the key. `DpopProofValidator` answers a key it cannot construct, the decoder's or the key material's refusal, as
-  `InvalidJwk`, and lets every other failure surface as the fault it is. `KeyAttestationParser.TryParse` and
+  of the key; a `use` or an operation outside the registered vocabulary, or a key the certificate judgement compares none of,
+  is refused as a relation not established, where it was refused as an inconsistency or a mismatch. Whether each `x5c` element
+  is base64 text is judged by `JwkCertificateChain.DefectOf` alone, which refuses whitespace and line breaks where the
+  whitespace-tolerant check and decoding accepted them. `DpopProofValidator` answers a key it cannot construct - the
+  decoder's refusal of a coordinate (`FormatException`) or the reconstruction's own typed refusal (`JwkPublicKeyException`,
+  `RsaPublicKeyException`) - as `InvalidJwk`; an `ArgumentException` of the decoder or the allocator the caller supplied, and
+  every other failure, surfaces as the fault it is, where an `ArgumentException` from either was answered as `InvalidJwk`.
+  `Jws.VerifyAsync` answers an empty protected header or signature segment, and the decoder's `FormatException` for either,
+  as not verifying; any other exception of the decoder surfaces, where every exception but cancellation was answered as not
+  verifying. `CryptoFormatConversions.DefaultJwkToAlgorithmConverter` refuses EC coordinates that are not each the full width
+  of the curve's coordinate or name no point of it before compressing them, where it compressed `x` with the parity of the `y`
+  it was given, and `EllipticCurveUtilities.CheckPointOnCurve` refuses coordinates of different widths. The library's
+  certificate parse (`ManagedCertificate`, read by the CMS, OCSP and `x5c` judgements) walks every field it reads whole: each
+  `AlgorithmIdentifier` an identifier and at most one parameters value, the outer `signatureAlgorithm` equal to the
+  `tbsCertificate.signature`, each `Name` an `RDNSequence` of non-empty `SET OF AttributeTypeAndValue`, and the
+  `SubjectPublicKeyInfo` exactly its two fields with its algorithm's parameters - a named curve for EC, `NULL` for RSA, absent
+  for Ed25519 and ML-DSA - and whole-octet keys. The SIOP verifier fails on a replay outcome the guard never gives, and the key
+  attestation verifier on a resolution status no failure maps from, where each was answered as a known outcome. `KeyAttestationParser.TryParse` and
   `KeyAttestationVerifier.VerifyAsync` answer only the decoder's refusal of a segment as no base64url text as a malformed
   attestation, where any exception of the header's reading was; a proof use of no defined value is refused as an
   `ArgumentOutOfRangeException`, never read as a use requiring no expiry. `JtiReplayGuard` refuses a retention of neither
@@ -290,6 +364,24 @@ A host taking this release changes, beyond renamed or widened calls the compiler
 - The inventory covers every library change since the host's own pin, not this release's last commit alone.
 - `DpopProofPartDocumentRefused<TPart>` and `DpopProofPartMemberRefused<TPart>`: a refused part is
   `DpopProofPartRefused<TPart>`, carrying the `JwsPartRefusal` a validation result carries whole.
+- A host deconstructing `JwsPartDocumentRefusal` or `DpopProofMemberRefusal` positionally, or creating one through an object
+  initializer or a `with` expression, reads and constructs them through their properties and constructors instead.
+- A host's base64url `DecodeDelegate` refuses text that is no base64url - a single character among it - with
+  `FormatException`, the one refusal the library answers as malformed input; any other exception it throws for such text is
+  now a fault surfacing from DPoP validation, JWS verification and the SD-JWT presentation reading, where several of those
+  answered it as malformed.
+- A host's catch of `ArgumentException` from `CryptoFormatConversions.DefaultJwkToAlgorithmConverter` keeps catching its
+  refusals, now `JwkPublicKeyException`; a host telling them from its own decoder's or allocator's faults catches the new type.
+  EC JWKs whose coordinates name no point of their curve are refused wherever the converter runs.
+- A host relying on the HAIP or SIOP verifier answering a `FormatException` of its issuer-key resolver, trust-evidence
+  resolver or digest as a malformed presentation now sees it surface as a fault, and maps the two new presentation defects.
+- The concrete consumption at the hosts' pins is recorded with the review: on the authorization server, the token-validation
+  parser delegates and their payload capture, the custom header reader and header-copy loop, the `PartRefusal` carriage and
+  `UnsupportedConfirmationMethod`, and the DPoP part parsers, catches and key-choice reading; on the gateway, the ID-token
+  validation's parser delegates and nullable values and the classification and retained evidence of the new part, parse and
+  member refusals - each with every retention delegate and state construction, serialization, TTL and cleanup behaviour,
+  attestation-use call, presentation-result consumer, extended-enum mapping and nullable contract, a gate the host's repin
+  closes and a successful compile does not.
 
 ### Fixed
 

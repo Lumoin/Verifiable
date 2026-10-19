@@ -1787,7 +1787,7 @@ public static class JAdESSignatureAugmentation
         //other projection is the encoder's own fault, not a property of the signature being augmented.
         var projected = encodeUnprotectedHeader(probeContainer);
         if(projected is null
-            || !projected.TryGetValue(WellKnownJAdESHeaderNames.EtsiU, out object? etsiUValue)
+            || !projected.TryGetValue(WellKnownJAdESHeaderNames.EtsiU, out var etsiUValue)
             || etsiUValue is not IReadOnlyList<object> etsiUArray
             || etsiUArray.Count != 1
             || etsiUArray[0] is not Dictionary<string, object> elementDict)

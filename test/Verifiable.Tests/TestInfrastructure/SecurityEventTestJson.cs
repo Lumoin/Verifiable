@@ -24,6 +24,9 @@ internal static class SecurityEventTestJson
             (Dictionary<string, object?>)payload, TestSetup.DefaultSerializationOptions);
 
 
+    /// <summary>Deserializes a security event token part's UTF-8 JSON bytes to its members.</summary>
+    /// <param name="json">The part's UTF-8 JSON bytes.</param>
+    /// <returns>The members, or <see langword="null"/> when the part is no JSON object.</returns>
     internal static Dictionary<string, object?>? DeserializePart(ReadOnlySpan<byte> json)
     {
         using JsonDocument document = JsonDocument.Parse(json.ToArray());
@@ -42,6 +45,9 @@ internal static class SecurityEventTestJson
     }
 
 
+    /// <summary>Converts a JSON object element to its members, each value converted to the CLR value the claims layer holds.</summary>
+    /// <param name="element">The JSON object element.</param>
+    /// <returns>The members.</returns>
     private static Dictionary<string, object?> ConvertObject(JsonElement element)
     {
         var dictionary = new Dictionary<string, object?>(StringComparer.Ordinal);

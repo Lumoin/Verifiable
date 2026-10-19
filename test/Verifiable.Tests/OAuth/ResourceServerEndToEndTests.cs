@@ -289,7 +289,7 @@ internal sealed class ResourceServerEndToEndTests
 
         string resourceUrl = new Uri(rs.HttpBaseAddress!, "/protected").ToString();
         string proof = await ResourceDpopProofs.BuildAsync(
-            dpopKey, "GET", resourceUrl, token, nonce: null, NowInstant, TestContext.CancellationToken).ConfigureAwait(false);
+            dpopKey, "GET", resourceUrl, token, nonce: null, NowInstant, jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
         using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
@@ -354,7 +354,7 @@ internal sealed class ResourceServerEndToEndTests
 
         string resourceUrl = new Uri(rs.HttpBaseAddress!, "/protected").ToString();
         string proof = await ResourceDpopProofs.BuildAsync(
-            dpopKey, "GET", resourceUrl, token, nonce: null, NowInstant, TestContext.CancellationToken).ConfigureAwait(false);
+            dpopKey, "GET", resourceUrl, token, nonce: null, NowInstant, jti: null, alterHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
 

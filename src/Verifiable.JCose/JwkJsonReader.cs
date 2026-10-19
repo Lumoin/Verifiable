@@ -3124,7 +3124,13 @@ public static class JwkJsonReader
     /// never a match (<see cref="JwkSelectionOutcome.KeyIdRequired"/>); a caller with no key
     /// identifier to present calls <see cref="SelectSoleKey(ReadOnlySpan{byte})"/> instead. The set is
     /// admitted first by the one strict judgement of a protocol document (<see cref="AdmissionRefusalOf"/>),
-    /// before any scan and before the identifier is required.
+    /// before any scan and before the identifier is required. The <c>keys</c> and <c>kid</c> names and the
+    /// <c>kid</c> value are read by their decoded spelling (RFC 8259 section 8.3: an escaped name is the
+    /// name it decodes to), a non-object element anywhere in <c>keys</c> answers
+    /// <see cref="JwkSelectionOutcome.MalformedDocument"/> (RFC 7517 section 5.1: <c>keys</c> is an array of
+    /// JWK values, and a JWK is an object), and a <see cref="JwkSelectionOutcome.Selected"/> result's
+    /// <see cref="JwkSelectionResult.Members"/> is keyed by each member's decoded name, exactly as
+    /// <see cref="SelectKeyByKeyId(ReadOnlySpan{byte}, string?, ReadOnlySpan{byte})"/> reads them.
     /// </summary>
     /// <param name="jwksJson">The JWK Set document as UTF-8 JSON bytes.</param>
     /// <param name="keyId">The requested <c>kid</c>, or <see langword="null"/>/empty when none was presented.</param>
@@ -3178,9 +3184,8 @@ public static class JwkJsonReader
     /// A refusal result's <see cref="JwkSelectionResult.Members"/> is always <see langword="null"/>. A
     /// <see cref="JwkSelectionOutcome.Selected"/> result's <see cref="JwkSelectionResult.Members"/> is
     /// keyed by each member's DECODED name, so a key matched through an escaped <c>kid</c> or
-    /// <c>kty</c> spelling hands its consumer the plain <c>kid</c>/<c>kty</c> key — unlike
-    /// <see cref="SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/>, whose <c>Members</c> is keyed by
-    /// each member's document spelling exactly as written, decoded or not.
+    /// <c>kty</c> spelling hands its consumer the plain <c>kid</c>/<c>kty</c> key, as every selection
+    /// of a JWK Set does.
     /// </summary>
     /// <param name="jwksJson">The JWK Set document as UTF-8 JSON bytes.</param>
     /// <param name="keyId">The requested <c>kid</c>, or <see langword="null"/>/empty when none was presented.</param>
@@ -3217,7 +3222,9 @@ public static class JwkJsonReader
     /// <c>kid</c> needs — <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517
     /// §4.5</see> makes <c>kid</c> optional — without ever falling back to "the first key" when the
     /// set in fact carries more than one. The set is admitted first by the one strict judgement of a
-    /// protocol document (<see cref="AdmissionRefusalOf"/>), before any scan.
+    /// protocol document (<see cref="AdmissionRefusalOf"/>), before any scan. The decoded-name reading, the
+    /// non-object-element refusal and the decoded <c>Members</c> are those of
+    /// <see cref="SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/>.
     /// </summary>
     /// <param name="jwksJson">The JWK Set document as UTF-8 JSON bytes.</param>
     /// <returns>
@@ -3316,11 +3323,14 @@ public static class JwkJsonReader
 
 
     /// <summary>
-    /// Walks every element of a JWK Set's <c>keys</c> array, counting the elements that satisfy the
-    /// query: with <paramref name="keyId"/> supplied, an element whose <c>kid</c> ordinal-equals it;
-    /// with <paramref name="keyId"/> <see langword="null"/>, every element (the
-    /// <see cref="SelectSoleKey(ReadOnlySpan{byte})"/> query). The whole array is scanned even after a
-    /// first match, so a second one is never missed — the shared core behind both
+    /// Walks every element of a JWK Set's <c>keys</c> array to its end, counting the elements that satisfy the
+    /// query: with <paramref name="keyId"/> supplied, an element whose <c>kid</c>, read by its decoded name and
+    /// value, ordinal-equals it; with <paramref name="keyId"/> <see langword="null"/>, every element (the
+    /// <see cref="SelectSoleKey(ReadOnlySpan{byte})"/> query). The <c>keys</c> array is located by its decoded
+    /// name, as <see cref="ScanKeysArrayFiltered"/> locates it; a non-object element, or one whose braces never
+    /// balance, answers <see cref="JwkSelectionOutcome.MalformedDocument"/> wherever it stands, so no prefix of
+    /// the array is ever selected from; only the first match's span is remembered, and its members are read
+    /// once, by their decoded names, after the walk settles on one match — the shared core behind both
     /// <see cref="SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/> and
     /// <see cref="SelectSoleKey(ReadOnlySpan{byte})"/>.
     /// </summary>
@@ -3330,14 +3340,15 @@ public static class JwkJsonReader
     {
         //RFC 7517 section 5: the keys member is REQUIRED and its value an array of JWK values, so a set without it, or with
         //another value under it, is no JWK Set: refused as malformed, never read as a set carrying no key. An empty array is a
-        //JWK Set carrying none, an ordinary miss.
-        int cursor = FindKeysArrayContentStart(json);
+        //JWK Set carrying none, an ordinary miss. RFC 8259 section 8.3: the member is found by the name its spelling decodes to.
+        var cursor = FindKeysArrayContentStartDecoded(json);
         if(cursor < 0)
         {
             return JwkSelectionResult.MalformedDocument();
         }
 
-        Dictionary<string, string>? selected = null;
+        int selectedStart = -1;
+        int selectedEnd = -1;
         int matchCount = 0;
 
         while(cursor < json.Length)
@@ -3352,46 +3363,46 @@ public static class JwkJsonReader
                 break;
             }
 
+            //RFC 7517 section 5.1: a JWK is an object, so an element of another kind makes the set no JWK Set, wherever it stands.
             if(json[cursor] != (byte)'{')
             {
-                break;
+                return JwkSelectionResult.MalformedDocument();
             }
 
             int objectStart = cursor;
             int objectEnd = FindJwkObjectEnd(json, objectStart);
             if(objectEnd < 0)
             {
-                break;
+                return JwkSelectionResult.MalformedDocument();
             }
 
-            ReadOnlySpan<byte> candidate = json[objectStart..objectEnd];
-            bool isMatch = keyId is null
-                || string.Equals(ExtractStringValue(candidate, WellKnownJwkMemberNames.KidUtf8), keyId, StringComparison.Ordinal);
-
-            if(isMatch)
+            if(keyId is null || KeyIdMatches(json[objectStart..objectEnd], keyId))
             {
                 matchCount++;
-                if(matchCount > 1)
+                if(matchCount == 1)
                 {
-                    return JwkSelectionResult.MultipleKeysMatched();
+                    selectedStart = objectStart;
+                    selectedEnd = objectEnd;
                 }
-
-                selected = ExtractJwkStringMembers(candidate);
             }
 
             cursor = objectEnd;
         }
 
-        return matchCount == 1 && selected is not null
-            ? JwkSelectionResult.Selected(selected)
-            : JwkSelectionResult.NoMatch();
+        return matchCount switch
+        {
+            0 => JwkSelectionResult.NoMatch(),
+            1 => ExtractJwkStringMembersDecoded(json[selectedStart..selectedEnd]) is { } members
+                ? JwkSelectionResult.Selected(members)
+                : JwkSelectionResult.MalformedDocument(),
+            _ => JwkSelectionResult.MultipleKeysMatched()
+        };
     }
 
 
     /// <summary>
     /// Walks every element of a JWK Set's <c>keys</c> array to its END, whatever it finds along the
-    /// way — unlike <see cref="ScanKeysArray"/>, which stops at the first non-object element or the
-    /// second <c>kid</c> match. Decides, per element: whether it carries private or symmetric key
+    /// way, as <see cref="ScanKeysArray"/> does. Decides, per element: whether it carries private or symmetric key
     /// material (set-wide, ruling regardless of eligibility); with <paramref name="keyId"/> supplied,
     /// whether its <c>kid</c> matches, whatever its <c>use</c>; whether it is eligible for
     /// <paramref name="publicKeyUse"/>. A non-object element, or one whose braces never balance,
@@ -3635,8 +3646,8 @@ public static class JwkJsonReader
 
     /// <summary>
     /// Locates the content start of a JWK Set's <c>keys</c> array by the member's DECODED name, so an
-    /// escaped spelling of <c>keys</c> is read exactly as the plain spelling — the filtered
-    /// counterpart of <see cref="FindKeysArrayContentStart"/>.
+    /// escaped spelling of <c>keys</c> is read exactly as the plain spelling (RFC 8259 section 8.3), for
+    /// every selection of a JWK Set.
     /// </summary>
     /// <param name="json">The JWK Set document, already confirmed well formed.</param>
     private static int FindKeysArrayContentStartDecoded(ReadOnlySpan<byte> json)
@@ -3736,30 +3747,6 @@ public static class JwkJsonReader
 
 
     /// <summary>
-    /// Locates the content start of a JWK Set's <c>keys</c> array — the byte immediately after its
-    /// opening <c>[</c> — or -1 when the <c>keys</c> member is absent or is not an array.
-    /// </summary>
-    /// <param name="json">The JWK Set document, already confirmed well formed.</param>
-    private static int FindKeysArrayContentStart(ReadOnlySpan<byte> json)
-    {
-        int keysStart = IndexOfKey(json, WellKnownJwkMemberNames.KeysUtf8);
-        if(keysStart < 0)
-        {
-            return -1;
-        }
-
-        int afterKeysKey = keysStart + WellKnownJwkMemberNames.KeysUtf8.Length + 1;
-        afterKeysKey = SkipWhitespaceAndColon(json, afterKeysKey);
-        if(afterKeysKey < 0 || afterKeysKey >= json.Length || json[afterKeysKey] != (byte)'[')
-        {
-            return -1;
-        }
-
-        return afterKeysKey + 1;
-    }
-
-
-    /// <summary>
     /// Returns the index one past the <c>}</c> that closes the object opening at
     /// <paramref name="objectStart"/>, or -1 when the braces never balance. String content is skipped
     /// so a brace inside a quoted value never biases the depth counter.
@@ -3809,35 +3796,12 @@ public static class JwkJsonReader
         value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n' or (byte)',';
 
 
-    /// <summary>Extracts every top-level string-valued member of one JWK object.</summary>
-    /// <param name="jwkObject">The UTF-8 bytes of one JWK object, braces included.</param>
-    private static Dictionary<string, string> ExtractJwkStringMembers(ReadOnlySpan<byte> jwkObject)
-    {
-        List<string> names = GetTopLevelKeyNames(jwkObject);
-        Dictionary<string, string> members = new(names.Count, StringComparer.Ordinal);
-        foreach(string name in names)
-        {
-            string? value = ExtractStringValue(jwkObject, Encoding.UTF8.GetBytes(name));
-            if(value is not null)
-            {
-                members[name] = value;
-            }
-        }
-
-        return members;
-    }
-
-
     /// <summary>
     /// Extracts every top-level string-valued member of one JWK object with its member NAME decoded,
-    /// for a <see cref="JwkSelectionOutcome.Selected"/> result from the filtered overloads
-    /// (<see cref="SelectKeyByKeyId(ReadOnlySpan{byte}, string?, ReadOnlySpan{byte})"/> and
-    /// <see cref="SelectSoleKey(ReadOnlySpan{byte}, ReadOnlySpan{byte})"/>): a key matched through an
-    /// escaped <c>kid</c> or <c>kty</c> spelling hands its consumer the plain <c>kid</c>/<c>kty</c>
-    /// key, not the escaped one. Unlike <see cref="ExtractJwkStringMembers"/> — the unfiltered
-    /// selectors' unchanged extraction, which keys its dictionary by the member's undecoded document
-    /// spelling — this walks the object once, decoding each top-level name as it goes rather than
-    /// re-searching the object by a re-encoded name.
+    /// for a <see cref="JwkSelectionOutcome.Selected"/> result from every JWK Set selection: a key
+    /// matched through an escaped <c>kid</c> or <c>kty</c> spelling hands its consumer the plain
+    /// <c>kid</c>/<c>kty</c> key, not the escaped one. It walks the object once, decoding each
+    /// top-level name as it goes rather than re-searching the object by a re-encoded name.
     /// </summary>
     /// <param name="jwkObject">The UTF-8 bytes of one JWK object, braces included.</param>
     /// <returns>The members, or <see langword="null"/> when a top-level member name decodes to no text.</returns>

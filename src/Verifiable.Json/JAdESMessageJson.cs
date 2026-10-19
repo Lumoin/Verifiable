@@ -179,10 +179,13 @@ public static class JAdESMessageJson
     }
 
 
-    //Never consulted: JAdES validation reads the protected header's own JAdES-typed decode
-    //(JAdESProtectedHeaderJson.Decode) over the raw bytes UnverifiedJwsSignature.Protected carries, not this
-    //generic dictionary -- an empty result keeps JwsParsing.ParseCompact's own contract satisfied without
-    //re-introducing the DateTime-sniff hazard this file's remarks describe.
+    /// <summary>
+    /// A header deserializer never consulted: JAdES validation reads the protected header's own JAdES-typed decode over the raw
+    /// bytes the signature carries, not this generic dictionary, and an empty result keeps the compact parse's contract satisfied
+    /// without re-introducing the date-sniffing hazard this file's remarks describe.
+    /// </summary>
+    /// <param name="headerJson">The header's UTF-8 JSON bytes, unread.</param>
+    /// <returns>An empty member set.</returns>
     private static IReadOnlyDictionary<string, object?> InertHeaderDeserializer(ReadOnlySpan<byte> headerJson) =>
         new Dictionary<string, object?>();
 

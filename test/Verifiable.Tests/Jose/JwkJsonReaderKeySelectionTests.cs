@@ -261,6 +261,9 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
     private static string DocEscapedKidMemberName => "{\"keys\":[{\"kty\":\"EC\",\"\\u006bid\":\"k\",\"use\":\"sig\"}]}";
 
+    /// <summary>A set of one key whose <c>kty</c> name is written with a four-digit escape for its first letter.</summary>
+    private static string DocEscapedKtyMemberName => /*lang=json,strict*/ """{"keys":[{"\u006bty":"EC","kid":"k","use":"sig"}]}""";
+
     private static string DocPrivateD => """{"keys":[{"kty":"EC","kid":"k","use":"sig","d":"secret"}]}""";
 
     private static string DocNonObjectBeforeMatch => """{"keys":[null,{"kty":"EC","kid":"k","use":"sig"}]}""";
@@ -327,32 +330,68 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
 
     /// <summary>
-    /// <see cref="JwkJsonReader.SelectSoleKey(ReadOnlySpan{byte})"/>'s lookup of the <c>keys</c>
-    /// member compares raw bytes, so an escaped spelling of <c>keys</c> is not found and the set reads
-    /// as if it carried no <c>keys</c> array: a JWK Set without one (RFC 7517 section 5), refused as a
-    /// malformed document rather than read as a set whose keys miss the selection.
+    /// RFC 8259 section 8.3: a member name written with an escape is the name it decodes to, so a JWK Set whose <c>keys</c>, a
+    /// key's <c>kid</c> or a key's <c>kty</c> is so written is the set its plain spelling writes. Every selection reads it so -
+    /// by its identifier and as the sole key, filtered by <c>use</c> or not - selects its one key, and hands the key's members
+    /// out by their decoded names.
     /// </summary>
+    /// <param name="document">The name of the set the row reads.</param>
     [TestMethod]
-    public void PinSelectSoleKeyReportsAMalformedSetWhenTheKeysMemberNameIsEscaped()
+    [DataRow("escaped-keys", DisplayName = "An escaped keys name")]
+    [DataRow("escaped-kid", DisplayName = "An escaped kid name")]
+    [DataRow("escaped-kty", DisplayName = "An escaped kty name")]
+    public void EverySelectionReadsAnEscapedNameAsTheNameItDecodesTo(string document)
     {
-        var result = JwkJsonReader.SelectSoleKey(Utf8(DocEscapedKeysMemberName));
+        var json = Utf8(document switch
+        {
+            "escaped-keys" => DocEscapedKeysMemberName,
+            "escaped-kid" => DocEscapedKidMemberName,
+            "escaped-kty" => DocEscapedKtyMemberName,
+            _ => throw new ArgumentOutOfRangeException(nameof(document), document, "No set is named so.")
+        });
 
-        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, result.Outcome);
+        foreach(var selection in EverySelection(json, "k"))
+        {
+            Assert.AreEqual(JwkSelectionOutcome.Selected, selection.Outcome, document);
+            Assert.AreEqual("k", selection.Members?["kid"], document);
+            Assert.AreEqual("EC", selection.Members?["kty"], document);
+        }
     }
 
 
     /// <summary>
-    /// An escaped <c>kid</c> member name is not found by
-    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/>'s raw-byte key
-    /// lookup, so a request for that key's plain-spelled identifier reports no match.
+    /// RFC 7517 section 5.1: the value of <c>keys</c> is an array of JWK values, and a JWK is an object, so a set holding an
+    /// element of another kind is no JWK Set wherever the element stands: before the match, between the match and another key,
+    /// or after the only key. Every selection refuses it as malformed, never selecting from the part of the array ahead of the
+    /// element, and hands no key out.
     /// </summary>
+    /// <param name="document">The set's JSON text.</param>
     [TestMethod]
-    public void PinSelectKeyByKeyIdReportsNoMatchWhenTheKidMemberNameIsEscaped()
+    [DataRow(/*lang=json,strict*/ """{"keys":[null,{"kty":"EC","kid":"k","use":"sig"}]}""", DisplayName = "A null before the match")]
+    [DataRow(/*lang=json,strict*/ """{"keys":[{"kty":"EC","kid":"k","use":"sig"},0,{"kty":"EC","kid":"other","use":"sig"}]}""", DisplayName = "A number between the match and another key")]
+    [DataRow(/*lang=json,strict*/ """{"keys":[{"kty":"EC","kid":"k","use":"sig"},"not-a-key"]}""", DisplayName = "A string after the only key")]
+    [DataRow(/*lang=json,strict*/ """{"keys":[{"kty":"EC","kid":"k","use":"sig"},["nested"]]}""", DisplayName = "An array after the only key")]
+    public void EverySelectionRefusesASetHoldingAnElementThatIsNoObject(string document)
     {
-        JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(Utf8(DocEscapedKidMemberName), "k");
-
-        Assert.AreEqual(JwkSelectionOutcome.NoMatch, result.Outcome);
+        foreach(var selection in EverySelection(Utf8(document), "k"))
+        {
+            Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, selection.Outcome, document);
+            Assert.IsNull(selection.Members, document);
+        }
     }
+
+
+    /// <summary>The four selections of a JWK Set, by the identifier given and as the sole key, unfiltered and filtered by <c>sig</c>.</summary>
+    /// <param name="json">The set.</param>
+    /// <param name="keyId">The identifier the by-identifier selections ask for.</param>
+    /// <returns>The four results.</returns>
+    private static JwkSelectionResult[] EverySelection(byte[] json, string keyId) =>
+    [
+        JwkJsonReader.SelectKeyByKeyId(json, keyId),
+        JwkJsonReader.SelectKeyByKeyId(json, keyId, WellKnownJwkValues.UseSigUtf8),
+        JwkJsonReader.SelectSoleKey(json),
+        JwkJsonReader.SelectSoleKey(json, WellKnownJwkValues.UseSigUtf8)
+    ];
 
 
     /// <summary>
@@ -366,20 +405,6 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
         Assert.AreEqual(JwkSelectionOutcome.Selected, result.Outcome);
         Assert.AreEqual("secret", result.Members?["d"]);
-    }
-
-
-    /// <summary>
-    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/>'s element walk stops
-    /// at the first non-object element rather than refusing the document, so a match after a leading
-    /// <see langword="null"/> element is missed.
-    /// </summary>
-    [TestMethod]
-    public void PinSelectKeyByKeyIdReportsNoMatchWhenANonObjectElementPrecedesTheMatch()
-    {
-        JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(Utf8(DocNonObjectBeforeMatch), "k");
-
-        Assert.AreEqual(JwkSelectionOutcome.NoMatch, result.Outcome);
     }
 
 
@@ -642,9 +667,8 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
 
     /// <summary>
-    /// The filtered walk locates the <c>keys</c> array by its DECODED name too, so an escaped
-    /// spelling of <c>keys</c> is read exactly as the plain spelling — unlike the unfiltered
-    /// selector, pinned above, which misses it.
+    /// The filtered walk locates the <c>keys</c> array by its DECODED name, as every selection does,
+    /// so an escaped spelling of <c>keys</c> is read exactly as the plain spelling.
     /// </summary>
     [TestMethod]
     public void SelectSoleKeyWithUseFilterSelectsWhenTheKeysMemberNameIsEscaped()

@@ -155,11 +155,14 @@ internal static class FederationHttpClientTransport
     }
 
 
+    /// <summary>Decodes a JSON object's UTF-8 bytes to its members.</summary>
+    /// <param name="bytes">The UTF-8 JSON bytes.</param>
+    /// <returns>The members.</returns>
     private static Dictionary<string, object?> DecodeJsonObject(ReadOnlySpan<byte> bytes)
     {
         string json = Encoding.UTF8.GetString(bytes);
         using JsonDocument document = JsonDocument.Parse(json);
-        Dictionary<string, object?> result = new(StringComparer.Ordinal);
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach(JsonProperty property in document.RootElement.EnumerateObject())
         {
             object? value = ConvertJsonElement(property.Value);
@@ -202,9 +205,12 @@ internal static class FederationHttpClientTransport
     }
 
 
+    /// <summary>Converts a JSON object element to its members, each value converted to the CLR value the claims layer holds.</summary>
+    /// <param name="element">The JSON object element.</param>
+    /// <returns>The members.</returns>
     private static Dictionary<string, object?> ConvertObject(JsonElement element)
     {
-        Dictionary<string, object?> dict = new(StringComparer.Ordinal);
+        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach(JsonProperty property in element.EnumerateObject())
         {
             object? value = ConvertJsonElement(property.Value);

@@ -137,8 +137,10 @@ public static class DidCommSignedMessageJson
     }
 
 
-    //Adapts the leaf's dictionary deserialization to the JCose JwsParsing header-deserializer Func
-    //(a contained boundary adaptation, as in the OAuth JarVerification pattern).
+    /// <summary>Deserializes a DIDComm signed message's JWS header to its members for the JCose header-deserializer seam, refusing a JSON <c>null</c> header as no header.</summary>
+    /// <param name="headerJson">The header's UTF-8 JSON bytes.</param>
+    /// <returns>The members.</returns>
+    /// <exception cref="FormatException">The header is JSON <c>null</c>.</exception>
     private static IReadOnlyDictionary<string, object?> HeaderDeserializer(ReadOnlySpan<byte> headerJson) =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerJson, Options)
             ?? throw new FormatException("A JWS header MUST NOT be JSON null.");

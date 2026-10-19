@@ -590,8 +590,13 @@ namespace Verifiable.JCose
 
 
         /// <summary>
-        /// Default converter from JWK to algorithm representation.
+        /// Default converter from JWK to algorithm representation. Its own refusal of a JWK - a member its type requires absent,
+        /// a type, curve, algorithm or size it reconstructs no key of, EC coordinates that are not each the full width of the
+        /// curve's coordinate or name no point of it (RFC 7518 sections 6.2.1.2 and 6.2.1.3), judged before the point is
+        /// compressed - is a <see cref="JwkPublicKeyException"/>; the decoder's refusal of a member as no base64url text is its
+        /// own exception; any other failure of the decoder or of the allocator is theirs and surfaces as it is.
         /// </summary>
+        /// <exception cref="JwkPublicKeyException">The JWK states no public key the converter reconstructs.</exception>
         /// <exception cref="RsaPublicKeyException">The RSA public exponent is missing or invalid.</exception>
         /// <remarks>
         /// Resolves <see cref="Purpose"/> from the optional JWK <c>use</c> field
@@ -606,7 +611,7 @@ namespace Verifiable.JCose
 
             if(!jwk.TryGetValue(WellKnownJwkMemberNames.Kty, out object? kty) || kty is not string keyType)
             {
-                throw new ArgumentException($"JWK must contain a valid '{WellKnownJwkMemberNames.Kty}' field.", nameof(jwk));
+                throw new JwkPublicKeyException(JwkPublicKeyFailureKind.MemberAbsent, $"JWK must contain a valid '{WellKnownJwkMemberNames.Kty}' field.");
             }
 
             ValidateRequiredFields(jwk, keyType);
@@ -630,7 +635,7 @@ namespace Verifiable.JCose
                 explicitPurpose = WellKnownJwkValues.Equals(use, WellKnownJwkValues.UseEnc) ? Purpose.Exchange : Purpose.Verification;
             }
 
-            byte[] keyMaterial = DecodeKeyMaterial(jwk, keyType, base64UrlDecoder, memoryPool);
+            var keyMaterial = DecodeKeyMaterial(jwk, keyType, crv, algorithm, base64UrlDecoder, memoryPool);
             int keySize = WellKnownKeyTypeValues.IsRsa(keyType)
                 ? RsaPublicKeyEncoding.Decode(keyMaterial).Modulus.Length
                 : keyMaterial.Length;
@@ -659,7 +664,7 @@ namespace Verifiable.JCose
                     var kt when WellKnownKeyTypeValues.IsOkp(kt) => ValidateOkp(jwk),
                     var kt when WellKnownKeyTypeValues.IsRsa(kt) => ValidateRsa(jwk),
                     var kt when WellKnownKeyTypeValues.IsAkp(kt) => ValidateAkp(jwk),
-                    _ => throw new ArgumentException($"Unsupported key type: '{keyType}'.")
+                    _ => throw new JwkPublicKeyException(JwkPublicKeyFailureKind.UnsupportedKeyType, $"Unsupported key type: '{keyType}'.")
                 };
 
 
@@ -667,12 +672,12 @@ namespace Verifiable.JCose
                 {
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.X, out object? ecX) || ecX is not string)
                     {
-                        throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.", nameof(jwk));
+                        throw new JwkPublicKeyException(JwkPublicKeyFailureKind.MemberAbsent, $"EC JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.");
                     }
 
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.Y, out object? ecY) || ecY is not string)
                     {
-                        throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkMemberNames.Y}' field.", nameof(jwk));
+                        throw new JwkPublicKeyException(JwkPublicKeyFailureKind.MemberAbsent, $"EC JWK must contain a valid '{WellKnownJwkMemberNames.Y}' field.");
                     }
 
                     return true;
@@ -683,7 +688,7 @@ namespace Verifiable.JCose
                 {
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.X, out object? okpX) || okpX is not string)
                     {
-                        throw new ArgumentException($"OKP JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.", nameof(jwk));
+                        throw new JwkPublicKeyException(JwkPublicKeyFailureKind.MemberAbsent, $"OKP JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.");
                     }
 
                     return true;
@@ -694,7 +699,7 @@ namespace Verifiable.JCose
                 {
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.N, out object? rsaN) || rsaN is not string)
                     {
-                        throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.N}' field.", nameof(jwk));
+                        throw new JwkPublicKeyException(JwkPublicKeyFailureKind.MemberAbsent, $"RSA JWK must contain a valid '{WellKnownJwkMemberNames.N}' field.");
                     }
 
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.E, out object? rsaE) || rsaE is not string { Length: > 0 })
@@ -711,7 +716,7 @@ namespace Verifiable.JCose
                 {
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.Pub, out object? akpPub) || akpPub is not string)
                     {
-                        throw new ArgumentException($"AKP JWK must contain a valid '{WellKnownJwkMemberNames.Pub}' field.", nameof(jwk));
+                        throw new JwkPublicKeyException(JwkPublicKeyFailureKind.MemberAbsent, $"AKP JWK must contain a valid '{WellKnownJwkMemberNames.Pub}' field.");
                     }
 
                     return true;
@@ -722,21 +727,35 @@ namespace Verifiable.JCose
             static byte[] DecodeKeyMaterial(
                 Dictionary<string, object> jwk,
                 string keyType,
+                string crv,
+                string algorithm,
                 DecodeDelegate decoder,
                 BaseMemoryPool pool) => keyType switch
                 {
-                    var kt when WellKnownKeyTypeValues.IsEc(kt) => DecodeEcKey(jwk, decoder, pool),
+                    var kt when WellKnownKeyTypeValues.IsEc(kt) => DecodeEcKey(jwk, crv, algorithm, keyType, decoder, pool),
                     var kt when WellKnownKeyTypeValues.IsOkp(kt) => DecodeOkpKey(jwk, decoder, pool),
                     var kt when WellKnownKeyTypeValues.IsRsa(kt) => DecodeRsaKey(jwk, decoder, pool),
                     var kt when WellKnownKeyTypeValues.IsAkp(kt) => DecodeAkpKey(jwk, decoder, pool),
-                    _ => throw new ArgumentException($"Unsupported key type: '{keyType}'.")
+                    _ => throw new JwkPublicKeyException(JwkPublicKeyFailureKind.UnsupportedKeyType, $"Unsupported key type: '{keyType}'.")
                 };
 
 
-            static byte[] DecodeEcKey(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool)
+            //RFC 7518 sections 6.2.1.2 and 6.2.1.3: x and y are each the full width of the curve's coordinate, and the point they
+            //name lies on the curve (NIST SP 800-186 appendix D.1.1.1), judged on the coordinates as supplied before the point is
+            //compressed: compression keeps x and the parity of y alone, which would turn coordinates naming no point into a point.
+            static byte[] DecodeEcKey(Dictionary<string, object> jwk, string crv, string algorithm, string keyType, DecodeDelegate decoder, BaseMemoryPool pool)
             {
+                (CryptoAlgorithm curveAlgorithm, _) = MapEc(crv, algorithm, Purpose.Verification, keyType);
+
                 using IMemoryOwner<byte> xBytes = decoder((string)jwk[WellKnownJwkMemberNames.X], pool);
                 using IMemoryOwner<byte> yBytes = decoder((string)jwk[WellKnownJwkMemberNames.Y], pool);
+
+                if(!EllipticCurveUtilities.CheckPointOnCurve(xBytes.Memory.Span, yBytes.Memory.Span, EllipticCurveUtilities.CurveTypeFor(curveAlgorithm)))
+                {
+                    throw new JwkPublicKeyException(
+                        JwkPublicKeyFailureKind.NotAPointOfTheCurve,
+                        $"The EC JWK's coordinates are not of the width of curve '{crv}' or name no point of it.");
+                }
 
                 //Compressed format is the canonical internal form for all EC public keys.
                 //Backend functions accept both compressed and uncompressed SEC1 encoding.
@@ -782,36 +801,7 @@ namespace Verifiable.JCose
                     var kt when WellKnownKeyTypeValues.IsOkp(kt) => MapOkp(crv, algorithm, keyType),
                     var kt when WellKnownKeyTypeValues.IsRsa(kt) => MapRsa(keyMaterialLength),
                     var kt when WellKnownKeyTypeValues.IsAkp(kt) => MapAkp(algorithm, keyType),
-                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
-                };
-
-
-                static (CryptoAlgorithm, Purpose) MapEc(string crv, string algorithm, Purpose explicitPurpose, string keyType) => crv switch
-                {
-                    //Prefer crv for EC key identification per RFC 7518 §6.2.1.1; fall back to alg.
-                    var c when WellKnownCurveValues.IsP256(c) => (CryptoAlgorithm.P256, explicitPurpose),
-                    var c when WellKnownCurveValues.IsP384(c) => (CryptoAlgorithm.P384, explicitPurpose),
-                    var c when WellKnownCurveValues.IsP521(c) => (CryptoAlgorithm.P521, explicitPurpose),
-                    var c when WellKnownCurveValues.IsSecp256k1(c) || WellKnownJwaValues.IsEs256K(algorithm) => (CryptoAlgorithm.Secp256k1, Purpose.Verification),
-
-                    //Brainpool curves per RFC 5639. ESB JWA fallback mirrors the ES* path
-                    //above — alg alone identifies the curve when crv is absent.
-                    var c when WellKnownCurveValues.IsBrainpoolP224r1(c) => (CryptoAlgorithm.BrainpoolP224r1, explicitPurpose),
-                    var c when WellKnownCurveValues.IsBrainpoolP256r1(c) => (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose),
-                    var c when WellKnownCurveValues.IsBrainpoolP320r1(c) => (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose),
-                    var c when WellKnownCurveValues.IsBrainpoolP384r1(c) => (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose),
-                    var c when WellKnownCurveValues.IsBrainpoolP512r1(c) => (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose),
-
-                    //Fall back to alg when crv is absent.
-                    _ when WellKnownJwaValues.IsEs256(algorithm) => (CryptoAlgorithm.P256, explicitPurpose),
-                    _ when WellKnownJwaValues.IsEs384(algorithm) => (CryptoAlgorithm.P384, explicitPurpose),
-                    _ when WellKnownJwaValues.IsEs512(algorithm) => (CryptoAlgorithm.P521, explicitPurpose),
-                    _ when WellKnownJwaValues.IsEsb256(algorithm) => (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose),
-                    _ when WellKnownJwaValues.IsEsb320(algorithm) => (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose),
-                    _ when WellKnownJwaValues.IsEsb384(algorithm) => (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose),
-                    _ when WellKnownJwaValues.IsEsb512(algorithm) => (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose),
-
-                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
+                    _ => throw new JwkPublicKeyException(JwkPublicKeyFailureKind.UnsupportedCurveOrAlgorithm, $"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
                 };
 
 
@@ -819,7 +809,7 @@ namespace Verifiable.JCose
                 {
                     var c when WellKnownCurveValues.IsEd25519(c) || WellKnownJwaValues.IsEdDsa(algorithm) => (CryptoAlgorithm.Ed25519, Purpose.Verification),
                     var c when WellKnownCurveValues.IsX25519(c) || WellKnownJwaValues.IsEcdha(algorithm) => (CryptoAlgorithm.X25519, Purpose.Exchange),
-                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
+                    _ => throw new JwkPublicKeyException(JwkPublicKeyFailureKind.UnsupportedCurveOrAlgorithm, $"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
                 };
 
 
@@ -827,7 +817,7 @@ namespace Verifiable.JCose
                 {
                     256 => (CryptoAlgorithm.Rsa2048, Purpose.Verification),
                     512 => (CryptoAlgorithm.Rsa4096, Purpose.Verification),
-                    _ => throw new ArgumentException($"Unsupported RSA key size: '{keyMaterialLength}' bytes.")
+                    _ => throw new JwkPublicKeyException(JwkPublicKeyFailureKind.UnsupportedCurveOrAlgorithm, $"Unsupported RSA key size: '{keyMaterialLength}' bytes.")
                 };
 
 
@@ -838,9 +828,38 @@ namespace Verifiable.JCose
                     var a when WellKnownJwaValues.IsMlDsa44(a) => (CryptoAlgorithm.MlDsa44, Purpose.Verification),
                     var a when WellKnownJwaValues.IsMlDsa65(a) => (CryptoAlgorithm.MlDsa65, Purpose.Verification),
                     var a when WellKnownJwaValues.IsMlDsa87(a) => (CryptoAlgorithm.MlDsa87, Purpose.Verification),
-                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
+                    _ => throw new JwkPublicKeyException(JwkPublicKeyFailureKind.UnsupportedCurveOrAlgorithm, $"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
                 };
             }
+
+
+            static (CryptoAlgorithm, Purpose) MapEc(string crv, string algorithm, Purpose explicitPurpose, string keyType) => crv switch
+            {
+                //Prefer crv for EC key identification per RFC 7518 §6.2.1.1; fall back to alg.
+                var c when WellKnownCurveValues.IsP256(c) => (CryptoAlgorithm.P256, explicitPurpose),
+                var c when WellKnownCurveValues.IsP384(c) => (CryptoAlgorithm.P384, explicitPurpose),
+                var c when WellKnownCurveValues.IsP521(c) => (CryptoAlgorithm.P521, explicitPurpose),
+                var c when WellKnownCurveValues.IsSecp256k1(c) || WellKnownJwaValues.IsEs256K(algorithm) => (CryptoAlgorithm.Secp256k1, Purpose.Verification),
+
+                //Brainpool curves per RFC 5639. ESB JWA fallback mirrors the ES* path
+                //above — alg alone identifies the curve when crv is absent.
+                var c when WellKnownCurveValues.IsBrainpoolP224r1(c) => (CryptoAlgorithm.BrainpoolP224r1, explicitPurpose),
+                var c when WellKnownCurveValues.IsBrainpoolP256r1(c) => (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose),
+                var c when WellKnownCurveValues.IsBrainpoolP320r1(c) => (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose),
+                var c when WellKnownCurveValues.IsBrainpoolP384r1(c) => (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose),
+                var c when WellKnownCurveValues.IsBrainpoolP512r1(c) => (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose),
+
+                //Fall back to alg when crv is absent.
+                _ when WellKnownJwaValues.IsEs256(algorithm) => (CryptoAlgorithm.P256, explicitPurpose),
+                _ when WellKnownJwaValues.IsEs384(algorithm) => (CryptoAlgorithm.P384, explicitPurpose),
+                _ when WellKnownJwaValues.IsEs512(algorithm) => (CryptoAlgorithm.P521, explicitPurpose),
+                _ when WellKnownJwaValues.IsEsb256(algorithm) => (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose),
+                _ when WellKnownJwaValues.IsEsb320(algorithm) => (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose),
+                _ when WellKnownJwaValues.IsEsb384(algorithm) => (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose),
+                _ when WellKnownJwaValues.IsEsb512(algorithm) => (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose),
+
+                _ => throw new JwkPublicKeyException(JwkPublicKeyFailureKind.UnsupportedCurveOrAlgorithm, $"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
+            };
         };
 
 

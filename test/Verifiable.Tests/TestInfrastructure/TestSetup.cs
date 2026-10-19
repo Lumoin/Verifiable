@@ -124,7 +124,14 @@ internal static class TestSetup
             throw new ArgumentException("Encoded input cannot be empty.", nameof(source));
         }
 
+        //A non-empty text decoding to no octet, a single character among them (RFC 4648 section 5: a quantum carries at least
+        //two characters), is no base64url text: refused as such, the decoder's one refusal, before any buffer is rented for it.
         int maxDecodedLength = Base64Url.GetMaxDecodedLength(source.Length);
+        if(maxDecodedLength == 0)
+        {
+            throw new FormatException("Base64Url decoding failed.");
+        }
+
         var buffer = pool.Rent(maxDecodedLength);
 
         bool success;

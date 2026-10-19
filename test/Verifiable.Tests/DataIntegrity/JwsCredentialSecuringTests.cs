@@ -279,9 +279,15 @@ internal sealed class JwsCredentialSecuringTests
     private static ReadOnlySpan<byte> CredentialSerializer(VerifiableCredential credential) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(credential, CredentialSecuringMaterial.JsonOptions);
 
+    /// <summary>Serializes a JWS header's members to UTF-8 JSON with the test's options.</summary>
+    /// <param name="header">The header's members.</param>
+    /// <returns>The UTF-8 JSON bytes.</returns>
     private static ReadOnlySpan<byte> HeaderSerializer(Dictionary<string, object?> header) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(header, CredentialSecuringMaterial.JsonOptions);
 
+    /// <summary>Deserializes a JWS header's UTF-8 JSON bytes to its members with the test's options, a present <c>null</c> kept as a member with no value.</summary>
+    /// <param name="headerBytes">The header's UTF-8 JSON bytes.</param>
+    /// <returns>The members, or <see langword="null"/> for a JSON <c>null</c>.</returns>
     private static Dictionary<string, object?>? HeaderDeserializer(ReadOnlySpan<byte> headerBytes) =>
         JsonSerializerExtensions.Deserialize<Dictionary<string, object?>>(headerBytes, CredentialSecuringMaterial.JsonOptions);
 

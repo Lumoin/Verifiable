@@ -296,7 +296,7 @@ internal sealed class JtiReplayGuardStoreProofTests
     [DataRow(false)]
     public async Task AClientAssertionsRetentionIsCarriedIntoTheStoredState(bool keptToTheClocksEnd)
     {
-        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        var store = new InMemoryJtiStore(JtiStoreBehavior.ResolvesWhatItSaved);
         using var server = BuildServer(store);
         var context = BuildContext(JtiReplayPolicy.Required);
         var keptUntil = TimeProvider.GetUtcNow().AddMinutes(5);

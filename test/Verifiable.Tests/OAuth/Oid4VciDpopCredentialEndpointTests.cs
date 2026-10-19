@@ -460,7 +460,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     private Task<string> BuildCredentialProofAsync(BoundTokenContext ctx, DpopKey? freshKey, string? nonce) =>
         ResourceDpopProofs.BuildAsync(
             freshKey ?? ctx.Fixture.DpopKey, WellKnownHttpMethods.Post, ctx.CredentialUrl.ToString(), ctx.AccessToken,
-            nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken);
+            nonce, TimeProvider.GetUtcNow(), jti: null, alterHeader: null, TestContext.CancellationToken);
 
 
     private async Task<HttpResponseMessage> PostCredentialAsync(
