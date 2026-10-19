@@ -1,4 +1,3 @@
-using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -89,7 +88,17 @@ public static class MdocCborIacaTrustResolver
             IReadOnlyList<PkiCertificateMemory>? chain = null;
             try
             {
-                chain = CoseSign1X5ChainExtractor.Extract(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
+                //A chain the extractor refuses, a repeated x5chain among it (RFC 9052 Section 3), is a malformed
+                //x5chain; the extractor has returned every certificate it read before the refusal.
+                try
+                {
+                    chain = CoseSign1X5ChainExtractor.Extract(issuerAuth.EncodedCoseSign1.AsReadOnlyMemory(), pool);
+                }
+                catch(Exception ex) when(CoseSerialization.IsMalformedInputException(ex))
+                {
+                    return MdocIacaTrustResolution.Failed(
+                        MdocIacaTrustFailureReason.X5ChainMalformed, ex.Message);
+                }
 
                 if(chain.Count == 0)
                 {
@@ -115,11 +124,6 @@ public static class MdocCborIacaTrustResolver
                 }
 
                 return MdocIacaTrustResolution.Success(leafKey);
-            }
-            catch(CborException ex)
-            {
-                return MdocIacaTrustResolution.Failed(
-                    MdocIacaTrustFailureReason.X5ChainMalformed, ex.Message);
             }
             finally
             {

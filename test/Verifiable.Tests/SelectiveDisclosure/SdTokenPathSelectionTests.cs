@@ -742,10 +742,11 @@ internal sealed class SdTokenPathSelectionTests
 
     /// <summary>
     /// Proves the SD-CWT type and issuer readers pass over a text-string claim key rather than
-    /// reading it as an integer. <see href="https://www.rfc-editor.org/rfc/rfc8392#section-4">RFC
-    /// 8392, Section 4</see>: "The Claim Key MUST be an integer or a text string", so a private
-    /// claim keyed by a text string is a well-formed CWT claim, and one sitting ahead of <c>vct</c>
-    /// and <c>iss</c> in the claims map must not stop the readers from reaching them.
+    /// reading it as an integer. <see href="https://www.rfc-editor.org/rfc/rfc8392#section-3">RFC
+    /// 8392, Section 3</see>: "To keep CWTs as small as possible, the Claim Keys are represented using
+    /// integers or text strings.", so a private claim keyed by a text string is a well-formed CWT
+    /// claim, and one sitting ahead of <c>vct</c> and <c>iss</c> in the claims map must not stop the
+    /// readers from reaching them.
     /// </summary>
     [TestMethod]
     public void SdCwtTypeAndIssuerAreReadPastATextKeyedPrivateClaim()
@@ -758,19 +759,22 @@ internal sealed class SdTokenPathSelectionTests
         Assert.AreEqual(
             NestedSdJwtVcFixtures.Vct,
             SdCwtVpParsing.ExtractCredentialType(token),
-            "RFC 8392 Section 4: a text-string claim key is well formed, so the vct reader passes over it and reads the type.");
+            "RFC 8392 Section 3: a text-string claim key is well formed, so the vct reader passes over it and reads the type.");
         Assert.AreEqual(
             NestedSdJwtVcFixtures.Issuer,
             SdCwtVpParsing.ExtractIssuer(token),
-            "RFC 8392 Section 4: a text-string claim key is well formed, so the iss reader passes over it and reads the issuer.");
+            "RFC 8392 Section 3: a text-string claim key is well formed, so the iss reader passes over it and reads the issuer.");
     }
 
 
     /// <summary>
     /// The SD-CWT <c>iss</c> reader refuses an issuer-signed claims map that carries the <c>iss</c> claim
     /// twice, also when the second label is written in a wider encoding of the same value.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
-    /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-7.2">RFC 8392 Section 7.2</see>: "If any of the
+    /// listed steps fail, then the CWT MUST be rejected -- that is, treated by the application as invalid input." Its
+    /// step 7: "Verify that the Message is a valid CBOR map; let the CWT Claims Set be this CBOR map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid".
     /// </summary>
     /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
     [TestMethod]
@@ -789,8 +793,11 @@ internal sealed class SdTokenPathSelectionTests
     /// <summary>
     /// The SD-CWT <c>vct</c> reader refuses an issuer-signed claims map that carries the <c>vct</c> claim
     /// twice, also when the second label is written in a wider encoding of the same value.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
-    /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-7.2">RFC 8392 Section 7.2</see>: "If any of the
+    /// listed steps fail, then the CWT MUST be rejected -- that is, treated by the application as invalid input." Its
+    /// step 7: "Verify that the Message is a valid CBOR map; let the CWT Claims Set be this CBOR map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid".
     /// </summary>
     /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
     [TestMethod]
@@ -809,8 +816,11 @@ internal sealed class SdTokenPathSelectionTests
     /// <summary>
     /// The SD-CWT <c>status</c> reader refuses an issuer-signed claims map that carries the <c>status</c>
     /// claim (65535) twice, also when the second label is written in a wider encoding of the same value.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
-    /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-7.2">RFC 8392 Section 7.2</see>: "If any of the
+    /// listed steps fail, then the CWT MUST be rejected -- that is, treated by the application as invalid input." Its
+    /// step 7: "Verify that the Message is a valid CBOR map; let the CWT Claims Set be this CBOR map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid".
     /// </summary>
     /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
     [TestMethod]
@@ -860,6 +870,11 @@ internal sealed class SdTokenPathSelectionTests
     /// The SD-CWT holder-key reader refuses an issuer-signed claims map that carries the <c>cnf</c> claim
     /// twice, and a <c>cnf</c> confirmation map that carries its COSE_Key member (1) twice, each also when the
     /// second label is written in a wider encoding of the same value.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-7.2">RFC 8392 Section 7.2</see>: "If any of the
+    /// listed steps fail, then the CWT MUST be rejected -- that is, treated by the application as invalid input." Its
+    /// step 7: "Verify that the Message is a valid CBOR map; let the CWT Claims Set be this CBOR map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid".
     /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
     /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
     /// </summary>
@@ -898,6 +913,26 @@ internal sealed class SdTokenPathSelectionTests
 
 
     /// <summary>
+    /// The SD-CWT holder-key reader refuses a <c>cnf</c> COSE_Key whose <c>kty</c> is 4294967297, whose low 32 bits
+    /// spell the OKP key type: the identifier is read whole and never read as the one its low word spells.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-7.1">RFC 9052 Section 7.1</see>: "The key type MUST
+    /// be included as part of the trust-decision process."
+    /// </summary>
+    [TestMethod]
+    public void SdCwtHolderKeyReaderRefusesAKeyTypeOutsideTheThirtyTwoBitRange()
+    {
+        byte[] claimsMap = Convert.FromHexString(
+            "A1" + "08" + "A101" + "A3" + "01" + "1B0000000100000001" + "2006"
+            + "2158201111111111111111111111111111111111111111111111111111111111111111");
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(claimsMap), []);
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtVpParsing.ExtractHolderKey(token, Pool),
+            "RFC 9052 Section 7.1: a key type the reader cannot represent is never read as another key type.");
+    }
+
+
+    /// <summary>
     /// Each SD-CWT claim reader refuses an issuer-signed claims map carrying one byte-string map key twice: the
     /// judgment covers every map key, not only the integer, text-string and simple-value claim keys.
     /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
@@ -928,6 +963,24 @@ internal sealed class SdTokenPathSelectionTests
 
 
     /// <summary>
+    /// The SD-CWT holder-key reader refuses a <c>cnf</c> confirmation map carrying one byte-string map key twice: the
+    /// judgment covers every map key of the confirmation map, not only its integer members.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </summary>
+    [TestMethod]
+    public void SdCwtHolderKeyReaderRefusesARepeatedByteStringMapKeyInTheConfirmationMap()
+    {
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString("A108A2410100410101")), []);
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtVpParsing.ExtractHolderKey(token, Pool),
+            "RFC 8949 Section 3.1: a cnf confirmation map carrying h'01' twice is not valid and is refused.");
+    }
+
+
+    /// <summary>
     /// The Key Binding Token claims reader refuses a claims map carrying one byte-string map key twice.
     /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
     /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
@@ -945,18 +998,185 @@ internal sealed class SdTokenPathSelectionTests
 
 
     /// <summary>
-    /// The <c>kcwt</c> reader reads the whole Key Binding Token protected header and answers <c>kcwt</c> when an
-    /// integer label beyond 32 bits follows it: the label is well-formed and passed over.
+    /// The Key Binding Token claims reader answers an <c>iat</c> claim it cannot read as a NumericDate, the
+    /// integer -2^64, as a malformed claims map with the seam's own <see cref="FormatException"/>, never with the
+    /// integer reader's overflow. <see href="https://www.rfc-editor.org/rfc/rfc8392#section-3.1.6">RFC 8392
+    /// Section 3.1.6</see>: "The "iat" (issued at) claim has the same meaning and processing rules as the "iat"
+    /// claim defined in Section 4.1.6 of [RFC7519], except that the value is a NumericDate, as defined in Section 2
+    /// of this specification."
+    /// </summary>
+    [TestMethod]
+    public void KbtClaimsReaderAnswersAnIatItCannotReadAsMalformed()
+    {
+        byte[] claimsMap = Convert.FromHexString("A1063BFFFFFFFFFFFFFFFF");
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtVpParsing.ReadKbtClaims(claimsMap),
+            "An iat below every NumericDate the reader holds is a malformed claims map, answered as FormatException.");
+    }
+
+
+    /// <summary>
+    /// The <c>kcwt</c> reader reads the whole Key Binding Token protected header and answers <c>kcwt</c> when a
+    /// well-formed label the reader does not carry follows it, an integer label beyond 32 bits or a text-string
+    /// label: the label is judged for a repeat and passed over.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    /// <param name="protectedHeader">The Key Binding Token protected header: <c>kcwt</c> with <c>h'01'</c>, then the other label.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0x0D, 0x41, 0x01, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01 }, DisplayName = "integer label 4294967296")]
+    [DataRow(new byte[] { 0xA2, 0x0D, 0x41, 0x01, 0x61, 0x78, 0x01 }, DisplayName = "text label")]
+    public void KcwtReaderPassesOverAWellFormedLabelItDoesNotCarry(byte[] protectedHeader)
+    {
+        ReadOnlyMemory<byte> kcwt = SdCwtVpParsing.ExtractKcwt(protectedHeader);
+
+        Assert.IsTrue(kcwt.Span.SequenceEqual(new byte[] { 0x41, 0x01 }), "RFC 9052 Section 1.5: the label beside kcwt is passed over and kcwt is answered.");
+    }
+
+
+    /// <summary>
+    /// The <c>kcwt</c> reader refuses a Key Binding Token protected header carrying <c>kcwt</c> twice, also when the
+    /// second label is written in a wider encoding of the same value, and never answers either one.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    /// <param name="protectedHeader">The Key Binding Token protected header carrying <c>kcwt</c> twice.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0x0D, 0x41, 0x01, 0x0D, 0x41, 0x02 }, DisplayName = "kcwt twice")]
+    [DataRow(new byte[] { 0xA2, 0x0D, 0x41, 0x01, 0x18, 0x0D, 0x41, 0x02 }, DisplayName = "kcwt twice, second label in two widths")]
+    public void KcwtReaderRefusesARepeatedKcwt(byte[] protectedHeader)
+    {
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtVpParsing.ExtractKcwt(protectedHeader),
+            "RFC 9052 Section 3: a Key Binding Token protected header carrying kcwt twice is rejected as malformed.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT reader parses a COSE_Sign1 whose unprotected bucket carries a text-string label and no
+    /// <c>sd_claims</c>: the text-string label is well-formed, judged for a repeat and passed over with its value.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
     /// </summary>
     [TestMethod]
-    public void KcwtReaderPassesOverALabelBeyondThirtyTwoBits()
+    public void SdCwtReaderPassesOverATextLabelInTheUnprotectedBucket()
     {
-        byte[] protectedHeader = [0xA2, 0x0D, 0x41, 0x01, 0x1A, 0x80, 0x00, 0x00, 0x00, 0x01];
+        byte[] wireBytes = CoseWireFixtures.ComposeCoseSign1(
+            UnverifiableCoseProtectedHeader.Span, [0xA1, 0x61, 0x78, 0x01], [0xA1, 0x01, 0x61, 0x61], UnverifiableCoseSignature.Span);
 
-        ReadOnlyMemory<byte> kcwt = SdCwtVpParsing.ExtractKcwt(protectedHeader);
+        using SdToken<ReadOnlyMemory<byte>> token = SdCwtSerializer.ParseToken(wireBytes, TestSalts.TestSaltTag, Pool, TestSetup.Base64UrlEncoder);
 
-        Assert.IsTrue(kcwt.Span.SequenceEqual(new byte[] { 0x41, 0x01 }), "RFC 9052 Section 1.5: the label 2147483648 is passed over and kcwt is answered.");
+        Assert.IsEmpty(token.Disclosures, "RFC 9052 Section 1.5: the text-string label is passed over and no Disclosure is read from it.");
+        Assert.AreEqual("a", SdCwtVpParsing.ExtractIssuer(token), "The issuer-signed claims are read as usual.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT reader parses a COSE_Sign1 whose unprotected bucket carries <c>sd_claims</c> (17) empty and the
+    /// integer label 4294967313 (2^32 + 17) over an array holding a byte string that is no Disclosure: the label
+    /// beyond 32 bits is its own label, passed over with its value, and never read as <c>sd_claims</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public void SdCwtReaderPassesOverAnIntegerLabelBeyondThirtyTwoBitsBesideSdClaims()
+    {
+        byte[] wireBytes = CoseWireFixtures.ComposeCoseSign1(
+            UnverifiableCoseProtectedHeader.Span,
+            [0xA2, 0x11, 0x80, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x11, 0x81, 0x41, 0x00],
+            [0xA1, 0x01, 0x61, 0x61],
+            UnverifiableCoseSignature.Span);
+
+        using SdToken<ReadOnlyMemory<byte>> token = SdCwtSerializer.ParseToken(wireBytes, TestSalts.TestSaltTag, Pool, TestSetup.Base64UrlEncoder);
+
+        Assert.IsEmpty(token.Disclosures, "RFC 9052 Section 1.5: the label 4294967313 is passed over and its value is never read as Disclosures.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT writer refuses, with the caller's own <see cref="ArgumentException"/>, a message whose protected
+    /// bucket the reading side would refuse: a label carried twice, a label of another kind, a bucket whose declared
+    /// count runs past its end, and the <c>sd_claims</c> label (17) the writer's own unprotected bucket carries.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x01, 0x26 }, DisplayName = "alg twice")]
+    [DataRow(new byte[] { 0xA1, 0x41, 0x01, 0x26 }, DisplayName = "a byte-string label")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26 }, DisplayName = "a declared count of two over one entry")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x11, 0x80 }, DisplayName = "sd_claims in the protected bucket")]
+    public void SdCwtSerializerRefusesAProtectedBucketTheReaderRefuses(byte[] protectedHeader)
+    {
+        SdCwtMessage message = new(new byte[] { 0xA1, 0x01, 0x61, 0x61 }, protectedHeader, new byte[] { 0x00 }, []);
+
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => SdCwtSerializer.Serialize(message),
+            "RFC 9052 Section 9: a message the reading side refuses is never written.");
+    }
+
+
+    /// <summary>
+    /// The holder's Key Binding Token header builder refuses, with <see cref="ArgumentException"/>, to embed a
+    /// presentation of a credential whose issuer protected bucket carries <c>alg</c> twice: it writes the presentation
+    /// SD-CWT again through the SD-CWT writer, which never generates such a message.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// </summary>
+    [TestMethod]
+    public void KbtHeaderBuilderRefusesToEmbedACredentialRepeatingAProtectedLabel()
+    {
+        byte[] credential = CoseWireFixtures.ComposeCoseSign1(
+            [0xA2, 0x01, 0x26, 0x01, 0x26], [0xA0], [0xA1, 0x01, 0x61, 0x61], UnverifiableCoseSignature.Span);
+        using SdToken<ReadOnlyMemory<byte>> presentation = new(credential, []);
+
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => SdKbtIssuance.BuildProtectedHeader(WellKnownCoseAlgorithms.Es256, presentation, Pool),
+            "RFC 9052 Section 9: the holder never generates a presentation repeating a label.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT reader returns every Disclosure it built to the pool when the message fails after the
+    /// <c>sd_claims</c> it read: a payload cut short, and a signature that is not a byte string.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949 Section 1.2</see>: "CBOR decoders by
+    /// definition only return contents from well-formed data items."
+    /// </summary>
+    /// <param name="tailHex">The encoded payload and signature that follow the unprotected bucket, as hexadecimal.</param>
+    [TestMethod]
+    [DataRow("4200", DisplayName = "a payload cut short")]
+    [DataRow("41A001", DisplayName = "a signature that is not a byte string")]
+    public void SdCwtParseReturnsEveryDisclosureWhenTheMessageTailIsMalformed(string tailHex)
+    {
+        byte[] disclosure = [0x83, 0x50, .. Enumerable.Repeat((byte)0x5A, 16), 0x61, 0x61, 0x01];
+        byte[] wireBytes =
+        [
+            0xD2, 0x84, 0x40, 0xA1, 0x11, 0x81, (byte)(0x40 + disclosure.Length), .. disclosure, .. Convert.FromHexString(tailHex)
+        ];
+        using MeteredHousePool metered = new();
+
+        _ = Assert.Throws<Exception>(
+            () => SdCwtSerializer.Parse(wireBytes, TestSalts.TestSaltTag, metered.Pool),
+            "A message whose tail is not well-formed is refused.");
+        Assert.AreEqual(0L, metered.OutstandingCount, "Every Disclosure built before the refusal is returned to the pool.");
+    }
+
+
+    /// <summary>
+    /// The embedded SD-CWT parse lets the caller's own argument fault out as itself, never as the wallet's malformed
+    /// presentation: a null pool, and a hash algorithm the library does not support.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949 Section 1.2</see>: "CBOR decoders by
+    /// definition only return contents from well-formed data items."
+    /// </summary>
+    [TestMethod]
+    public void EmbeddedSdCwtParseLetsTheCallersArgumentFaultOutAsItself()
+    {
+        byte[] wireBytes = ComposeUnsignedCoseSign1([0xA1, 0x01, 0x61, 0x61]);
+
+        _ = Assert.ThrowsExactly<ArgumentNullException>(
+            () => SdCwtVpParsing.ParseEmbeddedSdCwt(wireBytes, TestSalts.TestSaltTag, null!, TestSetup.Base64UrlEncoder),
+            "A null pool is the caller's own argument fault.");
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => SdCwtVpParsing.ParseEmbeddedSdCwt(wireBytes, TestSalts.TestSaltTag, Pool, TestSetup.Base64UrlEncoder, "md5"),
+            "An unsupported hash algorithm is the caller's own argument fault.");
     }
 
 

@@ -449,6 +449,48 @@ internal static class SdCwtVpFixture
 
 
     /// <summary>
+    /// A <see cref="BuildKbtPayloadDelegate"/> that builds the genuine Key Binding Token payload and writes its
+    /// <c>iat</c> (6) claim as the integer -2^64, a well-formed CBOR integer below every value a signed 64-bit
+    /// NumericDate holds, every other claim copied as encoded.
+    /// </summary>
+    /// <param name="aud">The verifier audience for the <c>aud</c> claim.</param>
+    /// <param name="iat">The issuance timestamp the genuine payload carries; replaced in the written claims map.</param>
+    /// <param name="cnonce">The verifier nonce for the <c>cnonce</c> claim, or <see langword="null"/> to omit it.</param>
+    /// <param name="pool">Memory pool the returned buffer is rented from.</param>
+    /// <returns>The payload carrying the unreadable <c>iat</c>, in a pool-rented buffer the caller owns.</returns>
+    public static IMemoryOwner<byte> BuildPayloadWithIatBelowTheSignedRange(string aud, long iat, string? cnonce, BaseMemoryPool pool)
+    {
+        using IMemoryOwner<byte> validPayload = SdKbtIssuance.BuildPayload(aud, iat, cnonce, pool);
+
+        var reader = new CborReader(validPayload.Memory, CborOptions.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The genuine payload is a definite-length map.");
+        writer.WriteStartMap(count);
+        for(int i = 0; i < count; i++)
+        {
+            int claimKey = reader.ReadInt32();
+            ReadOnlyMemory<byte> value = reader.ReadEncodedValue();
+            writer.WriteInt32(claimKey);
+            writer.WriteEncodedValue(claimKey == WellKnownCwtClaimNames.Iat ? IatBelowTheSignedRange.Span : value.Span);
+        }
+
+        writer.WriteEndMap();
+
+        IMemoryOwner<byte> owner = pool.Rent(buffer.WrittenCount);
+        buffer.WrittenSpan.CopyTo(owner.Memory.Span);
+
+        return owner;
+    }
+
+
+    /// <summary>The CBOR integer -2^64: major type 1 with the eight-byte argument 2^64 - 1.</summary>
+    private static ReadOnlyMemory<byte> IatBelowTheSignedRange { get; } =
+        new byte[] { 0x3B, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+
+    /// <summary>
     /// Rewrites an SD-CWT COSE_Sign1 so its unprotected bucket carries <c>sd_claims</c> twice: the first entry
     /// holds the first Disclosure and the second entry the rest, every other part copied as encoded.
     /// </summary>
@@ -526,8 +568,59 @@ internal static class SdCwtVpFixture
     /// <param name="issuerKey">The issuer's signing key.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The header builder.</returns>
-    public static async ValueTask<BuildKbtProtectedHeaderDelegate> PrepareProtectedHeaderWithRedactedClaimKeysTwiceAsync(
-        SdToken<ReadOnlyMemory<byte>> issued, PrivateKeyMemory issuerKey, CancellationToken cancellationToken)
+    public static ValueTask<BuildKbtProtectedHeaderDelegate> PrepareProtectedHeaderWithRedactedClaimKeysTwiceAsync(
+        SdToken<ReadOnlyMemory<byte>> issued, PrivateKeyMemory issuerKey, CancellationToken cancellationToken) =>
+        PrepareProtectedHeaderWithRewrittenClaimsAsync(issued, issuerKey, SplitRedactedClaimKeys, cancellationToken);
+
+
+    /// <summary>
+    /// Answers a preparation like <see cref="PrepareProtectedHeaderWithRedactedClaimKeysTwiceAsync"/> whose rewrite
+    /// appends <paramref name="entries"/>, encoded map entries, to the top level of the issued SD-CWT's issuer-signed
+    /// claims map, raising the map's entry count by <paramref name="entryCount"/>.
+    /// </summary>
+    /// <param name="entries">The encoded entries appended to the claims map.</param>
+    /// <param name="entryCount">How many entries <paramref name="entries"/> encodes.</param>
+    /// <returns>The preparation.</returns>
+    public static Func<SdToken<ReadOnlyMemory<byte>>, PrivateKeyMemory, CancellationToken, ValueTask<BuildKbtProtectedHeaderDelegate>> PrepareProtectedHeaderWithClaimsAppended(
+        byte[] entries, int entryCount) =>
+        (issued, issuerKey, cancellationToken) => PrepareProtectedHeaderWithRewrittenClaimsAsync(
+            issued, issuerKey, payload => AppendClaimsMapEntries(payload, entries, entryCount), cancellationToken);
+
+
+    /// <summary>
+    /// Copies a definite-length claims map and appends <paramref name="entries"/> after its entries, raising its entry
+    /// count by <paramref name="entryCount"/>.
+    /// </summary>
+    /// <param name="payload">The claims map.</param>
+    /// <param name="entries">The encoded entries appended.</param>
+    /// <param name="entryCount">How many entries <paramref name="entries"/> encodes.</param>
+    /// <returns>The rewritten claims map bytes.</returns>
+    private static byte[] AppendClaimsMapEntries(byte[] payload, byte[] entries, int entryCount)
+    {
+        var reader = new CborReader(payload, CborOptions.Lax);
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The claims map is a definite-length map.");
+        ReadOnlySpan<byte> originalEntries = payload.AsSpan(payload.Length - reader.BytesRemaining);
+
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        writer.WriteStartMap(count + entryCount);
+
+        return [.. buffer.WrittenSpan, .. originalEntries, .. entries];
+    }
+
+
+    /// <summary>
+    /// Prepares a <see cref="BuildKbtProtectedHeaderDelegate"/> whose embedded SD-CWT carries the issued SD-CWT's
+    /// issuer-signed claims map rewritten by <paramref name="rewriteClaims"/>, signed again by the issuer over the same
+    /// protected bucket; every Disclosure still travels.
+    /// </summary>
+    /// <param name="issued">The issued SD-CWT.</param>
+    /// <param name="issuerKey">The issuer's signing key.</param>
+    /// <param name="rewriteClaims">Rewrites the issuer-signed claims map.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The header builder.</returns>
+    private static async ValueTask<BuildKbtProtectedHeaderDelegate> PrepareProtectedHeaderWithRewrittenClaimsAsync(
+        SdToken<ReadOnlyMemory<byte>> issued, PrivateKeyMemory issuerKey, Func<byte[], byte[]> rewriteClaims, CancellationToken cancellationToken)
     {
         var reader = new CborReader(issued.IssuerSigned, CborOptions.Lax);
         _ = reader.ReadTag();
@@ -536,7 +629,7 @@ internal static class SdCwtVpFixture
         reader.SkipValue();
         byte[] payload = reader.ReadByteString();
 
-        byte[] rewrittenPayload = SplitRedactedClaimKeys(payload);
+        byte[] rewrittenPayload = rewriteClaims(payload);
         using CoseSign1Message signed = await Verifiable.JCose.Cose.SignAsync(
             EncodedCoseProtectedHeader.FromBytes(protectedHeader, Pool),
             null,

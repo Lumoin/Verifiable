@@ -1,6 +1,7 @@
 using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Security.Cryptography;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -80,14 +81,29 @@ public static class SdCwtSerializer
     /// <summary>
     /// Serializes an SD-CWT message to COSE_Sign1 format.
     /// </summary>
+    /// <remarks>
+    /// The protected bucket arrives already serialized, so its labels are read with this file's label read before
+    /// anything is written, and a message the reading side would refuse is not written: a label carried twice, a label
+    /// that is neither an integer nor a text string, a bucket that is no well-formed map of labels, and the
+    /// <c>sd_claims</c> label the unprotected bucket written here carries.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "Applications can
+    /// either fail processing or process messages by ignoring incorrect labels; however, they MUST NOT create
+    /// messages with incorrect labels."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Applications SHOULD
+    /// verify that the same label does not occur in both the protected and unprotected header parameters."
+    /// </remarks>
     /// <param name="message">The SD-CWT message to serialize.</param>
     /// <param name="conformanceMode">CBOR conformance mode for deterministic encoding.</param>
     /// <returns>The CBOR-encoded COSE_Sign1 bytes.</returns>
+    /// <exception cref="ArgumentException">The reading side would refuse the message's protected bucket.</exception>
     public static byte[] Serialize(
         SdCwtMessage message,
         CborConformanceMode conformanceMode = CborConformanceMode.RfcCanonical)
     {
         ArgumentNullException.ThrowIfNull(message);
+        RefuseToWriteMalformedProtectedBucket(message.ProtectedHeader, nameof(message));
 
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(buffer, CborSerializerOptions.Default(conformanceMode));
@@ -190,24 +206,28 @@ public static class SdCwtSerializer
         //Unprotected header - extract sd_claims.
         var disclosures = new List<SdDisclosure>();
         var wireBytes = new List<byte[]>();
-        _ = reader.ReadStartMap();
 
-        HashSet<int> seenLabels = [];
+        HashSet<(Int128 Number, string? Text)> seenLabels = [];
+
+        //Every disclosure built here moves into the returned message; a failure anywhere after the first one is
+        //built, through the rest of the unprotected bucket, the payload, the signature and the array's end,
+        //returns each to the pool.
         try
         {
+            _ = reader.ReadStartMap();
             while(reader.PeekState() != CborReaderState.EndMap)
             {
-                int label = reader.ReadInt32();
+                (Int128 Number, string? Text) label = ReadLabel(reader);
 
                 //RFC 9052 Section 3: a label that appears twice in one map makes the message malformed;
                 //a second sd_claims is refused, never merged into the first.
                 if(!seenLabels.Add(label))
                 {
                     throw new CborContentException(
-                        $"COSE header label {label} appears more than once in the unprotected bucket; the message is malformed (RFC 9052 Section 3).");
+                        $"COSE header label {label.Text ?? label.Number.ToString(CultureInfo.InvariantCulture)} appears more than once in the unprotected bucket; the message is malformed (RFC 9052 Section 3).");
                 }
 
-                if(label == CoseHeaderParameters.SdClaims)
+                if(label is { Text: null } && label.Number == CoseHeaderParameters.SdClaims)
                 {
                     //Read sd_claims array.
                     _ = reader.ReadStartArray();
@@ -225,30 +245,31 @@ public static class SdCwtSerializer
                     reader.SkipValue();
                 }
             }
+
+            reader.ReadEndMap();
+
+            //Payload.
+            byte[] payload = reader.ReadByteString();
+
+            //Signature.
+            byte[] signature = reader.ReadByteString();
+
+            reader.ReadEndArray();
+
+            disclosureWireBytes = wireBytes;
+
+            return new SdCwtMessage(payload, protectedHeader, signature, disclosures);
         }
         catch
         {
-            //Mid-parse failure — dispose every disclosure already constructed.
+            //Mid-parse failure: dispose every disclosure already constructed.
             foreach(SdDisclosure d in disclosures)
             {
                 d.Dispose();
             }
+
             throw;
         }
-
-        reader.ReadEndMap();
-
-        //Payload.
-        byte[] payload = reader.ReadByteString();
-
-        //Signature.
-        byte[] signature = reader.ReadByteString();
-
-        reader.ReadEndArray();
-
-        disclosureWireBytes = wireBytes;
-
-        return new SdCwtMessage(payload, protectedHeader, signature, disclosures);
     }
 
 
@@ -722,11 +743,90 @@ public static class SdCwtSerializer
     /// <param name="algorithm">The hash algorithm name.</param>
     /// <returns>The digest <see cref="Tag"/>, output byte length, and seam qualifier for <paramref name="algorithm"/>.</returns>
     /// <exception cref="ArgumentException">Thrown for an unsupported algorithm name.</exception>
-    private static (Tag Tag, int Length, string? Qualifier) ResolveDigestTag(string algorithm) => algorithm switch
+    internal static (Tag Tag, int Length, string? Qualifier) ResolveDigestTag(string algorithm) => algorithm switch
     {
         _ when WellKnownHashAlgorithms.IsSha256(algorithm) => (CryptoTags.Sha256Digest, WellKnownHashAlgorithms.Sha256SizeBytes, null),
         _ when WellKnownHashAlgorithms.IsSha384(algorithm) => (CryptoTags.Sha384Digest, WellKnownHashAlgorithms.Sha384SizeBytes, nameof(HashAlgorithmName.SHA384)),
         _ when WellKnownHashAlgorithms.IsSha512(algorithm) => (CryptoTags.Sha512Digest, WellKnownHashAlgorithms.Sha512SizeBytes, nameof(HashAlgorithmName.SHA512)),
         _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithm}'.", nameof(algorithm))
     };
+
+
+    /// <summary>
+    /// Refuses, as the caller's own argument, a protected bucket the reading side would refuse: each label is read
+    /// through <see cref="ReadLabel"/> and judged as it is read, a label carried twice or the <c>sd_claims</c> label
+    /// refusing the bucket, and a bucket that is no well-formed map of labels, or carries bytes after its map, is
+    /// refused too.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// </remarks>
+    /// <param name="protectedHeader">The serialized protected bucket; empty when the bucket is empty.</param>
+    /// <param name="parameterName">The name of the serializer's parameter that carries the bucket.</param>
+    /// <exception cref="ArgumentException">The reading side would refuse the bucket.</exception>
+    private static void RefuseToWriteMalformedProtectedBucket(ReadOnlyMemory<byte> protectedHeader, string parameterName)
+    {
+        if(protectedHeader.IsEmpty)
+        {
+            return;
+        }
+
+        try
+        {
+            var reader = new CborReader(protectedHeader, CborOptions.Lax);
+            HashSet<(Int128 Number, string? Text)> seenLabels = [];
+            _ = reader.ReadStartMap();
+            while(reader.PeekState() != CborReaderState.EndMap)
+            {
+                (Int128 Number, string? Text) label = ReadLabel(reader);
+                if(!seenLabels.Add(label) || (label is { Text: null } && label.Number == CoseHeaderParameters.SdClaims))
+                {
+                    throw new CborContentException(
+                        $"COSE header label {label.Text ?? label.Number.ToString(CultureInfo.InvariantCulture)} is repeated in the protected bucket or is also in the unprotected bucket (RFC 9052 Section 3).");
+                }
+
+                reader.SkipValue();
+            }
+
+            reader.ReadEndMap();
+            if(reader.BytesRemaining != 0)
+            {
+                throw new CborContentException("The protected bucket carries bytes after its map (RFC 9052 Section 3).");
+            }
+        }
+        catch(Exception exception) when(CoseSerialization.IsMalformedInputException(exception))
+        {
+            throw new ArgumentException(
+                "The protected bucket repeats a label, carries a label that is neither an integer nor a text string, carries the sd_claims label or is no well-formed map of labels; such a message is not written (RFC 9052 Sections 1.5, 3 and 9).",
+                parameterName,
+                exception);
+        }
+    }
+
+
+    /// <summary>
+    /// Reads one COSE header-map label as RFC 9052 Section 1.5 defines it: any CBOR integer, negative or unsigned,
+    /// read whole and never cast down, or a text string. Two labels are the same when their decoded values are
+    /// equal; an integer and a text string are never the same. This is the one label read of this file.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr"
+    /// and "In a CBOR map defined by this specification, the presence a label that is neither a text string nor an
+    /// integer is an error." This reader fails processing.
+    /// </remarks>
+    /// <param name="reader">The reader, positioned at a header-map label.</param>
+    /// <returns>The decoded label: its integer value, or its text when it is a text string.</returns>
+    /// <exception cref="CborContentException">The map key is neither an integer nor a text string.</exception>
+    private static (Int128 Number, string? Text) ReadLabel(CborReader reader)
+    {
+        return reader.PeekState() switch
+        {
+            CborReaderState.UnsignedInteger => ((Int128)reader.ReadUInt64(), null),
+            CborReaderState.NegativeInteger => (-1 - (Int128)reader.ReadCborNegativeIntegerRepresentation(), null),
+            CborReaderState.TextString => (Int128.Zero, reader.ReadTextString()),
+            CborReaderState otherState => throw new CborContentException(
+                $"A COSE header label is an integer or a text string; the unprotected bucket carries a {otherState} map key (RFC 9052 Section 1.5).")
+        };
+    }
 }

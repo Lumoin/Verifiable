@@ -254,6 +254,97 @@ internal sealed class MdocVpTokenVerificationTests
 
 
     /// <summary>
+    /// A presentation whose DeviceSignature is signed by the device key over a protected bucket whose labels cannot be
+    /// read is refused as malformed with the COSE parser's own failure: <c>alg</c> twice before a byte-string label,
+    /// <c>alg</c> twice before the end of a declared count of three, a byte string rather than a map, and a declared
+    /// count of two over one entry. The verification calls the DeviceSignature parse directly.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "empty_or_serialized_map = bstr .cbor header_map / bstr .size 0".
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket the device signature covers.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA3, 0x01, 0x26, 0x01, 0x26, 0x41, 0x00, 0x00 }, DisplayName = "alg twice, then a byte-string label")]
+    [DataRow(new byte[] { 0xA3, 0x01, 0x26, 0x01, 0x26 }, DisplayName = "alg twice, then the end of a declared count of three")]
+    [DataRow(new byte[] { 0x41, 0x00 }, DisplayName = "a byte string, not a map")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26 }, DisplayName = "a declared count of two over one entry")]
+    public async Task DeviceSignatureOverAnUnreadableProtectedBucketIsRefusedAsMalformed(byte[] protectedHeader)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        try
+        {
+            (string vpTokenValue, string transmittedNonce) =
+                await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
+
+            using IMemoryOwner<byte> nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+
+            string malformedVpTokenValue = await ResignDeviceSignatureAsync(
+                vpTokenValue, nonceOwner.Memory, deviceKeys.PrivateKey, protectedHeader).ConfigureAwait(false);
+
+            _ = await Assert.ThrowsExactlyAsync<CborContentException>(
+                async () => await VerifyAsync(
+                    malformedVpTokenValue, MdocVpFixture.TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false),
+                "RFC 9052 Section 3: a DeviceSignature whose protected bucket is no serialized header map is rejected as malformed.").ConfigureAwait(false);
+        }
+        finally
+        {
+            DisposeKeyMaterial(issuerKeys);
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
+    /// <summary>
+    /// A presentation whose IssuerAuth is signed again by the issuer key over a protected bucket carrying <c>alg</c>
+    /// twice before a byte-string label, an entry that cannot be read, is refused as malformed at the DeviceResponse
+    /// parse. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of
+    /// the maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be
+    /// rejected as malformed."
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket the issuer signature covers.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA3, 0x01, 0x26, 0x01, 0x26, 0x41, 0x00, 0x00 }, DisplayName = "alg twice, then a byte-string label")]
+    public async Task IssuerAuthRepeatingAProtectedLabelBeforeAnUnreadableEntryIsRefusedAsMalformed(byte[] protectedHeader)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        try
+        {
+            (string vpTokenValue, string transmittedNonce) =
+                await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
+
+            object[] issuerAuthPath = ["documents", 0, "issuerSigned", "issuerAuth"];
+            using IMemoryOwner<byte> deviceResponse = TestSetup.Base64UrlDecoder(vpTokenValue, BaseMemoryPool.Shared);
+            byte[] issuerAuth = MdocVpFixture.ReadAt(deviceResponse.Memory, issuerAuthPath);
+            byte[] resignedIssuerAuth = await MdocVpFixture.ResignIssuerAuthOverProtectedBucketAsync(
+                issuerAuth, issuerKeys.PrivateKey, protectedHeader, TestContext.CancellationToken).ConfigureAwait(false);
+            string malformedVpTokenValue = TestSetup.Base64UrlEncoder(
+                MdocVpFixture.RewriteAt(deviceResponse.Memory, issuerAuthPath, _ => resignedIssuerAuth));
+
+            using IMemoryOwner<byte> nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+
+            _ = await Assert.ThrowsExactlyAsync<FormatException>(
+                async () => await VerifyAsync(
+                    malformedVpTokenValue, MdocVpFixture.TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false),
+                "RFC 9052 Section 3: an IssuerAuth whose protected bucket repeats a label is rejected as malformed.").ConfigureAwait(false);
+        }
+        finally
+        {
+            DisposeKeyMaterial(issuerKeys);
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
+    /// <summary>
     /// A DeviceSignature signed again by the device key over a well-formed protected bucket verifies over the
     /// verifier-reconstructed SessionTranscript, so a presentation signed again over a malformed bucket differs
     /// from an accepted one by that bucket alone.

@@ -10,6 +10,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
@@ -442,6 +443,65 @@ internal sealed class MdocIacaTrustEndToEndTests
     }
 
 
+    /// <summary>
+    /// The trust delegate answers <see cref="MdocIacaTrustFailureReason.X5ChainMalformed"/> for an issuer-signed
+    /// IssuerAuth whose unprotected bucket carries label 33 (<c>x5chain</c>) twice: the refused chain is a failure
+    /// value, never an exception. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052
+    /// Section 3</see>: "When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task TrustResolutionAnswersX5ChainMalformedForARepeatedX5Chain()
+    {
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
+        using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Repeated-Chain Root", rootKey);
+        using PrivateKeyMemory rootPrivateKey = LoadP256PrivateKey(rootKey);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            using MdocDocument issued = await MdocTestFixtures.BuildSampleLogicalPid(() => MdocTestFixtures.ItemRandomSalt()).SignAsync(
+                new MdocIssuerSigningConfig
+                {
+                    DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
+                    Validity = SampleValidity(),
+                    DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey),
+                    X5Chain = [rootCert.RawData]
+                },
+                rootPrivateKey,
+                BaseMemoryPool.Shared,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            //The unprotected bucket is outside the issuer signature, so only the repeated label differs.
+            byte[] repeatingIssuerAuth = MdocVpFixture.RewriteAt(
+                issued.IssuerSigned.IssuerAuth.EncodedCoseSign1.AsReadOnlyMemory(),
+                [1],
+                unprotected => MdocVpFixture.WithLabelTwice(unprotected, MdocCoseHeaderLabels.X5Chain, new byte[] { 0x41, 0x00 }));
+            using MdocIssuerAuth repeating = new(
+                issued.IssuerSigned.IssuerAuth.Mso, EncodedCoseSign1.FromBytes(repeatingIssuerAuth, BaseMemoryPool.Shared));
+
+            using PkiCertificateMemory rootAnchor = CopyToPkiCertificate(rootCert.RawData);
+            ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
+                MicrosoftX509Functions.ValidateChainAsync,
+                trustAnchors: [rootAnchor],
+                timeProvider: TrustResolutionTimeProvider,
+                pool: BaseMemoryPool.Shared);
+
+            using MdocIacaTrustResolution resolution = await trustDelegate(repeating, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(resolution.IsTrusted, "RFC 9052 Section 3: an IssuerAuth repeating x5chain is malformed and is not trusted.");
+            Assert.AreEqual(MdocIacaTrustFailureReason.X5ChainMalformed, resolution.FailureReason,
+                "The refused chain is answered as a malformed x5chain.");
+        }
+        finally
+        {
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
     [TestMethod]
     public void ExtractorReturnsCertificatesInChainOrder()
     {
@@ -521,21 +581,24 @@ internal sealed class MdocIacaTrustEndToEndTests
 
 
     /// <summary>
-    /// The <c>x5chain</c> reader reads label 33 and label 4294967329, which share their low 32 bits, as two labels and
-    /// answers the one chain under 33. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052
-    /// Section 1.5</see>: "label = int / tstr".
+    /// The <c>x5chain</c> reader passes over a well-formed label beside label 33 and answers the one chain under 33:
+    /// label 4294967329, which shares its low 32 bits with 33, is a label of its own, and a text-string label is
+    /// read as text. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>:
+    /// "label = int / tstr".
     /// </summary>
+    /// <param name="unprotectedHeader">The encoded unprotected bucket: label 33 with <c>h'07'</c>, then the other label with <c>h'08'</c>.</param>
     [TestMethod]
-    public void ExtractorReadsALabelBeyondThirtyTwoBitsAsItsOwn()
+    [DataRow(new byte[] { 0xA2, 0x18, 0x21, 0x41, 0x07, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x21, 0x41, 0x08 }, DisplayName = "label 4294967329")]
+    [DataRow(new byte[] { 0xA2, 0x18, 0x21, 0x41, 0x07, 0x61, 0x78, 0x41, 0x08 }, DisplayName = "text label")]
+    public void ExtractorPassesOverAWellFormedLabelItDoesNotCarry(byte[] unprotectedHeader)
     {
-        byte[] unprotectedHeader = [0xA2, 0x18, 0x21, 0x41, 0x07, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x21, 0x41, 0x08];
         byte[] coseSign1 = CoseWireFixtures.ComposeCoseSign1([0xA0], unprotectedHeader, [], []);
 
         IReadOnlyList<PkiCertificateMemory> chain = CoseSign1X5ChainExtractor.Extract(coseSign1, BaseMemoryPool.Shared);
 
         try
         {
-            Assert.HasCount(1, chain, "RFC 9052 Section 1.5: label 4294967329 is its own label, never a second x5chain.");
+            Assert.HasCount(1, chain, "RFC 9052 Section 1.5: the label beside 33 is its own label, never a second x5chain.");
             Assert.IsTrue(chain[0].AsReadOnlySpan().SequenceEqual(new byte[] { 0x07 }), "The chain is the value under label 33.");
         }
         finally

@@ -386,6 +386,27 @@ internal sealed class CoseSignTests
 
 
     /// <summary>
+    /// A COSE_Sign whose body or signer protected bucket carries <c>alg</c> twice and then an entry that cannot be
+    /// read (a byte-string label, or the end of the data before the declared count of entries) fails closed to an
+    /// unsuccessful result. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "Labels in each of the maps MUST be unique. When processing messages, if a label appears multiple times, the
+    /// message MUST be rejected as malformed."
+    /// </summary>
+    /// <param name="wireBytes">The untagged COSE_Sign wire bytes.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0x84, 0x48, 0xA3, 0x01, 0x26, 0x01, 0x26, 0x41, 0x00, 0x00, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "body alg twice, then a byte-string label")]
+    [DataRow(new byte[] { 0x84, 0x45, 0xA3, 0x01, 0x26, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "body alg twice, then the end of a declared count of three")]
+    [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x48, 0xA3, 0x01, 0x26, 0x01, 0x26, 0x41, 0x00, 0x00, 0xA0, 0x41, 0x00 }, DisplayName = "signer alg twice, then a byte-string label")]
+    [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x45, 0xA3, 0x01, 0x26, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "signer alg twice, then the end of a declared count of three")]
+    public void ParseFailsClosedOnARepeatBeforeAnUnreadableProtectedEntry(byte[] wireBytes)
+    {
+        using CoseSignParseResult parseResult = CoseSerialization.ParseCoseSign(wireBytes, BaseMemoryPool.Shared);
+
+        Assert.IsFalse(parseResult.IsSuccess, "A protected bucket repeating a label is malformed whatever follows the repeat; the parse must fail closed.");
+    }
+
+
+    /// <summary>
     /// A COSE_Sign whose body protected bucket carries a text-string label beside <c>alg</c>, and whose body
     /// unprotected bucket carries <c>kid</c>, is parsed: the text-string label is well-formed and passed over.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".

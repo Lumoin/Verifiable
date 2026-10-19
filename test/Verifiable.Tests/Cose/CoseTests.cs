@@ -420,9 +420,9 @@ internal sealed class CoseTests
     /// <summary>
     /// A protected bucket whose map carries one label twice is refused as malformed, judged on the decoded
     /// label: <c>alg</c> twice in minimal form, <c>alg</c> twice with the second label in a two-byte width,
-    /// <c>alg</c> twice with the same value, and one text-string label twice.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of
-    /// the maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be
+    /// <c>alg</c> twice with the same value, <c>alg</c> twice with the second value null, and one text-string label
+    /// twice. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each
+    /// of the maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be
     /// rejected as malformed."
     /// </summary>
     /// <param name="protectedHeader">The serialized protected bucket.</param>
@@ -430,6 +430,7 @@ internal sealed class CoseTests
     [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x01, 0x38, 0x22 }, DisplayName = "alg twice, minimal form")]
     [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x18, 0x01, 0x38, 0x22 }, DisplayName = "alg twice, second label in two widths")]
     [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x01, 0x26 }, DisplayName = "alg twice, same value")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x38, 0x22, 0x01, 0xF6 }, DisplayName = "alg twice, second value null")]
     [DataRow(new byte[] { 0xA2, 0x61, 0x78, 0x01, 0x61, 0x78, 0x02 }, DisplayName = "text label twice")]
     public void ParseProtectedHeaderRefusesARepeatedLabel(byte[] protectedHeader)
     {
@@ -480,9 +481,9 @@ internal sealed class CoseTests
 
 
     /// <summary>
-    /// A COSE_Sign1 whose unprotected bucket carries one label twice (in one width, or in two widths), or whose
-    /// protected bucket carries one label twice while the unprotected bucket is empty, is refused as malformed by
-    /// both COSE_Sign1 parsers. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// A COSE_Sign1 whose unprotected bucket carries one label twice (in one width, or in two widths, also beside an
+    /// empty protected bucket), or whose protected bucket carries one label twice while the unprotected bucket is
+    /// empty, is refused as malformed by both COSE_Sign1 parsers. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
     /// "Labels in each of the maps MUST be unique. When processing messages, if a label appears multiple times,
     /// the message MUST be rejected as malformed."
     /// </summary>
@@ -493,10 +494,12 @@ internal sealed class CoseTests
     [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x18, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected kid twice, two widths")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x45, 0xA2, 0x01, 0x26, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: protected alg twice, unprotected empty")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x47, 0xA2, 0x61, 0x78, 0x01, 0x61, 0x78, 0x02, 0xA0, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: protected text label twice")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x40, 0xA2, 0x04, 0x42, 0x6B, 0x31, 0x04, 0x42, 0x6B, 0x32, 0x40, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected kid twice, empty protected bucket")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected kid twice")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x18, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected kid twice, two widths")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x45, 0xA2, 0x01, 0x26, 0x01, 0x26, 0xA0, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: protected alg twice, unprotected empty")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x47, 0xA2, 0x61, 0x78, 0x01, 0x61, 0x78, 0x02, 0xA0, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: protected text label twice")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x40, 0xA2, 0x04, 0x42, 0x6B, 0x31, 0x04, 0x42, 0x6B, 0x32, 0x40, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected kid twice, empty protected bucket")]
     public void ParseCoseSign1RefusesARepeatedLabel(byte[] wireBytes, bool isNilPayloadParser)
     {
         ParseCoseSign1Delegate parse = SelectCoseSign1Parser(isNilPayloadParser);
@@ -572,6 +575,218 @@ internal sealed class CoseTests
 
 
     /// <summary>
+    /// A protected bucket that carries <c>alg</c> twice and then a byte-string label, an entry that cannot be read, is
+    /// refused as malformed by <see cref="CoseSerialization.ParseCoseSign1"/>: each label is judged as it is read, so
+    /// the repeat is refused at its second occurrence, before the unreadable entry is reached.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of the
+    /// maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed."
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA3, 0x01, 0x26, 0x01, 0x26, 0x41, 0x00, 0x00 }, DisplayName = "alg twice, then a byte-string label")]
+    public void ParseCoseSign1RefusesARepeatBeforeAnUnreadableProtectedEntry(byte[] protectedHeader)
+    {
+        byte[] wireBytes = CoseWireFixtures.ComposeCoseSign1(protectedHeader, [0xA0], [0x00], [0x00]);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => CoseSerialization.ParseCoseSign1(wireBytes, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> refuses as malformed a protected bucket whose
+    /// labels cannot be read: one that repeats <c>alg</c> before a byte-string label or before the end of its declared
+    /// count, one that is a byte string rather than a map, and one whose declared count runs past its end without a
+    /// repeat. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "empty_or_serialized_map = bstr .cbor header_map / bstr .size 0".
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA3, 0x01, 0x26, 0x01, 0x26, 0x41, 0x00, 0x00 }, DisplayName = "alg twice, then a byte-string label")]
+    [DataRow(new byte[] { 0xA3, 0x01, 0x26, 0x01, 0x26 }, DisplayName = "alg twice, then the end of a declared count of three")]
+    [DataRow(new byte[] { 0x41, 0x00 }, DisplayName = "a byte string, not a map")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26 }, DisplayName = "a declared count of two over one entry")]
+    public void ParseCoseSign1AllowingNilPayloadRefusesAnUnreadableProtectedBucket(byte[] protectedHeader)
+    {
+        byte[] wireBytes = CoseWireFixtures.ComposeCoseSign1(protectedHeader, [0xA0], [0x00], [0x00]);
+
+        _ = Assert.ThrowsExactly<CborContentException>(
+            () => CoseSerialization.ParseCoseSign1AllowingNilPayload(wireBytes, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// Both COSE_Sign1 parsers return every buffer they rented from the caller's pool when they refuse a message: a
+    /// protected bucket repeating a label, an unprotected bucket repeating a label, one label in both buckets, an
+    /// unprotected label of another kind, an unprotected map whose value cannot be read, and (at the parser that
+    /// admits a nil payload) a protected bucket that is not a map.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    /// <param name="wireBytes">The tagged COSE_Sign1 wire bytes.</param>
+    /// <param name="isNilPayloadParser">Whether the row drives <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> rather than <see cref="CoseSerialization.ParseCoseSign1"/>.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x45, 0xA2, 0x01, 0x26, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: protected alg twice")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected kid twice")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: alg in both buckets")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x41, 0x01, 0x01, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected byte-string label")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x04, 0xA1, 0xF6, 0x00, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected value keyed by null")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x45, 0xA2, 0x01, 0x26, 0x01, 0x26, 0xA0, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: protected alg twice")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected kid twice")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: alg in both buckets")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x41, 0x01, 0x01, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected byte-string label")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x04, 0x5F, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected value cut short")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x42, 0x41, 0x00, 0xA0, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: protected bucket not a map")]
+    public void ParseCoseSign1ReturnsEveryRentedBufferWhenItRefusesAMessage(byte[] wireBytes, bool isNilPayloadParser)
+    {
+        using MeteredHousePool metered = new();
+        ParseCoseSign1Delegate parse = SelectCoseSign1Parser(isNilPayloadParser);
+
+        _ = Assert.Throws<Exception>(() => parse(wireBytes, metered.Pool), "RFC 9052 Section 3: the message is refused.");
+        Assert.AreEqual(0L, metered.OutstandingCount, "Every buffer the parser rented before the refusal is returned to the pool.");
+    }
+
+
+    /// <summary>
+    /// Both COSE_Sign1 parsers refuse as malformed a protected bucket that carries bytes after its map.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "empty_or_serialized_map = bstr .cbor header_map / bstr .size 0".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949 Section 1.2</see>: "A well-formed data
+    /// item uses the initial bytes and the byte strings and/or data items that are implied by their values as defined
+    /// in CBOR and does not include following extraneous data."
+    /// </summary>
+    /// <param name="isNilPayloadParser">Whether the row drives <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> rather than <see cref="CoseSerialization.ParseCoseSign1"/>.</param>
+    [TestMethod]
+    [DataRow(false, DisplayName = "ParseCoseSign1")]
+    [DataRow(true, DisplayName = "AllowingNilPayload")]
+    public void ParseCoseSign1RefusesBytesAfterTheProtectedMap(bool isNilPayloadParser)
+    {
+        byte[] wireBytes = CoseWireFixtures.ComposeCoseSign1([0xA1, 0x01, 0x26, 0x00], [0xA0], [0x00], [0x00]);
+        ParseCoseSign1Delegate parse = SelectCoseSign1Parser(isNilPayloadParser);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => parse(wireBytes, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// Both COSE_Sign1 parsers refuse as malformed a COSE_Sign1 followed by one more byte.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949 Section 1.2</see>: "A well-formed data
+    /// item uses the initial bytes and the byte strings and/or data items that are implied by their values as defined
+    /// in CBOR and does not include following extraneous data."
+    /// </summary>
+    /// <param name="isNilPayloadParser">Whether the row drives <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> rather than <see cref="CoseSerialization.ParseCoseSign1"/>.</param>
+    [TestMethod]
+    [DataRow(false, DisplayName = "ParseCoseSign1")]
+    [DataRow(true, DisplayName = "AllowingNilPayload")]
+    public void ParseCoseSign1RefusesBytesAfterTheMessage(bool isNilPayloadParser)
+    {
+        byte[] wireBytes = [.. CoseWireFixtures.ComposeCoseSign1([0xA1, 0x01, 0x26], [0xA0], [0x00], [0x00]), 0x00];
+        ParseCoseSign1Delegate parse = SelectCoseSign1Parser(isNilPayloadParser);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => parse(wireBytes, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// The protected-header reader refuses as malformed a serialized protected header that carries bytes after its
+    /// map. <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949 Section 1.2</see>: "A well-formed
+    /// data item uses the initial bytes and the byte strings and/or data items that are implied by their values as
+    /// defined in CBOR and does not include following extraneous data."
+    /// </summary>
+    [TestMethod]
+    public void ParseProtectedHeaderRefusesBytesAfterTheMap()
+    {
+        _ = Assert.ThrowsExactly<CborContentException>(() => CoseSerialization.ParseProtectedHeader(new byte[] { 0xA1, 0x01, 0x26, 0x00 }));
+    }
+
+
+    /// <summary>
+    /// A correctly signed COSE_Sign1 whose protected bucket carries bytes after its map fails the verification and
+    /// answers a result, never an exception.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949 Section 1.2</see>: "A well-formed data
+    /// item uses the initial bytes and the byte strings and/or data items that are implied by their values as defined
+    /// in CBOR and does not include following extraneous data."
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyAndDecodeRefusesBytesAfterTheProtectedMap()
+    {
+        CoseVerificationResult result = await SignAndVerifyOverProtectedBucketAsync([0xA1, 0x01, 0x26, 0x00]).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A protected bucket carrying bytes after its map is not a serialized header map and fails the verification.");
+    }
+
+
+    /// <summary>
+    /// A correctly signed COSE_Sign1 whose protected bucket carries an <c>alg</c> value below the 64-bit signed range
+    /// fails the verification and answers a result, never an exception: the decoded header cannot carry the value, so
+    /// the bucket is refused as one the reader cannot represent.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6">RFC 8949 Section 5.6</see>: "The encoding and
+    /// decoding applications need to agree on what types of keys are going to be used in maps."
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyAndDecodeFailsForAnAlgorithmBelowTheSixtyFourBitRange()
+    {
+        CoseVerificationResult result = await SignAndVerifyOverProtectedBucketAsync(
+            [0xA1, 0x01, 0x3B, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A protected bucket the reader cannot represent fails the verification.");
+    }
+
+
+    /// <summary>
+    /// A correctly signed COSE_Sign1 whose protected bucket carries a well-formed map under a text-string label the
+    /// header dictionary does not carry verifies: the label is judged, its value passed over whole and nothing inside
+    /// the value is read. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>:
+    /// "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyAndDecodePassesOverAMapUnderATextLabel()
+    {
+        CoseVerificationResult result = await SignAndVerifyOverProtectedBucketAsync(
+            [0xA2, 0x01, 0x26, 0x63, 0x65, 0x78, 0x74, 0xA2, 0x01, 0x00, 0x02, 0x01]).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid, "RFC 9052 Section 1.5: the text-string label and its value are passed over and the message verifies.");
+        Assert.AreEqual(WellKnownCoseAlgorithms.Es256, result.Algorithm, "The algorithm is read beside the passed-over label.");
+    }
+
+
+    /// <summary>
+    /// The COSE_Key reader refuses a <c>kty</c>, <c>crv</c> or <c>alg</c> identifier outside the 32-bit signed range
+    /// whose low 32 bits name an identifier the library supports: the value is read whole and never read as the
+    /// identifier its low word spells. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-7.1">RFC 9052
+    /// Section 7.1</see>: "The key type MUST be included as part of the trust-decision process."
+    /// </summary>
+    /// <param name="coseKey">The encoded COSE_Key.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA1, 0x01, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01 }, DisplayName = "kty 4294967297")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x01, 0x20, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06 }, DisplayName = "crv 4294967302")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x02, 0x03, 0x1A, 0xFF, 0xFF, 0xFF, 0xF9 }, DisplayName = "alg 4294967289")]
+    public void CoseKeyReaderRefusesAnIdentifierOutsideTheThirtyTwoBitRange(byte[] coseKey)
+    {
+        _ = Assert.ThrowsExactly<CborContentException>(() => MdocCborCoseKeyReader.Read(coseKey));
+    }
+
+
+    /// <summary>
+    /// The family of exceptions the CBOR readers answer malformed input with leaves out
+    /// <see cref="ObjectDisposedException"/>: a carrier or a pool used after its disposal is the caller's lifetime
+    /// fault, never content of the data item read.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949 Section 1.2</see>: "CBOR decoders by
+    /// definition only return contents from well-formed data items."
+    /// </summary>
+    [TestMethod]
+    public void TheMalformedInputFamilyLeavesOutAnObjectDisposedException()
+    {
+        Assert.IsFalse(
+            CoseSerialization.IsMalformedInputException(new ObjectDisposedException("carrier")),
+            "A disposed carrier is the caller's fault and is never answered as malformed input.");
+        Assert.IsTrue(
+            CoseSerialization.IsMalformedInputException(new InvalidOperationException("state")),
+            "A read in the wrong reader state stays in the family.");
+    }
+
+
+    /// <summary>
     /// A correctly signed COSE_Sign1 whose protected bucket carries <c>alg</c> and a text-string label verifies, and
     /// its algorithm is read: the text-string label is well-formed and passed over.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
@@ -624,7 +839,7 @@ internal sealed class CoseTests
 
     /// <summary>
     /// A COSE_Key carrying 32 bytes under label 4294967294 and nothing under -2 has no <c>x</c> coordinate: a label
-    /// beyond 32 bits is its own label and is never read as the label of its low 32 bits.
+    /// outside the 32-bit signed range is its own label and is never read as the label its low 32 bits spell.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
     /// </summary>
     [TestMethod]
@@ -635,6 +850,24 @@ internal sealed class CoseTests
         CoseKey read = MdocCborCoseKeyReader.Read(coseKey);
 
         Assert.IsNull(read.X, "The value under 4294967294 is not the x coordinate.");
+    }
+
+
+    /// <summary>
+    /// A COSE_Key carrying a text-string label beside <c>kty</c> and <c>x</c> is read, and <c>x</c> is the value under
+    /// -2: the text-string label is well-formed, judged for a repeat and passed over with its value.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public void CoseKeyReaderPassesOverATextLabel()
+    {
+        byte[] x = [.. Enumerable.Repeat((byte)0x11, 32)];
+        byte[] coseKey = [0xA3, 0x01, 0x02, 0x61, 0x78, 0x41, 0x00, 0x21, 0x58, 0x20, .. x];
+
+        CoseKey read = MdocCborCoseKeyReader.Read(coseKey);
+
+        Assert.IsNotNull(read.X, "RFC 9052 Section 1.5: the text-string label is passed over and x is read.");
+        Assert.IsTrue(read.X.Value.Span.SequenceEqual(x), "x is the value under -2.");
     }
 
 

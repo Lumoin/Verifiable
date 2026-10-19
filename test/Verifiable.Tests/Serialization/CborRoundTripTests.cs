@@ -288,9 +288,9 @@ internal sealed class CborRoundTripTests
     /// <summary>
     /// A nested map read through <see cref="CborValueConverter.ReadValue(CborReader)"/> whose map key appears
     /// twice by the equivalence of map keys is refused: one floating-point value written in two widths,
-    /// -0.0 and 0.0, two arrays equal element by element, two maps holding the same pairs in another order, one
-    /// tagged value twice, the simple value <c>true</c> twice, and two NaN values whose significands are equal
-    /// after zero-extension, written in two widths.
+    /// -0.0 and 0.0, two arrays equal element by element (one of them holding the simple value <c>null</c>), two
+    /// maps holding the same pairs in another order, one tagged value twice, the simple value <c>true</c> twice,
+    /// and two NaN values whose significands are equal after zero-extension, written in two widths.
     /// </summary>
     /// <remarks>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6.1">RFC 8949 Section 5.6.1</see>: "Within
@@ -308,8 +308,10 @@ internal sealed class CborRoundTripTests
     [DataRow(new byte[] { 0xA2, 0xF9, 0x3C, 0x00, 0x00, 0xFA, 0x3F, 0x80, 0x00, 0x00, 0x01 }, DisplayName = "float map key 1.0 twice, half and single width")]
     [DataRow(new byte[] { 0xA2, 0xF9, 0x80, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x00, 0x01 }, DisplayName = "-0.0 and 0.0 as map keys")]
     [DataRow(new byte[] { 0xA2, 0x82, 0x01, 0x02, 0x00, 0x82, 0x01, 0x02, 0x01 }, DisplayName = "array map key twice")]
+    [DataRow(new byte[] { 0xA2, 0x81, 0xF6, 0x00, 0x81, 0xF6, 0x01 }, DisplayName = "array map key [null] twice")]
     [DataRow(new byte[] { 0xA2, 0xA2, 0x01, 0x02, 0x03, 0x04, 0x00, 0xA2, 0x03, 0x04, 0x01, 0x02, 0x01 }, DisplayName = "map as map key twice, pairs in another order")]
     [DataRow(new byte[] { 0xA2, 0xC1, 0x05, 0x00, 0xC1, 0x05, 0x01 }, DisplayName = "tagged map key 1(5) twice")]
+    [DataRow(new byte[] { 0xA2, 0xC2, 0x41, 0x01, 0x00, 0xC2, 0x41, 0x01, 0x01 }, DisplayName = "tagged map key 2(h'01') twice")]
     [DataRow(new byte[] { 0xA2, 0xF5, 0x00, 0xF5, 0x01 }, DisplayName = "true twice")]
     [DataRow(new byte[] { 0xA2, 0xF9, 0x7E, 0x00, 0x00, 0xFA, 0x7F, 0xC0, 0x00, 0x00, 0x01 }, DisplayName = "NaN twice, equal significands, half and single width")]
     public void ValueConverterRefusesAnEquivalentMapKey(byte[] encodedMap)

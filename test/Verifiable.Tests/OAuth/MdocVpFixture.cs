@@ -692,6 +692,53 @@ internal static class MdocVpFixture
 
 
     /// <summary>
+    /// Signs an IssuerAuth COSE_Sign1's payload again under the issuer key over <paramref name="protectedHeader"/> as
+    /// given and writes the message with that protected bucket, every other element copied as it was, so the issuer
+    /// signature over the rewritten protected bucket is genuine.
+    /// </summary>
+    /// <param name="issuerAuth">The encoded IssuerAuth COSE_Sign1.</param>
+    /// <param name="issuerKey">The issuer's signing key.</param>
+    /// <param name="protectedHeader">The serialized protected bucket the new signature covers.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The encoded IssuerAuth over <paramref name="protectedHeader"/>.</returns>
+    public static async ValueTask<byte[]> ResignIssuerAuthOverProtectedBucketAsync(
+        ReadOnlyMemory<byte> issuerAuth, PrivateKeyMemory issuerKey, byte[] protectedHeader, CancellationToken cancellationToken)
+    {
+        var reader = new CborReader(issuerAuth, CborOptions.Lax);
+        CborTag? issuerAuthTag = reader.PeekState() == CborReaderState.Tag ? reader.ReadTag() : null;
+        _ = reader.ReadStartArray();
+        _ = reader.ReadByteString();
+        ReadOnlyMemory<byte> unprotectedHeader = reader.ReadEncodedValue();
+        byte[] payload = reader.ReadByteString();
+
+        using CoseSign1Message signed = await Verifiable.JCose.Cose.SignAsync(
+            EncodedCoseProtectedHeader.FromBytes(protectedHeader, Pool),
+            unprotectedHeader: null,
+            payload,
+            CoseSerialization.BuildSigStructure,
+            issuerKey,
+            Pool,
+            cancellationToken).ConfigureAwait(false);
+
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        if(issuerAuthTag is CborTag tag)
+        {
+            writer.WriteTag(tag);
+        }
+
+        writer.WriteStartArray(4);
+        writer.WriteByteString(protectedHeader);
+        writer.WriteEncodedValue(unprotectedHeader.Span);
+        writer.WriteByteString(payload);
+        writer.WriteByteString(signed.Signature.AsReadOnlySpan());
+        writer.WriteEndArray();
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>
     /// Walks one step of <paramref name="path"/> per nesting level for
     /// <see cref="RewriteAt(ReadOnlyMemory{byte}, IReadOnlyList{object}, Func{ReadOnlyMemory{byte}, byte[]})"/>.
     /// </summary>

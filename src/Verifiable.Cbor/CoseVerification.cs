@@ -1,4 +1,3 @@
-using Lumoin.Veritas.Cbor;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -22,18 +21,29 @@ public static class CoseVerification
     /// <see cref="CoseVerificationResult"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Fail-closed over untrusted input: malformed bytes or a failed signature yield a result with
     /// <see cref="CoseVerificationResult.IsValid"/> <see langword="false"/>, never a thrown exception —
-    /// matching the JWS verify paths. A protected bucket the parser refuses as malformed (a label that
-    /// appears twice among them, <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>)
-    /// fails the verification; it is never read as an absent algorithm. The verifying function is resolved from <paramref name="publicKey"/>'s
-    /// tag through the crypto-function registry, so the caller supplies only the key.
+    /// matching the JWS verify paths. A protected bucket the parser refuses as malformed, one that is not a
+    /// well-formed map of labels or that carries a label twice, fails the verification; it is never read as an
+    /// absent algorithm (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
+    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed."). A
+    /// well-formed protected bucket carrying a label the header dictionary does not carry, a text string or an
+    /// integer outside the 32-bit signed range, is read, and its algorithm is read from it as usual
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr").
+    /// </para>
+    /// <para>
+    /// The verifying function is resolved from <paramref name="publicKey"/>'s tag through the crypto-function
+    /// registry, so the caller supplies only the key.
+    /// </para>
     /// </remarks>
     /// <param name="encodedCoseSign1">The tagged COSE_Sign1 wire bytes.</param>
     /// <param name="publicKey">The verifying public key; its tag selects the verification function.</param>
     /// <param name="pool">Memory pool for the transient parse buffers.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result; <see cref="CoseVerificationResult.IsValid"/> is <see langword="false"/> on any failure.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="publicKey"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is cancelled.</exception>
     public static async ValueTask<CoseVerificationResult> VerifyAndDecodeAsync(
         ReadOnlyMemory<byte> encodedCoseSign1,
         PublicKeyMemory publicKey,
@@ -50,7 +60,7 @@ public static class CoseVerification
         {
             message = CoseSerialization.ParseCoseSign1(encodedCoseSign1, pool);
         }
-        catch(Exception ex) when(ex is CborException or InvalidOperationException or ArgumentException or IndexOutOfRangeException)
+        catch(Exception ex) when(CoseSerialization.IsMalformedInputException(ex))
         {
             //Malformed, untagged, or wrong-shape COSE on untrusted input — fail closed, like the JWS
             //verify paths, rather than letting the CBOR reader's exception escape.
@@ -113,7 +123,7 @@ public static class CoseVerification
         {
             protectedMap = CoseSerialization.ParseProtectedHeader(protectedHeader);
         }
-        catch(Exception ex) when(ex is CborException or InvalidOperationException)
+        catch(Exception ex) when(CoseSerialization.IsMalformedInputException(ex))
         {
             return false;
         }

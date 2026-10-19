@@ -51,9 +51,21 @@ public static class CborValueConverter
     /// <summary>
     /// Writes a CLR value as CBOR.
     /// </summary>
+    /// <remarks>
+    /// An object-keyed dictionary whose entries would be written as the same map key twice is refused before anything
+    /// of it is written: two entries the dictionary tells apart can be one map key on the wire (a boxed
+    /// <see cref="int"/> 1 and a boxed <see cref="long"/> 1 are both the integer 1), and sameness is the RFC 8949
+    /// Section 5.6.1 equivalence the reading side refuses a repeated map key by.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// </remarks>
     /// <param name="writer">The CBOR writer.</param>
     /// <param name="value">The value to write.</param>
     /// <exception cref="NotSupportedException">Thrown when the type is not supported.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when an object-keyed dictionary in <paramref name="value"/> holds two entries that would be written as
+    /// the same map key.
+    /// </exception>
     public static void WriteValue(CborWriter writer, object? value)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -213,9 +225,28 @@ public static class CborValueConverter
     /// <summary>
     /// Reads a CBOR value and converts it to a CLR object.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A CBOR map is answered as a <see cref="Dictionary{TKey, TValue}"/> that compares its map keys by the
+    /// equivalence of map keys of <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6.1">RFC 8949
+    /// Section 5.6.1</see>, so a lookup by a boxed <see cref="long"/> finds an <see cref="int"/> map key of the same
+    /// value and a lookup by a byte array compares its content. A map that carries one map key twice by that
+    /// equivalence is refused (<see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949
+    /// Section 3.1</see>: "A map that has duplicate keys may be well-formed, but it is not valid, and thus it causes
+    /// indeterminate decoding; see also Section 5.6.").
+    /// </para>
+    /// <para>
+    /// The decoded dictionary carries no null map key, so a map whose map key is the CBOR simple value null is
+    /// refused as one the decoded form cannot represent
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6">RFC 8949 Section 5.6</see>: "The encoding and
+    /// decoding applications need to agree on what types of keys are going to be used in maps.").
+    /// </para>
+    /// </remarks>
     /// <param name="reader">The CBOR reader.</param>
     /// <returns>The converted CLR object.</returns>
-    /// <exception cref="CborContentException">Thrown when the CBOR content is invalid.</exception>
+    /// <exception cref="CborContentException">
+    /// Thrown when the CBOR content is invalid, when a map carries one map key twice, or when a map's map key is null.
+    /// </exception>
     public static object? ReadValue(ref CborReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
@@ -248,8 +279,12 @@ public static class CborValueConverter
     /// <summary>
     /// Reads a CBOR value using non-ref parameter (for delegate compatibility).
     /// </summary>
+    /// <remarks>The map rules of <see cref="ReadValue(ref CborReader)"/> hold here alike.</remarks>
     /// <param name="reader">The CBOR reader.</param>
     /// <returns>The converted CLR object.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the CBOR content is invalid, when a map carries one map key twice, or when a map's map key is null.
+    /// </exception>
     public static object? ReadValue(CborReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
@@ -322,7 +357,7 @@ public static class CborValueConverter
     /// </remarks>
     /// <param name="reader">The CBOR reader positioned at the start of the map.</param>
     /// <returns>The map's entries.</returns>
-    /// <exception cref="CborContentException">A map key appears twice in the map.</exception>
+    /// <exception cref="CborContentException">A map key appears twice in the map, or a map key is null.</exception>
     private static Dictionary<object, object?> ReadMap(ref CborReader reader)
     {
         int? count = reader.ReadStartMap();
@@ -330,7 +365,8 @@ public static class CborValueConverter
 
         while(reader.PeekState() != CborReaderState.EndMap)
         {
-            object key = ReadValue(ref reader)!;
+            object key = ReadValue(ref reader) ?? throw new CborContentException(
+                "A CBOR map carries the map key null, which the decoded dictionary cannot carry (RFC 8949 Section 5.6).");
             if(dict.ContainsKey(key))
             {
                 throw new CborContentException(
@@ -539,8 +575,10 @@ public static class CborValueConverter
     /// compared byte by byte, arrays are compared element by element, and are equal if they have the same number of
     /// bytes/elements and the same values at the same positions. Two maps are equal if they have the same set of
     /// pairs regardless of their order; pairs are equal if both the key and value are equal." and "Tagged values are
-    /// equal if both the tag number and the tag content are equal. ... Simple values are equal if they simply have
-    /// the same value. Nothing else is equal in the generic data model".
+    /// equal if both the tag number and the tag content are equal. (...) Simple values are equal if they simply have
+    /// the same value. Nothing else is equal in the generic data model; a simple value 2 is not equivalent to an
+    /// integer 2, and an array is never equivalent to a map." The cut "(...)" leaves out the parenthesised note on
+    /// tag 2 and tag 3 content with leading zeroes, which a generic decoder may not tell apart.
     /// </para>
     /// <para>
     /// The CLR forms: every integer type, and a <see cref="DateTimeOffset"/> or <see cref="DateTime"/> (written
@@ -552,10 +590,29 @@ public static class CborValueConverter
     /// compared element by element; the <c>(ulong Tag, object? Value)</c> tuple <see cref="ReadTaggedValue"/>
     /// answers is a tagged value compared by tag number and content; a <see cref="decimal"/>, written as a Tag 4
     /// decimal fraction, compares by its exponent and mantissa; <see langword="true"/>, <see langword="false"/> and
-    /// <see langword="null"/> compare by value; anything else by <see cref="object.Equals(object?, object?)"/>.
+    /// <see langword="null"/> compare by value (<see langword="null"/> is never a map key of a decoded map, but it is
+    /// an element of an array or a value of a map that is one); anything else by
+    /// <see cref="object.Equals(object?, object?)"/>.
+    /// </para>
+    /// <para>
+    /// Two forms the decoded value cannot carry as Section 5.6.1 compares them. First, the reader decodes a
+    /// half-width floating-point value through <see cref="Half"/> into a <see cref="double"/>, and that conversion
+    /// sets the quiet bit of a NaN: a half-width signalling NaN therefore decodes with a significand other than its
+    /// own, so it and the single-width NaN of the same significand are judged two map keys where Section 5.6.1 calls
+    /// them one, and it and the half-width quiet NaN whose significand differs only in that bit are judged one map
+    /// key where Section 5.6.1 calls them two. Second, the writer: two <see cref="double"/> NaN map keys of different
+    /// significands are two map keys here, so <see cref="WriteValue"/> does not refuse them, and the canonical writer
+    /// of the pinned CBOR package writes every <see cref="double"/> NaN under a deterministic mode, unless its options
+    /// suppress the float reduction, as the one half-width quiet NaN <c>0xF97E00</c>, so such a dictionary written
+    /// under a deterministic mode carries that map
+    /// key twice on the wire; <see cref="float"/> and <see cref="Half"/> NaN values are written with their own bits.
+    /// </para>
+    /// <para>
+    /// The comparer is internal to the assembly so the leaf's claim readers judge a claims-map key of any other kind by
+    /// this one equivalence.
     /// </para>
     /// </remarks>
-    private sealed class MapKeyEquivalence: IEqualityComparer<object>
+    internal sealed class MapKeyEquivalence: IEqualityComparer<object>
     {
         /// <summary>The one instance; the equivalence holds no state.</summary>
         public static MapKeyEquivalence Instance { get; } = new();

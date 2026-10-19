@@ -1,3 +1,4 @@
+using Lumoin.Veritas.Cbor;
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using Verifiable.Cbor;
@@ -158,16 +159,15 @@ internal sealed class CosePresentationFlowTests
 
     /// <summary>
     /// A presentation carrying a COSE-secured credential whose genuinely signed protected bucket repeats
-    /// <c>kid</c> is reconstructed from the wire JSON like any other, and the verifier refuses the credential
-    /// with a failure value. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section
-    /// 3</see>: "When processing messages, if a label appears multiple times, the message MUST be rejected as
-    /// malformed."
+    /// <c>kid</c> is reconstructed from the wire JSON like any other, and the verifier's COSE parse of the enveloped
+    /// credential refuses it as malformed with the parser's own failure, before any signature is judged.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
     /// </summary>
     [TestMethod]
     public async Task PresentationOfACoseCredentialRepeatingKidIsRefused()
     {
         using var privateKey = DataIntegrity.CredentialSecuringMaterial.DecodeEd25519PrivateKey();
-        using var publicKey = DataIntegrity.CredentialSecuringMaterial.DecodeEd25519PublicKey();
 
         const string holderDid = "did:example:holder";
         var issuer = new Issuer { Id = IssuerDidWeb, Name = ClaimValueUniversityName };
@@ -217,18 +217,10 @@ internal sealed class CosePresentationFlowTests
 
         string envelopedId = receivedPresentation.EnvelopedVerifiableCredential![0].Id!;
         byte[] decodedCose = Convert.FromBase64String(envelopedId[VcCoseDataUrlPrefix.Length..]);
-        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(decodedCose, BaseMemoryPool.Shared);
 
-        CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
-            parsed,
-            CoseSerialization.BuildSigStructure,
-            publicKey,
-            CredentialFromJsonBytes,
-            CoseSerialization.ParseProtectedHeader,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.IsFalse(result.IsValid, "RFC 9052 Section 3: a credential whose protected bucket repeats kid is malformed and is not verified.");
-        Assert.IsNull(result.Credential, "A refused credential yields no verified credential.");
+        _ = Assert.ThrowsExactly<CborContentException>(
+            () => CoseSerialization.ParseCoseSign1(decodedCose, BaseMemoryPool.Shared),
+            "RFC 9052 Section 3: a credential whose protected bucket repeats kid is malformed and is not parsed.");
     }
 
 

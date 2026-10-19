@@ -636,6 +636,66 @@ internal sealed class CoseCounterSignatureTests
 
 
     /// <summary>
+    /// A full countersignature whose protected bucket carries <c>alg</c> twice and then an entry that cannot be read
+    /// (a byte-string label, or the end of the data before the declared count of entries) fails closed to an
+    /// unsuccessful result. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "Labels in each of the maps MUST be unique. When processing messages, if a label appears multiple times, the
+    /// message MUST be rejected as malformed."
+    /// </summary>
+    /// <param name="valueBytes">The encoded countersignature header value.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0x83, 0x48, 0xA3, 0x01, 0x26, 0x01, 0x26, 0x41, 0x00, 0x00, 0xA0, 0x41, 0x00 }, DisplayName = "alg twice, then a byte-string label")]
+    [DataRow(new byte[] { 0x83, 0x45, 0xA3, 0x01, 0x26, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "alg twice, then the end of a declared count of three")]
+    public void ParseCounterSignatureHeaderValueFailsClosedOnARepeatBeforeAnUnreadableProtectedEntry(byte[] valueBytes)
+    {
+        using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
+            CoseHeaderParameters.CounterSignatureVersion2, valueBytes, BaseMemoryPool.Shared);
+
+        Assert.IsFalse(result.IsSuccess, "RFC 9052 Section 3: a countersignature whose protected bucket repeats a label is refused as malformed.");
+    }
+
+
+    /// <summary>
+    /// The countersignature writer refuses, with the caller's own <see cref="ArgumentException"/>, a full
+    /// countersignature whose protected bucket the reading side would refuse: a label carried twice, a label of
+    /// another kind, a bucket whose declared count runs past its end, and a label its unprotected bucket also carries.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket.</param>
+    /// <param name="isAlgUnprotected">Whether the unprotected bucket carries <c>alg</c>.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x01, 0x26 }, false, DisplayName = "alg twice")]
+    [DataRow(new byte[] { 0xA1, 0x41, 0x01, 0x26 }, false, DisplayName = "a byte-string label")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26 }, false, DisplayName = "a declared count of two over one entry")]
+    [DataRow(new byte[] { 0xA1, 0x01, 0x26 }, true, DisplayName = "alg in both buckets")]
+    public async Task WriteCounterSignatureV2RefusesAProtectedBucketTheReaderRefuses(byte[] protectedHeader, bool isAlgUnprotected)
+    {
+        Dictionary<int, object>? unprotectedHeader = isAlgUnprotected
+            ? new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es256 }
+            : null;
+
+        using CoseSign1Message sign1Target = await BuildSignedCoseSign1TargetAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        var coseSign1CountersignTarget = new CoseSign1CountersignTarget(
+            sign1Target.ProtectedHeader.AsReadOnlyMemory(), sign1Target.Payload, sign1Target.Signature.AsReadOnlyMemory());
+
+        var counterSigner = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var counterSignerPublicKey = counterSigner.PublicKey;
+        using var counterSignerPrivateKey = counterSigner.PrivateKey;
+
+        using CounterSignatureV2 counterSignature = await CoseCounterSign.CountersignFullAsync(
+            coseSign1CountersignTarget,
+            EncodedCoseProtectedHeader.FromBytes(protectedHeader, BaseMemoryPool.Shared),
+            unprotectedHeader, ReadOnlyMemory<byte>.Empty, CoseSerialization.BuildCountersignStructure, counterSignerPrivateKey,
+            BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => CoseSerialization.WriteCounterSignatureV2(counterSignature, BaseMemoryPool.Shared),
+            "RFC 9052 Section 9: a countersignature the reading side refuses is never written.");
+    }
+
+
+    /// <summary>
     /// The unknown-label switch arm inside <see cref="CoseSerialization.ParseCounterSignatureHeaderValue"/>
     /// guards a caller bug, not wire data -- every label the delegate's own contract admits (7, 9, 11, 12) is
     /// already enumerated, so ANY other value (including <see cref="CoseHeaderParameters.Alg"/>, 1, used here,

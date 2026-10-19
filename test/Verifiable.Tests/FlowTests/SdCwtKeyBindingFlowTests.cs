@@ -220,14 +220,15 @@ internal sealed class SdCwtKeyBindingFlowTests
 
     /// <summary>
     /// A Key Binding Token whose genuinely signed protected header carries the <c>kcwt</c> (13) label twice is
-    /// refused as malformed with the <c>kcwt</c> reader's own failure, before any embedded SD-CWT is parsed.
+    /// refused as malformed by the COSE parser of the Key Binding Token itself, with that parser's own failure,
+    /// before any embedded SD-CWT is parsed.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
     /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
     /// </summary>
     [TestMethod]
     public async Task VerifierRefusesAKbtRepeatingKcwt()
     {
-        await AssertKbtRefusedAsync<FormatException>(
+        await AssertKbtRefusedAsync<CborContentException>(
             SdCwtVpFixture.BuildProtectedHeaderWithKcwtTwice, SdKbtIssuance.BuildPayload).ConfigureAwait(false);
     }
 
@@ -249,8 +250,11 @@ internal sealed class SdCwtKeyBindingFlowTests
     /// <summary>
     /// A Key Binding Token whose genuinely signed claims map carries the <c>aud</c> (3) claim twice is refused as
     /// malformed with the claims reader's own failure.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
-    /// NOT parse and process messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-7.2">RFC 8392 Section 7.2</see>: "If any of the
+    /// listed steps fail, then the CWT MUST be rejected -- that is, treated by the application as invalid input." Its
+    /// step 7: "Verify that the Message is a valid CBOR map; let the CWT Claims Set be this CBOR map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid".
     /// </summary>
     [TestMethod]
     public async Task VerifierRefusesAKbtRepeatingAClaim()
@@ -270,12 +274,43 @@ internal sealed class SdCwtKeyBindingFlowTests
     [TestMethod]
     public async Task IssuerSignatureVerificationRefusesAnSdCwtRepeatingAProtectedLabel()
     {
+        await AssertIssuerSignatureVerificationRefusesAsync([0xA2, 0x01, 0x26, 0x01, 0x26]).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An SD-CWT carrying no <c>sd_claims</c>, whose genuinely issuer-signed protected bucket carries <c>alg</c> twice
+    /// and then a byte-string label, an entry that cannot be read, is refused by the issuer-signature verification with
+    /// the COSE parser's own failure: each label is judged as it is read. The verification calls the issuer-signature
+    /// parse directly.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of the
+    /// maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed."
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket the issuer signature covers.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA3, 0x01, 0x26, 0x01, 0x26, 0x41, 0x00, 0x00 }, DisplayName = "alg twice, then a byte-string label")]
+    public async Task IssuerSignatureVerificationRefusesARepeatBeforeAnUnreadableProtectedEntry(byte[] protectedHeader)
+    {
+        await AssertIssuerSignatureVerificationRefusesAsync(protectedHeader).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Signs an SD-CWT carrying no <c>sd_claims</c> under a fresh issuer key over <paramref name="protectedHeader"/> as
+    /// given, its unprotected bucket empty, and asserts the issuer-signature verification refuses it with the COSE
+    /// parser's own failure.
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket the issuer signature covers.</param>
+    /// <returns>A task that completes when the refusal has been asserted.</returns>
+    private async Task AssertIssuerSignatureVerificationRefusesAsync(byte[] protectedHeader)
+    {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
             TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
 
-        byte[] repeatedAlgorithmHeader = [0xA2, 0x01, 0x26, 0x01, 0x26];
+        byte[] repeatedAlgorithmHeader = protectedHeader;
         byte[] payload = SdCwtWireFixtures.SerializeCwtClaimMap(new Dictionary<int, object> { [WellKnownCwtClaimNames.Iss] = IssuerId }).ToArray();
 
         using CoseSign1Message signed = await Verifiable.JCose.Cose.SignAsync(

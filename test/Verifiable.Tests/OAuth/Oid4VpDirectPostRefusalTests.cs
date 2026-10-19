@@ -459,8 +459,8 @@ produceWithoutApu,
     /// carrying the embedded presentation SD-CWT under the <c>kcwt</c> (13) parameter per
     /// draft-ietf-spice-sd-cwt §7.1 — is truncated to half its byte length is a shape no
     /// conformant Wallet produces. The outer KBT COSE_Sign1 envelope stays structurally valid (its
-    /// protected header is read as an opaque byte string, so <c>ParseCoseSign1</c> never inspects
-    /// its content), but <see cref="SdCwtVpParsing.ExtractKcwt"/> — reading that content as CBOR —
+    /// protected header is a byte string whose labels <c>ParseCoseSign1</c> reads only to judge a repeat,
+    /// handing on raw a bucket whose labels it cannot read), but <see cref="SdCwtVpParsing.ExtractKcwt"/>, reading that content as CBOR,
     /// rejects the truncation and normalizes it to <see cref="FormatException"/> at its own public
     /// boundary, so the presentation is refused with
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749, Section
@@ -502,7 +502,8 @@ produceWithoutApu,
 truncateProtectedHeader,
                 SdKbtIssuance.BuildPayload,
                 CoseSerialization.BuildSigStructure,
-                CoseSerialization.SerializeCoseSign1,
+                //The library's serializer refuses to write a protected bucket it cannot read, so the wire form is assembled as given.
+                CoseWireFixtures.SerializeCoseSign1AsGiven,
                 Pool,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -558,23 +559,6 @@ truncateProtectedHeader,
 
 
     /// <summary>
-    /// A <c>dc+sd-cwt</c> Key Binding Token whose genuinely signed protected header carries the <c>kcwt</c>
-    /// (13) label twice is refused over the wire with the answer every other malformed Key Binding Token
-    /// protected header gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
-    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
-    /// </summary>
-    [TestMethod]
-    public async Task AnSdCwtKeyBindingTokenRepeatingKcwtIsRefusedAsMalformed()
-    {
-        await AssertSdCwtPresentationRefusedAsMalformedAsync(
-            SdCwtVpFixture.BuildProtectedHeaderWithKcwtTwice,
-            SdKbtIssuance.BuildPayload,
-            "nonce-sdcwt-kcwt-twice").ConfigureAwait(false);
-    }
-
-
-    /// <summary>
     /// A <c>dc+sd-cwt</c> presentation whose embedded SD-CWT carries <c>sd_claims</c> twice in its unprotected
     /// bucket, every Disclosure still present, is refused over the wire with the answer every other malformed
     /// embedded SD-CWT gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
@@ -587,7 +571,8 @@ truncateProtectedHeader,
         await AssertSdCwtPresentationRefusedAsMalformedAsync(
             SdCwtVpFixture.BuildProtectedHeaderWithSdClaimsTwice,
             SdKbtIssuance.BuildPayload,
-            "nonce-sdcwt-sd-claims-twice").ConfigureAwait(false);
+            "nonce-sdcwt-sd-claims-twice",
+            "RFC 9052 Section 3: an embedded SD-CWT repeating sd_claims is malformed").ConfigureAwait(false);
     }
 
 
@@ -595,8 +580,11 @@ truncateProtectedHeader,
     /// A <c>dc+sd-cwt</c> Key Binding Token whose genuinely signed claims map carries the <c>aud</c> (3) claim twice
     /// is refused over the wire with the answer every other malformed Key Binding Token gets: HTTP 400,
     /// <c>invalid_request</c>, the Malformed refusal class's sentence.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
-    /// parse and process messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-7.2">RFC 8392 Section 7.2</see>: "If any of the
+    /// listed steps fail, then the CWT MUST be rejected -- that is, treated by the application as invalid input." Its
+    /// step 7: "Verify that the Message is a valid CBOR map; let the CWT Claims Set be this CBOR map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid".
     /// </summary>
     [TestMethod]
     public async Task AnSdCwtKeyBindingTokenRepeatingAClaimIsRefusedAsMalformed()
@@ -604,7 +592,97 @@ truncateProtectedHeader,
         await AssertSdCwtPresentationRefusedAsMalformedAsync(
             SdKbtIssuance.BuildProtectedHeader,
             SdCwtVpFixture.BuildPayloadWithAudTwice,
-            "nonce-sdcwt-kbt-claim-twice").ConfigureAwait(false);
+            "nonce-sdcwt-kbt-claim-twice",
+            "RFC 8392 Section 7.2: a Key Binding Token claims map repeating a claim key is not a valid CBOR map").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A <c>dc+sd-cwt</c> Key Binding Token whose genuinely signed claims map carries an <c>iat</c> the claims reader
+    /// cannot read as a NumericDate, the integer -2^64, is refused over the wire with the answer every other malformed
+    /// Key Binding Token gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 Section 4.1.2.1</see>, on
+    /// <c>invalid_request</c>: "The request is missing a required parameter, includes an invalid parameter value,
+    /// includes a parameter more than once, or is otherwise malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task AnSdCwtKeyBindingTokenWithAnUnreadableIatIsRefusedAsMalformed()
+    {
+        await AssertSdCwtPresentationRefusedAsMalformedAsync(
+            SdKbtIssuance.BuildProtectedHeader,
+            SdCwtVpFixture.BuildPayloadWithIatBelowTheSignedRange,
+            "nonce-sdcwt-kbt-iat-unreadable",
+            "RFC 6749 Section 4.1.2.1: a Key Binding Token whose iat cannot be read is malformed").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A <c>dc+sd-cwt</c> presentation whose embedded SD-CWT carries a map key twice at a nested level of its genuinely
+    /// issuer-signed claims map, where no claim reader looks and the claims walker alone judges it, is refused over the
+    /// wire with the Malformed answer: the redacted-claim-keys map key <c>simple(59)</c>, the <c>sd_claims</c>
+    /// label 17 and the <c>sd_alg</c> label 18, each twice inside the map under claim 100.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </summary>
+    /// <param name="entriesHex">The claims-map entry appended, as hexadecimal.</param>
+    /// <param name="nonce">The transaction nonce.</param>
+    [TestMethod]
+    [DataRow("1864A2F83B80F83B80", "nonce-sdcwt-nested-simple59-twice", DisplayName = "simple(59) twice at a nested level")]
+    [DataRow("1864A211801180", "nonce-sdcwt-nested-17-twice", DisplayName = "17 twice at a nested level")]
+    [DataRow("1864A212011201", "nonce-sdcwt-nested-18-twice", DisplayName = "18 twice at a nested level")]
+    public async Task AnSdCwtPresentationRepeatingAMechanismMapKeyAtANestedLevelIsRefusedAsMalformed(string entriesHex, string nonce)
+    {
+        await AssertSdCwtPresentationRefusedAsMalformedAsync(
+            SdCwtVpFixture.PrepareProtectedHeaderWithClaimsAppended(Convert.FromHexString(entriesHex), entryCount: 1),
+            SdKbtIssuance.BuildPayload,
+            nonce,
+            "RFC 8949 Section 3.1: a nested claims map repeating a mechanism map key is not valid",
+            isTrustEvidenceWired: false).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A <c>dc+sd-cwt</c> presentation whose embedded SD-CWT carries one byte-string map key twice at the top level of
+    /// its genuinely issuer-signed claims map is refused over the wire with the Malformed answer.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-7.2">RFC 8392 Section 7.2</see>: "If any of the
+    /// listed steps fail, then the CWT MUST be rejected -- that is, treated by the application as invalid input." Its
+    /// step 7: "Verify that the Message is a valid CBOR map; let the CWT Claims Set be this CBOR map."
+    /// </summary>
+    [TestMethod]
+    public async Task AnSdCwtPresentationRepeatingAByteStringClaimsMapKeyIsRefusedAsMalformed()
+    {
+        await AssertSdCwtPresentationRefusedAsMalformedAsync(
+            SdCwtVpFixture.PrepareProtectedHeaderWithClaimsAppended([0x41, 0x01, 0x00, 0x41, 0x01, 0x01], entryCount: 2),
+            SdKbtIssuance.BuildPayload,
+            "nonce-sdcwt-byte-string-key-twice",
+            "RFC 8392 Section 7.2: a claims map repeating a byte-string map key is not a valid CBOR map",
+            isTrustEvidenceWired: false).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An <c>mso_mdoc</c> presentation whose Mobile Security Object, signed again by the issuer key, commits a
+    /// <c>deviceKey</c> COSE_Key carrying its <c>x</c> coordinate (label -2) twice is refused over the encrypted
+    /// <c>direct_post.jwt</c> wire with the Malformed answer.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// parse and process messages with the same label used twice as a key in a single map."
+    /// </summary>
+    [TestMethod]
+    public async Task AnMdocDeviceKeyRepeatingALabelIsRefusedAsMalformed()
+    {
+        await AssertMdocPresentationRefusedAsMalformedAsync(
+            async (deviceResponse, issuerKey, cancellationToken) =>
+            {
+                object[] issuerAuthPath = ["documents", 0, "issuerSigned", "issuerAuth"];
+                byte[] issuerAuth = MdocVpFixture.ReadAt(deviceResponse, issuerAuthPath);
+                byte[] resignedIssuerAuth = await MdocVpFixture.ResignIssuerAuthWithDeviceKeyXTwiceAsync(
+                    issuerAuth, issuerKey, cancellationToken).ConfigureAwait(false);
+
+                return MdocVpFixture.RewriteAt(deviceResponse, issuerAuthPath, _ => resignedIssuerAuth);
+            },
+            "nonce-mdoc-device-key-x-twice",
+            "RFC 9052 Section 9: a deviceKey COSE_Key repeating a label is neither parsed nor processed").ConfigureAwait(false);
     }
 
 
@@ -612,6 +690,8 @@ truncateProtectedHeader,
     /// A <c>dc+sd-cwt</c> presentation whose embedded SD-CWT carries the redacted-claim-keys map key <c>simple(59)</c>
     /// twice at the top level of its genuinely issuer-signed claims map is refused over the wire with the answer every
     /// other malformed embedded SD-CWT gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
+    /// The claim readers refuse the top-level repeat before the claims walker reaches it, so the row proves their
+    /// refusal and its normalization to the Malformed answer.
     /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
     /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
     /// Section 5.6."
@@ -623,6 +703,7 @@ truncateProtectedHeader,
             SdCwtVpFixture.PrepareProtectedHeaderWithRedactedClaimKeysTwiceAsync,
             SdKbtIssuance.BuildPayload,
             "nonce-sdcwt-redacted-claim-keys-twice",
+            "RFC 8949 Section 3.1: a claims map repeating simple(59) is not valid",
             isTrustEvidenceWired: false).ConfigureAwait(false);
     }
 
@@ -641,6 +722,7 @@ truncateProtectedHeader,
             (_, _, _) => ValueTask.FromResult<BuildKbtProtectedHeaderDelegate>(SdCwtVpFixture.BuildProtectedHeaderWithSdClaimsTwice),
             SdKbtIssuance.BuildPayload,
             "nonce-sdcwt-sd-claims-twice-trust-evidence",
+            "RFC 9052 Section 3: an embedded SD-CWT repeating sd_claims is malformed",
             isTrustEvidenceWired: true).ConfigureAwait(false);
     }
 
@@ -655,9 +737,122 @@ truncateProtectedHeader,
     [TestMethod]
     public async Task AnMdocIssuerAuthRepeatingX5ChainIsRefusedAsMalformed()
     {
+        await AssertMdocPresentationRefusedAsMalformedAsync(
+            (deviceResponse, _, _) => ValueTask.FromResult(MdocVpFixture.RewriteAt(
+                deviceResponse,
+                ["documents", 0, "issuerSigned", "issuerAuth", 1],
+                unprotected => MdocVpFixture.WithLabelTwice(unprotected, CoseHeaderParameters.X5Chain, new byte[] { 0x41, 0x00 }))),
+            "nonce-mdoc-x5chain-twice",
+            "RFC 9052 Section 3: an IssuerAuth repeating a label in its unprotected bucket is malformed").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An <c>mso_mdoc</c> presentation whose IssuerAuth COSE_Sign1 is signed again by the issuer key over a protected
+    /// bucket carrying <c>alg</c> twice, <c>A2 01 26 01 38 22</c>, is refused over the encrypted
+    /// <c>direct_post.jwt</c> wire with the answer every other malformed DeviceResponse gets: HTTP 400,
+    /// <c>invalid_request</c>, the Malformed refusal class's sentence.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of the
+    /// maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task AnMdocIssuerAuthRepeatingAProtectedLabelIsRefusedAsMalformed()
+    {
+        await AssertMdocPresentationRefusedAsMalformedAsync(
+            ResignIssuerAuthOverAsync([0xA2, 0x01, 0x26, 0x01, 0x38, 0x22]),
+            "nonce-mdoc-protected-alg-twice",
+            "RFC 9052 Section 3: an IssuerAuth repeating a label in its protected bucket is malformed").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An <c>mso_mdoc</c> presentation whose IssuerAuth COSE_Sign1 is signed again by the issuer key over a protected
+    /// bucket carrying <c>alg</c> while its unprotected bucket carries <c>alg</c> too is refused over the encrypted
+    /// <c>direct_post.jwt</c> wire with the Malformed answer.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Applications SHOULD
+    /// verify that the same label does not occur in both the protected and unprotected header parameters."
+    /// </summary>
+    [TestMethod]
+    public async Task AnMdocIssuerAuthHoldingALabelInBothBucketsIsRefusedAsMalformed()
+    {
+        await AssertMdocPresentationRefusedAsMalformedAsync(
+            (deviceResponse, _, _) => ValueTask.FromResult(MdocVpFixture.RewriteAt(
+                deviceResponse,
+                ["documents", 0, "issuerSigned", "issuerAuth", 1],
+                unprotected => WithAlgorithmAdded(unprotected))),
+            "nonce-mdoc-alg-in-both-buckets",
+            "RFC 9052 Section 3: an IssuerAuth holding one label in both buckets is malformed").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Copies an encoded definite-length header map and adds one <c>alg</c> entry, ES256, after its entries.
+    /// </summary>
+    /// <param name="map">The encoded header map.</param>
+    /// <returns>The encoded map carrying one more entry, <c>alg</c>.</returns>
+    private static byte[] WithAlgorithmAdded(ReadOnlyMemory<byte> map)
+    {
+        var reader = new Lumoin.Veritas.Cbor.CborReader(map, CborOptions.Lax);
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The map is a definite-length map.");
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new Lumoin.Veritas.Cbor.CborWriter(buffer, CborOptions.Lax);
+        writer.WriteStartMap(count + 1);
+        for(int i = 0; i < count; i++)
+        {
+            writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
+            writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
+        }
+
+        writer.WriteInt32(CoseHeaderParameters.Alg);
+        writer.WriteInt32(WellKnownCoseAlgorithms.Es256);
+        writer.WriteEndMap();
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>
+    /// Answers a DeviceResponse rewrite that signs the IssuerAuth again under the issuer key over
+    /// <paramref name="protectedHeader"/> as given.
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket the issuer signature covers.</param>
+    /// <returns>The rewrite.</returns>
+    private static Func<ReadOnlyMemory<byte>, PrivateKeyMemory, CancellationToken, ValueTask<byte[]>> ResignIssuerAuthOverAsync(byte[] protectedHeader)
+    {
+        return async (deviceResponse, issuerKey, cancellationToken) =>
+        {
+            object[] issuerAuthPath = ["documents", 0, "issuerSigned", "issuerAuth"];
+            byte[] issuerAuth = MdocVpFixture.ReadAt(deviceResponse, issuerAuthPath);
+            byte[] resignedIssuerAuth = await MdocVpFixture.ResignIssuerAuthOverProtectedBucketAsync(
+                issuerAuth, issuerKey, protectedHeader, cancellationToken).ConfigureAwait(false);
+
+            return MdocVpFixture.RewriteAt(deviceResponse, issuerAuthPath, _ => resignedIssuerAuth);
+        };
+    }
+
+
+    /// <summary>
+    /// Starts the mdoc format run, rewrites the wallet's DeviceResponse with <paramref name="rewriteDeviceResponse"/>,
+    /// presents it over the encrypted <c>direct_post.jwt</c> wire and asserts the Malformed answer: HTTP 400,
+    /// <c>invalid_request</c>, the Malformed refusal class's one fixed sentence, no server fault on the host, and the
+    /// Malformed terminal state.
+    /// </summary>
+    /// <param name="rewriteDeviceResponse">Rewrites the DeviceResponse, given the issuer's signing key.</param>
+    /// <param name="nonce">The transaction nonce.</param>
+    /// <param name="ruleSentence">The clause the row holds, the start of every assertion message.</param>
+    /// <returns>A task that completes when the answer has been asserted.</returns>
+    private async Task AssertMdocPresentationRefusedAsMalformedAsync(
+        Func<ReadOnlyMemory<byte>, PrivateKeyMemory, CancellationToken, ValueTask<byte[]>> rewriteDeviceResponse,
+        string nonce,
+        string ruleSentence)
+    {
         await using FormatRun run = await MdocVpFixture.Format.StartAsync(
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
         TestHostShell app = run.App;
+
+        //The run owns the issuer key pair before the device key pair, so the first private key it owns is the issuer's.
+        PrivateKeyMemory issuerKey = run.Owned.OfType<PrivateKeyMemory>().First();
 
         using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
@@ -668,10 +863,8 @@ truncateProtectedHeader,
 
             using IMemoryOwner<byte> fullDeviceResponseBytes = Oid4VpMdocPresentation.DecodeVpTokenValue(
                 valid.PresentationsByQueryId[PidCredentialQueryId], TestSetup.Base64UrlDecoder, context.MemoryPool);
-            byte[] repeatingDeviceResponse = MdocVpFixture.RewriteAt(
-                fullDeviceResponseBytes.Memory,
-                ["documents", 0, "issuerSigned", "issuerAuth", 1],
-                unprotected => MdocVpFixture.WithLabelTwice(unprotected, CoseHeaderParameters.X5Chain, new byte[] { 0x41, 0x00 }));
+            byte[] repeatingDeviceResponse = await rewriteDeviceResponse(
+                fullDeviceResponseBytes.Memory, issuerKey, cancellationToken).ConfigureAwait(false);
 
             return new Oid4VpPresentationSet
             {
@@ -691,7 +884,7 @@ truncateProtectedHeader,
 
         (Uri requestUri, string parHandle) = await app.HandleParAsync(
             verifierKeys,
-            new TransactionNonce("nonce-mdoc-x5chain-twice"),
+            new TransactionNonce(nonce),
             run.Query,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -708,13 +901,14 @@ truncateProtectedHeader,
                     CompactJar = compactJar,
                     RequestUri = requestUri,
                     ExpectedVerifierClientId = VerifierClientId,
-                    FlowId = $"wallet-mdoc-x5chain-twice-{Guid.NewGuid():N}"
+                    FlowId = $"wallet-{nonce}-{Guid.NewGuid():N}"
                 },
                 TestContext.CancellationToken).ConfigureAwait(false),
-            "The Verifier refuses an IssuerAuth repeating x5chain, so the wallet client throws on the non-200 answer.").ConfigureAwait(false);
+            $"{ruleSentence}: the Verifier refuses it, so the wallet client throws on the non-200 answer.").ConfigureAwait(false);
 
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), $"{ruleSentence}: the refusal is answered without a server fault.");
         Assert.Contains("returned status 400", refusal.Message, StringComparison.Ordinal,
-            "RFC 9052 Section 3: an IssuerAuth repeating a label is malformed, answered as HTTP 400.");
+            $"{ruleSentence}, answered as HTTP 400.");
 
         (string wireError, string wireDescription) = OAuthErrorAssertions.ReadOAuthErrorBody(
             refusal.Message[refusal.Message.IndexOf('{', StringComparison.Ordinal)..]);
@@ -725,7 +919,7 @@ truncateProtectedHeader,
 
         VerifierFlowFailedState failed = ReadFailedState(app, parHandle);
         Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
-            "An IssuerAuth repeating x5chain is the Malformed refusal class.");
+            $"{ruleSentence}: the Malformed refusal class.");
     }
 
 
@@ -738,15 +932,16 @@ truncateProtectedHeader,
     /// <param name="buildProtectedHeader">Builds the Key Binding Token's protected header.</param>
     /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
     /// <param name="nonce">The transaction nonce, bound into the Key Binding Token's <c>cnonce</c>.</param>
+    /// <param name="ruleSentence">The clause the row holds, the start of every assertion message.</param>
     /// <returns>A task that completes when the answer has been asserted.</returns>
     private Task AssertSdCwtPresentationRefusedAsMalformedAsync(
-        BuildKbtProtectedHeaderDelegate buildProtectedHeader, BuildKbtPayloadDelegate buildPayload, string nonce) =>
+        BuildKbtProtectedHeaderDelegate buildProtectedHeader, BuildKbtPayloadDelegate buildPayload, string nonce, string ruleSentence) =>
         AssertSdCwtPresentationRefusedAsMalformedAsync(
-            (_, _, _) => ValueTask.FromResult(buildProtectedHeader), buildPayload, nonce, isTrustEvidenceWired: false);
+            (_, _, _) => ValueTask.FromResult(buildProtectedHeader), buildPayload, nonce, ruleSentence, isTrustEvidenceWired: false);
 
 
     /// <summary>
-    /// <see cref="AssertSdCwtPresentationRefusedAsMalformedAsync(BuildKbtProtectedHeaderDelegate, BuildKbtPayloadDelegate, string)"/>
+    /// <see cref="AssertSdCwtPresentationRefusedAsMalformedAsync(BuildKbtProtectedHeaderDelegate, BuildKbtPayloadDelegate, string, string)"/>
     /// with the Key Binding Token's header builder prepared from the issued SD-CWT and the issuer's signing key, and
     /// with the Verifier's trust-evidence resolution wired or not: when wired, the embedded SD-CWT's <c>x5chain</c>
     /// is read by <see cref="CoseSign1X5ChainExtractor.Extract"/> before the Key Binding Token is verified.
@@ -754,12 +949,14 @@ truncateProtectedHeader,
     /// <param name="prepareProtectedHeader">Prepares the Key Binding Token's header builder from the issued SD-CWT and the issuer's signing key.</param>
     /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
     /// <param name="nonce">The transaction nonce, bound into the Key Binding Token's <c>cnonce</c>.</param>
+    /// <param name="ruleSentence">The clause the row holds, the start of every assertion message.</param>
     /// <param name="isTrustEvidenceWired">Whether the Verifier resolves trust evidence from the embedded SD-CWT's <c>x5chain</c>.</param>
     /// <returns>A task that completes when the answer has been asserted.</returns>
     private async Task AssertSdCwtPresentationRefusedAsMalformedAsync(
         Func<SdToken<ReadOnlyMemory<byte>>, PrivateKeyMemory, CancellationToken, ValueTask<BuildKbtProtectedHeaderDelegate>> prepareProtectedHeader,
         BuildKbtPayloadDelegate buildPayload,
         string nonce,
+        string ruleSentence,
         bool isTrustEvidenceWired)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
@@ -821,8 +1018,9 @@ truncateProtectedHeader,
                 ],
                 TestContext.CancellationToken).ConfigureAwait(false);
 
+            Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), $"{ruleSentence}: the refusal is answered without a server fault.");
             Assert.AreEqual(400, statusCode,
-                "RFC 9052: a presentation repeating a label is malformed, answered as HTTP 400, not as an HTTP 500 Verifier fault.");
+                $"{ruleSentence}, answered as HTTP 400, not as an HTTP 500 Verifier fault.");
             Assert.AreEqual(WellKnownMediaTypes.Application.Json, contentType,
                 "The RFC 6749 Section 4.1.2.1 error object is a JSON body.");
 
@@ -834,7 +1032,7 @@ truncateProtectedHeader,
 
             VerifierFlowFailedState failed = ReadFailedState(app, parHandle);
             Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
-                "A presentation repeating a label is the Malformed refusal class.");
+                $"{ruleSentence}: the Malformed refusal class.");
         }
         finally
         {

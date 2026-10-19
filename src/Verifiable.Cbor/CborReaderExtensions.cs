@@ -444,7 +444,7 @@ public static class CborReaderExtensions
             long key = reader.ReadInt64();
             TValue value = valueReader(reader);
 
-            //RFC 8949 Section 3.1: a map with duplicate keys is not valid.
+            //RFC 8949 Section 3.1: a map that carries one map key twice is not valid.
             if(!result.TryAdd(key, value))
             {
                 throw new CborContentException(
@@ -483,7 +483,7 @@ public static class CborReaderExtensions
             string key = reader.ReadTextString();
             TValue value = valueReader(reader);
 
-            //RFC 8949 Section 3.1: a map with duplicate keys is not valid.
+            //RFC 8949 Section 3.1: a map that carries one map key twice is not valid.
             if(!result.TryAdd(key, value))
             {
                 throw new CborContentException(

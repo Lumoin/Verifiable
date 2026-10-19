@@ -59,8 +59,9 @@ public static class MdocCborDeviceResponseReader
     /// <returns>The parsed, owned <see cref="MdocParsedDeviceResponse"/>.</returns>
     /// <exception cref="FormatException">
     /// Thrown when the bytes do not satisfy the ISO/IEC 18013-5 §8.3.2.1 DeviceResponse wire shape or a
-    /// required field is missing (the <see cref="CborException"/> or <see cref="InvalidOperationException"/>
-    /// the CBOR reader raises for a malformed encoding rides as the <see cref="Exception.InnerException"/>).
+    /// required field is missing (the exception of the leaf's malformed-input family the CBOR reading raises,
+    /// <see cref="CborException"/>, <see cref="InvalidOperationException"/> or <see cref="OverflowException"/> among
+    /// them, rides as the <see cref="Exception.InnerException"/>).
     /// </exception>
     public static MdocParsedDeviceResponse Read(ReadOnlySpan<byte> encodedDeviceResponse, BaseMemoryPool pool)
     {
@@ -72,7 +73,7 @@ public static class MdocCborDeviceResponseReader
         {
             return ReadDeviceResponse(reader, pool);
         }
-        catch(Exception exception) when(exception is CborException or InvalidOperationException)
+        catch(Exception exception) when(exception is not FormatException && CoseSerialization.IsMalformedInputException(exception))
         {
             throw new FormatException(
                 "The DeviceResponse does not satisfy the ISO/IEC 18013-5 §8.3.2.1 wire shape.", exception);

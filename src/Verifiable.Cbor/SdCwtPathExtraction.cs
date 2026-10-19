@@ -237,6 +237,33 @@ public static class SdCwtPathExtraction
 
 
     /// <summary>
+    /// Records a mechanism map key read at one map level of the claims map, a simple value or the integer
+    /// <c>sd_claims</c> (17) or <c>sd_alg</c> (18) label, and refuses the claims map when the same level already
+    /// carried it, so two digest arrays of one level are never merged.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </remarks>
+    /// <param name="mechanismMapKeys">The mechanism map keys already read at this level.</param>
+    /// <param name="mapKey">The mechanism map key just read: whether it is a simple value, and its number.</param>
+    /// <exception cref="FormatException">The level already carried <paramref name="mapKey"/>.</exception>
+    private static void RefuseRepeatedMechanismMapKey(HashSet<(bool IsSimpleValue, int Number)> mechanismMapKeys, (bool IsSimpleValue, int Number) mapKey)
+    {
+        if(!mechanismMapKeys.Add(mapKey))
+        {
+            string mapKeyText = mapKey.IsSimpleValue
+                ? string.Create(CultureInfo.InvariantCulture, $"simple({mapKey.Number})")
+                : mapKey.Number.ToString(CultureInfo.InvariantCulture);
+
+            throw new FormatException(
+                $"draft-ietf-spice-sd-cwt: the map key {mapKeyText} appears more than once at this level; the map is not valid (RFC 8949 Section 3.1).");
+        }
+    }
+
+
+    /// <summary>
     /// Recursively walks one CBOR node from the reader, resolving redacted-map-key digests
     /// (simple(59)) and redacted-array-element digests (tag 60) to disclosures and recursing
     /// into a resolved disclosure's own <see cref="SdDisclosure.ClaimValue"/> so a recursive
@@ -258,8 +285,8 @@ public static class SdCwtPathExtraction
     /// container node.
     /// </returns>
     /// <exception cref="FormatException">
-    /// Thrown when a step 3.c or 4 rule is violated, or when the nesting exceeds
-    /// <see cref="MaximumWalkDepth"/>.
+    /// Thrown when a step 3.c or 4 rule is violated, when one map level carries a claim name, a simple-value map key
+    /// or the integer label 17 or 18 twice, or when the nesting exceeds <see cref="MaximumWalkDepth"/>.
     /// </exception>
     private static object? WalkAndClean(
         CborReader reader,
@@ -288,6 +315,11 @@ public static class SdCwtPathExtraction
             var redactedDigests = new List<string>();
             var cleaned = new Dictionary<string, object?>(StringComparer.Ordinal);
 
+            //The mechanism map keys this level carries, a simple value or the integer 17 or 18: RFC 8949
+            //Section 3.1 makes a map that carries one of them twice not valid, so a second one is refused and
+            //two digest arrays are never merged.
+            HashSet<(bool IsSimpleValue, int Number)> mechanismMapKeys = [];
+
             while(reader.PeekState() != CborReaderState.EndMap)
             {
                 //SD-CWT places redacted object-property claim digests under the simple(59) map
@@ -296,6 +328,7 @@ public static class SdCwtPathExtraction
                 if(reader.PeekState() == CborReaderState.SimpleValue)
                 {
                     int simpleKey = reader.ReadSimpleValue();
+                    RefuseRepeatedMechanismMapKey(mechanismMapKeys, (true, simpleKey));
                     if(simpleKey == SdCwtConstants.RedactedClaimKeysSimpleValue
                         && reader.PeekState() == CborReaderState.StartArray)
                     {
@@ -318,6 +351,7 @@ public static class SdCwtPathExtraction
                 {
                     //A COSE unprotected-header key never legitimately appears at the payload
                     //level; skipped defensively rather than misread as a claim.
+                    RefuseRepeatedMechanismMapKey(mechanismMapKeys, (false, intKey));
                     if(reader.PeekState() == CborReaderState.StartArray)
                     {
                         ReadDigestArray(reader, redactedDigests, encoder);
@@ -329,6 +363,7 @@ public static class SdCwtPathExtraction
                 }
                 else if(key is int algoKey && algoKey == SdCwtConstants.SdAlgHeaderKey)
                 {
+                    RefuseRepeatedMechanismMapKey(mechanismMapKeys, (false, algoKey));
                     reader.SkipValue();
                 }
                 else

@@ -40,7 +40,8 @@ public static class StatusClaimCborReader
     /// <exception cref="CborContentException">
     /// Thrown when the map carries no entry (Section 6.3's "at least one data item"), when a key is
     /// not a text string (Section 6.3's "the key MUST be a CBOR text string (major type 3)"), when a
-    /// mechanism key repeats, or when a <c>status_list</c> value leaves Section 6.3's value domain.
+    /// mechanism key repeats, when a <c>status_list</c> value leaves Section 6.3's value domain, or when a
+    /// <c>status_list</c> value carries one member twice.
     /// This is the one refusal family the reader answers a malformed Status structure with, so a
     /// caller classifying a wire-shape rejection names a single type.
     /// </exception>
@@ -164,17 +165,31 @@ public static class StatusClaimCborReader
     /// ownership transfer), so the caller's own reader position is
     /// unaffected.
     /// </summary>
+    /// <remarks>
+    /// A member the map carries twice, <c>idx</c> or <c>uri</c> or any other, is refused, so one producer cannot show
+    /// one reader one index and another reader a different one:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </remarks>
     /// <param name="reader">A reader over the encoded <c>status_list</c> value alone.</param>
-    /// <exception cref="CborContentException">Thrown on the first value-domain mismatch.</exception>
+    /// <exception cref="CborContentException">Thrown on the first value-domain mismatch, or when a member appears twice.</exception>
     private static void ValidateStatusListReferenceValueDomain(CborReader reader)
     {
         int? entryCount = reader.ReadStartMap();
+        HashSet<string> members = new(StringComparer.Ordinal);
 
         int entriesRead = 0;
         while(entryCount is null ? reader.PeekState() != CborReaderState.EndMap : entriesRead < entryCount.Value)
         {
             string key = reader.ReadTextString();
             entriesRead++;
+
+            if(!members.Add(key))
+            {
+                throw new CborContentException(
+                    $"The status_list reference carries the member '{key}' more than once; the map is not valid (RFC 8949 Section 3.1).");
+            }
 
             _ = key switch
             {

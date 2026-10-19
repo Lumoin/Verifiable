@@ -2,6 +2,7 @@ using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -60,9 +61,26 @@ public static class CoseSerialization
     /// <para>
     /// The output includes CBOR tag(18) for COSE_Sign1.
     /// </para>
+    /// <para>
+    /// The protected bucket arrives already serialized, so its labels are read with the reading side's own label
+    /// read before anything is written, and a message the reading side would refuse is not written.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "Applications can
+    /// either fail processing or process messages by ignoring incorrect labels; however, they MUST NOT create
+    /// messages with incorrect labels."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Applications SHOULD
+    /// verify that the same label does not occur in both the protected and unprotected header parameters."
+    /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// The message's protected bucket carries one label twice, or a label that is neither an integer nor a text
+    /// string, or a label its unprotected bucket also carries.
+    /// </exception>
     public static SerializeCoseSign1Delegate SerializeCoseSign1 { get; } = static (message, pool) =>
     {
+        RefuseToWriteMalformedBuckets(message.ProtectedHeader.AsReadOnlyMemory(), message.UnprotectedHeader, nameof(message));
+
         using var buffer = new SlabBufferWriter(pool);
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteTag(new CborTag(CoseTags.Sign1));
@@ -109,6 +127,34 @@ public static class CoseSerialization
     /// <summary>
     /// Gets a delegate that parses COSE_Sign1 bytes into a message.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both buckets are judged as RFC 9052 defines their labels. A label is any CBOR integer, read whole, or a text
+    /// string, and two labels are the same when their decoded values are equal, so one label written in two widths
+    /// is one label (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>:
+    /// "label = int / tstr"). The protected bucket's labels are read for that judgment alone, whatever the
+    /// unprotected bucket holds, each judged as it is read, and its bytes are handed on raw. A protected bucket whose
+    /// labels cannot be read past some point (one that is no well-formed map of labels) is handed on raw after every
+    /// label read before that point has been judged: this parser does not refuse such a bucket, and a reader of the
+    /// bucket's content (<see cref="ParseProtectedHeader"/> among them) refuses it in its own failure shape, while a
+    /// verification that never reads the content verifies the signature over the bytes as they are. A protected
+    /// bucket carrying bytes after its map, and a message carrying bytes after its array, are refused. A well-formed
+    /// label the header dictionary does not carry, a text string or an integer outside the 32-bit signed range, is
+    /// judged and passed over with its value, and nothing inside that value is read.
+    /// </para>
+    /// <para>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of the
+    /// maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed. Applications SHOULD verify that the same label does not occur in both the protected and
+    /// unprotected header parameters." A message holding one label in both buckets is refused, so the precedence
+    /// sentence that follows the clause has nothing left to decide.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="CborContentException">
+    /// A bucket carries one label twice, the unprotected bucket carries a map key that is neither an integer nor a
+    /// text string, or the two buckets share a label; or the bytes are otherwise not a well-formed COSE_Sign1.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">The bytes are not tagged as a COSE_Sign1 or do not hold its four elements.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of protectedHeaderCarrier and signatureCarrier transfers to the returned CoseSign1Message; the caller disposes the message.")]
     public static ParseCoseSign1Delegate ParseCoseSign1 { get; } = static (coseSign1Bytes, pool) =>
@@ -134,50 +180,57 @@ public static class CoseSerialization
         //zero-length header (RFC 9052 §3's empty_or_serialized_map, bstr .size 0 arm) through the
         //shared EmptyMemoryOwner singleton rather than a bare pool.Rent(0), which throws.
         byte[] protectedHeaderBytes = reader.ReadByteString();
-        EncodedCoseProtectedHeader protectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(protectedHeaderBytes, pool);
+        EncodedCoseProtectedHeader? protectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(protectedHeaderBytes, pool);
+        Signature? signatureCarrier = null;
 
-        //Unprotected header: a repeated label, or a label also in the protected bucket, is a malformed
-        //message (RFC 9052 Section 3).
-        Dictionary<int, object>? unprotectedHeader = null;
-        HashSet<int> unprotectedLabels = [];
-        int? mapLength = reader.ReadStartMap();
-        if(mapLength > 0)
+        //Every carrier rented here moves into the returned message; on every failing exit the finally block
+        //returns whichever is still held to the pool.
+        try
         {
-            unprotectedHeader = [];
-            for(int i = 0; i < mapLength; i++)
+            //Unprotected header: a repeated label, or a label also in the protected bucket, is a malformed
+            //message (RFC 9052 Section 3).
+            Dictionary<int, object>? unprotectedHeader = null;
+            HashSet<(Int128 Number, string? Text)> unprotectedLabels = [];
+            int? mapLength = reader.ReadStartMap();
+            if(mapLength > 0)
             {
-                int key = reader.ReadInt32();
-                RefuseRepeatedLabel(unprotectedLabels, key);
-                object? value = CborValueConverter.ReadValue(reader);
-                if(value is not null)
+                unprotectedHeader = [];
+                for(int i = 0; i < mapLength; i++)
                 {
-                    unprotectedHeader[key] = value;
+                    ReadHeaderEntry(reader, unprotectedLabels, unprotectedHeader);
                 }
             }
+
+            reader.ReadEndMap();
+            RefuseRepeatedOrSharedLabel(protectedHeaderBytes, unprotectedLabels, isUnreadableBucketRefused: false);
+
+            //Payload (borrowed; the message's lifetime brackets the caller's
+            //use of this returned reference).
+            byte[] payload = reader.ReadByteString();
+
+            //Signature: routed through the pool into a Signature carrier.
+            byte[] signature = reader.ReadByteString();
+            IMemoryOwner<byte> signatureOwner = pool.Rent(signature.Length);
+            signature.CopyTo(signatureOwner.Memory.Span);
+            signatureCarrier = new(signatureOwner, CryptoTags.AlgorithmAgnosticSignature);
+
+            reader.ReadEndArray();
+            if(reader.BytesRemaining != 0)
+            {
+                throw new CborContentException("Trailing bytes after the COSE_Sign1 structure.");
+            }
+
+            CoseSign1Message message = new(protectedHeaderCarrier, unprotectedHeader, payload, signatureCarrier);
+            protectedHeaderCarrier = null;
+            signatureCarrier = null;
+
+            return message;
         }
-        reader.ReadEndMap();
-        RefuseLabelInBothBuckets(protectedHeaderBytes, unprotectedLabels);
-
-        //Payload (borrowed; the message's lifetime brackets the caller's
-        //use of this returned reference).
-        byte[] payload = reader.ReadByteString();
-
-        //Signature — route through pool into a Signature carrier. The
-        //signature carries a tag the verifier inspects; reuse the signing
-        //tag conventions where possible. Here we use a generic
-        //"signature value" Tag composition.
-        byte[] signature = reader.ReadByteString();
-        IMemoryOwner<byte> signatureOwner = pool.Rent(signature.Length);
-        signature.CopyTo(signatureOwner.Memory.Span);
-        Signature signatureCarrier = new(signatureOwner, CryptoTags.AlgorithmAgnosticSignature);
-
-        reader.ReadEndArray();
-
-        return new CoseSign1Message(
-            protectedHeaderCarrier,
-            unprotectedHeader,
-            payload,
-            signatureCarrier);
+        finally
+        {
+            protectedHeaderCarrier?.Dispose();
+            signatureCarrier?.Dispose();
+        }
     };
 
 
@@ -189,6 +242,24 @@ public static class CoseSerialization
     /// verifier wires it as the parse seam. Routes protected-header + signature bytes through the
     /// pool; the returned message owns its carriers and the caller disposes it.
     /// </summary>
+    /// <remarks>
+    /// The two buckets are judged as <see cref="ParseCoseSign1"/> judges them: a label is any CBOR integer, read
+    /// whole, or a text string; the protected bucket's labels are read for the judgment alone, each as it is read,
+    /// whatever the unprotected bucket holds; a well-formed label the header dictionary does not carry is passed over
+    /// with its value, and nothing inside that value is read. Unlike <see cref="ParseCoseSign1"/>, this parser refuses
+    /// a protected bucket whose labels cannot be read, since the mdoc device verification it serves verifies the
+    /// signature over the protected bytes without reading them again. A protected bucket carrying bytes after its map,
+    /// and a message carrying bytes after its array, are refused.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of the
+    /// maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed. Applications SHOULD verify that the same label does not occur in both the protected and
+    /// unprotected header parameters."
+    /// </remarks>
+    /// <exception cref="CborContentException">
+    /// A bucket carries one label twice, the unprotected bucket carries a map key that is neither an integer nor a
+    /// text string, or the two buckets share a label; or the bytes are otherwise not a well-formed COSE_Sign1.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">The bytes are not tagged as a COSE_Sign1 or do not hold its four elements.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of protectedHeaderCarrier and signatureCarrier transfers to the returned CoseSign1Message; the caller disposes the message.")]
     public static ParseCoseSign1Delegate ParseCoseSign1AllowingNilPayload { get; } = static (coseSign1Bytes, pool) =>
@@ -211,54 +282,76 @@ public static class CoseSerialization
         //empty_or_serialized_map, bstr .size 0 arm) through the shared EmptyMemoryOwner singleton
         //rather than a bare pool.Rent(0), which throws.
         byte[] protectedHeader = reader.ReadByteString();
-        EncodedCoseProtectedHeader protectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(protectedHeader, pool);
+        EncodedCoseProtectedHeader? protectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(protectedHeader, pool);
+        Signature? signatureCarrier = null;
 
-        //Unprotected header — read raw encoded value bytes; the verification math never touches it. A
-        //repeated label, or a label also in the protected bucket, is a malformed message (RFC 9052 Section 3).
-        Dictionary<int, object>? unprotectedHeader = null;
-        HashSet<int> unprotectedLabels = [];
-        if(reader.PeekState() == CborReaderState.StartMap)
+        //Every carrier rented here moves into the returned message; on every failing exit the finally block
+        //returns whichever is still held to the pool.
+        try
         {
-            int? mapEntries = reader.ReadStartMap();
-            if(mapEntries is null || mapEntries.Value > 0)
+            //Unprotected header: read raw encoded value bytes; the verification math never touches it. A
+            //repeated label, or a label also in the protected bucket, is a malformed message (RFC 9052 Section 3).
+            Dictionary<int, object>? unprotectedHeader = null;
+            HashSet<(Int128 Number, string? Text)> unprotectedLabels = [];
+            if(reader.PeekState() == CborReaderState.StartMap)
             {
-                unprotectedHeader = [];
-                while(reader.PeekState() != CborReaderState.EndMap)
+                int? mapEntries = reader.ReadStartMap();
+                if(mapEntries is null || mapEntries.Value > 0)
                 {
-                    int label = (int)reader.ReadInt64();
-                    RefuseRepeatedLabel(unprotectedLabels, label);
-                    byte[] valueBytes = reader.ReadEncodedValue().ToArray();
-                    unprotectedHeader[label] = valueBytes;
+                    unprotectedHeader = [];
+                    while(reader.PeekState() != CborReaderState.EndMap)
+                    {
+                        (Int128 Number, string? Text) label = ReadLabel(reader);
+                        RefuseRepeatedLabel(unprotectedLabels, label);
+                        if(IsDictionaryLabel(label, out int dictionaryLabel))
+                        {
+                            unprotectedHeader[dictionaryLabel] = reader.ReadEncodedValue().ToArray();
+                        }
+                        else
+                        {
+                            reader.SkipValue();
+                        }
+                    }
                 }
+
+                reader.ReadEndMap();
             }
-            reader.ReadEndMap();
+
+            RefuseRepeatedOrSharedLabel(protectedHeader, unprotectedLabels, isUnreadableBucketRefused: true);
+
+            //Payload: nil for the detached form, byte string for the attached form.
+            ReadOnlyMemory<byte> payload = ReadOnlyMemory<byte>.Empty;
+            if(reader.PeekState() == CborReaderState.Null)
+            {
+                reader.ReadNull();
+            }
+            else
+            {
+                payload = reader.ReadByteString();
+            }
+
+            byte[] signature = reader.ReadByteString();
+            IMemoryOwner<byte> signatureOwner = pool.Rent(signature.Length);
+            signature.CopyTo(signatureOwner.Memory.Span);
+            signatureCarrier = new(signatureOwner, CryptoTags.AlgorithmAgnosticSignature);
+
+            reader.ReadEndArray();
+            if(reader.BytesRemaining != 0)
+            {
+                throw new CborContentException("Trailing bytes after the COSE_Sign1 structure.");
+            }
+
+            CoseSign1Message message = new(protectedHeaderCarrier, unprotectedHeader, payload, signatureCarrier);
+            protectedHeaderCarrier = null;
+            signatureCarrier = null;
+
+            return message;
         }
-
-        RefuseLabelInBothBuckets(protectedHeader, unprotectedLabels);
-
-        //Payload: nil for the detached form, byte string for the attached form.
-        ReadOnlyMemory<byte> payload = ReadOnlyMemory<byte>.Empty;
-        if(reader.PeekState() == CborReaderState.Null)
+        finally
         {
-            reader.ReadNull();
+            protectedHeaderCarrier?.Dispose();
+            signatureCarrier?.Dispose();
         }
-        else
-        {
-            payload = reader.ReadByteString();
-        }
-
-        byte[] signature = reader.ReadByteString();
-        IMemoryOwner<byte> signatureOwner = pool.Rent(signature.Length);
-        signature.CopyTo(signatureOwner.Memory.Span);
-        Signature signatureCarrier = new(signatureOwner, CryptoTags.AlgorithmAgnosticSignature);
-
-        reader.ReadEndArray();
-
-        return new CoseSign1Message(
-            protectedHeaderCarrier,
-            unprotectedHeader,
-            payload,
-            signatureCarrier);
     };
 
 
@@ -315,9 +408,30 @@ public static class CoseSerialization
     /// parameter for <c>COSE_Sign1</c>; this generic, non-CBAdES-specific <c>COSE_Sign</c> substrate has no
     /// sibling wrapper carrying that parameter, so it infers the same fact from the message itself.
     /// </para>
+    /// <para>
+    /// Every protected bucket, the body's and each signer's, arrives already serialized, so its labels are read with
+    /// the reading side's own label read before anything is written, and a layer the reading side would refuse is not
+    /// written. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications
+    /// MUST NOT generate messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "Applications can
+    /// either fail processing or process messages by ignoring incorrect labels; however, they MUST NOT create
+    /// messages with incorrect labels."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Applications SHOULD
+    /// verify that the same label does not occur in both the protected and unprotected header parameters."
+    /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// A protected bucket of the body or of a signer carries one label twice, or a label that is neither an integer
+    /// nor a text string, or a label the same layer's unprotected bucket also carries.
+    /// </exception>
     public static SerializeCoseSignDelegate SerializeCoseSign { get; } = static (message, pool) =>
     {
+        RefuseToWriteMalformedBuckets(message.ProtectedHeader.AsReadOnlyMemory(), message.UnprotectedHeader, nameof(message));
+        foreach(CoseSignatureComponent signerLayer in message.Signatures)
+        {
+            RefuseToWriteMalformedBuckets(signerLayer.ProtectedHeader.AsReadOnlyMemory(), signerLayer.UnprotectedHeader, nameof(message));
+        }
+
         using var buffer = new SlabBufferWriter(pool);
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteTag(new CborTag(CoseTags.Sign));
@@ -391,6 +505,18 @@ public static class CoseSerialization
     /// message. See <see cref="ParseCoseSignDelegate"/>'s remarks for the tagged/untagged
     /// acceptance and fail-closed conventions.
     /// </summary>
+    /// <remarks>
+    /// Every layer, the body and each signer, is judged as <see cref="ParseCoseSign1"/> judges its one layer: a label
+    /// is any CBOR integer, read whole, or a text string; each protected bucket's labels are read for the judgment
+    /// alone, whatever its layer's unprotected bucket holds, and a protected bucket whose labels cannot be read is
+    /// handed on raw; a well-formed label the header dictionary does not carry is passed over. A layer that carries
+    /// one label twice in a bucket, an unprotected map key that is neither an integer nor a
+    /// text string, or one label in both of its buckets answers <see cref="CoseSignParseResult.Failure"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of the
+    /// maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed. Applications SHOULD verify that the same label does not occur in both the protected and
+    /// unprotected header parameters."
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of bodyProtectedHeaderCarrier and every component transfers to the returned CoseSignMessage on success; the catch block disposes them on any failure path.")]
     public static ParseCoseSignDelegate ParseCoseSign { get; } = static (coseSignBytes, pool) =>
@@ -493,7 +619,7 @@ public static class CoseSerialization
 
             return CoseSignParseResult.Success(message);
         }
-        catch(Exception ex) when(IsFailClosedCoseSignParseException(ex))
+        catch(Exception ex) when(IsMalformedInputException(ex))
         {
             bodyProtectedHeaderCarrier?.Dispose();
             signerProtectedHeaderCarrier?.Dispose();
@@ -512,9 +638,9 @@ public static class CoseSerialization
 
         //Reads a COSE unprotected-header map from reader, returning null when empty — the shape every
         //layer of COSE_Sign (body and every signer) shares, per RFC 9052 §3's Headers CDDL group.
-        //Fails closed on an indefinite-length map (RFC 9052 §9 requires definite lengths), on a label
-        //repeated in the map and on a label also in the same layer's protected bucket, protectedHeaderBytes
-        //(RFC 9052 Section 3).
+        //Fails closed on an indefinite-length map (RFC 9052 Section 9 requires definite lengths), on a label
+        //repeated in either bucket, on a label also in the same layer's protected bucket, protectedHeaderBytes,
+        //and on a protected bucket whose labels cannot be read (RFC 9052 Section 3).
         static Dictionary<int, object>? ReadUnprotectedHeaderMap(CborReader reader, ReadOnlyMemory<byte> protectedHeaderBytes)
         {
             int? mapLength = reader.ReadStartMap();
@@ -524,23 +650,18 @@ public static class CoseSerialization
             }
 
             Dictionary<int, object>? header = null;
-            HashSet<int> seenLabels = [];
+            HashSet<(Int128 Number, string? Text)> seenLabels = [];
             if(mapLength.Value > 0)
             {
                 header = [];
                 for(int i = 0; i < mapLength.Value; i++)
                 {
-                    int key = reader.ReadInt32();
-                    RefuseRepeatedLabel(seenLabels, key);
-                    object? value = CborValueConverter.ReadValue(reader);
-                    if(value is not null)
-                    {
-                        header[key] = value;
-                    }
+                    ReadHeaderEntry(reader, seenLabels, header);
                 }
             }
+
             reader.ReadEndMap();
-            RefuseLabelInBothBuckets(protectedHeaderBytes, seenLabels);
+            RefuseRepeatedOrSharedLabel(protectedHeaderBytes, seenLabels, isUnreadableBucketRefused: true);
 
             return header;
         }
@@ -548,17 +669,30 @@ public static class CoseSerialization
 
 
     /// <summary>
-    /// Determines whether <paramref name="exception"/> is one of the exception types
-    /// <see cref="ParseCoseSign"/>'s malformed-input paths raise internally — the set the
-    /// fail-closed catch clause converts to <see cref="CoseSignParseResult.Failure"/>
-    /// rather than letting escape, mirroring <c>CBAdESSignatureSerialization</c>'s own
-    /// <c>IsFailClosedParseException</c> predicate.
+    /// Determines whether <paramref name="exception"/> belongs to the family of exceptions this leaf's CBOR readers
+    /// raise for malformed input: the CBOR reader's own <see cref="CborException"/> family, the
+    /// <see cref="InvalidOperationException"/> of a read in the wrong reader state, the <see cref="ArgumentException"/>
+    /// family of a decoded value outside a constructor's domain, the <see cref="IndexOutOfRangeException"/> of a
+    /// truncated structure, the <see cref="OverflowException"/> of an integer outside the width it is read into, and
+    /// the <see cref="FormatException"/> a reader answers a refused shape with. The catches and normalizers around
+    /// the COSE readers (the COSE_Sign1, COSE_Sign and countersignature parsers, the COSE verification and the
+    /// <c>x5chain</c> extractor), the SD-CWT readers (the claim readers, the status claim among them, the Key Binding
+    /// Token readers and the embedded SD-CWT parse) and the mdoc DeviceResponse and IACA trust readers name the
+    /// family through this one predicate, so no member of it escapes one of those sites that another refuses;
+    /// <see cref="ParseCoseSign"/>'s fail-closed catch converts it to <see cref="CoseSignParseResult.Failure"/>,
+    /// mirroring <c>CBAdESSignatureSerialization</c>'s own <c>IsFailClosedParseException</c> predicate.
     /// </summary>
+    /// <remarks>
+    /// <see cref="OperationCanceledException"/> derives from none of these types, so a caller's cancellation is never
+    /// read as malformed input. <see cref="ObjectDisposedException"/>, an <see cref="InvalidOperationException"/>, is
+    /// left out: a carrier or a pool used after its disposal is a lifetime fault of the caller's, never content of
+    /// the data item read.
+    /// </remarks>
     /// <param name="exception">The exception to classify.</param>
     /// <returns><see langword="true"/> when the exception represents malformed input.</returns>
-    private static bool IsFailClosedCoseSignParseException(Exception exception) =>
-        exception is CborException or InvalidOperationException or ArgumentException
-            or IndexOutOfRangeException or OverflowException or FormatException;
+    internal static bool IsMalformedInputException(Exception exception) =>
+        exception is (CborException or InvalidOperationException or ArgumentException
+            or IndexOutOfRangeException or OverflowException or FormatException) and not ObjectDisposedException;
 
 
     /// <summary>
@@ -738,7 +872,7 @@ public static class CoseSerialization
             byte[] protectedHeaderBytes = reader.ReadByteString();
             protectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(protectedHeaderBytes, pool);
 
-            Dictionary<int, object>? unprotectedHeader = ReadCounterSignatureUnprotectedHeaderMap(reader);
+            Dictionary<int, object>? unprotectedHeader = ReadCounterSignatureUnprotectedHeaderMap(reader, protectedHeaderBytes);
 
             byte[] signatureBytes = reader.ReadByteString();
             IMemoryOwner<byte> signatureOwner = pool.Rent(signatureBytes.Length);
@@ -772,8 +906,9 @@ public static class CoseSerialization
 
         //Reads a COSE unprotected-header map from mapReader for a countersignature's own
         //COSE_Signature shape, returning null when empty — the same Headers CDDL group every COSE
-        //layer shares (RFC 9052 §3).
-        static Dictionary<int, object>? ReadCounterSignatureUnprotectedHeaderMap(CborReader mapReader)
+        //layer shares (RFC 9052 Section 3). A label repeated in either bucket, one label in both, or a
+        //protected bucket whose labels cannot be read is a malformed countersignature (RFC 9052 Section 3).
+        static Dictionary<int, object>? ReadCounterSignatureUnprotectedHeaderMap(CborReader mapReader, ReadOnlyMemory<byte> protectedHeaderBytes)
         {
             int? mapLength = mapReader.ReadStartMap();
             if(mapLength is null)
@@ -782,22 +917,18 @@ public static class CoseSerialization
             }
 
             Dictionary<int, object>? header = null;
-            HashSet<int> seenLabels = [];
+            HashSet<(Int128 Number, string? Text)> seenLabels = [];
             if(mapLength.Value > 0)
             {
                 header = [];
                 for(int i = 0; i < mapLength.Value; i++)
                 {
-                    int key = mapReader.ReadInt32();
-                    RefuseRepeatedLabel(seenLabels, key);
-                    object? value = CborValueConverter.ReadValue(mapReader);
-                    if(value is not null)
-                    {
-                        header[key] = value;
-                    }
+                    ReadHeaderEntry(mapReader, seenLabels, header);
                 }
             }
+
             mapReader.ReadEndMap();
+            RefuseRepeatedOrSharedLabel(protectedHeaderBytes, seenLabels, isUnreadableBucketRefused: true);
 
             return header;
         }
@@ -888,13 +1019,27 @@ public static class CoseSerialization
     /// to CBOR bytes, untagged.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Never emits CBOR tag 19 — the tagged form is reserved for read tolerance only.
     /// See <see cref="ReadCounterSignatureV2"/>.
+    /// </para>
+    /// <para>
+    /// The protected bucket arrives already serialized, so its labels are read with the reading side's own label read
+    /// before anything is written, and a countersignature the reading side would refuse is not written.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// The countersignature's protected bucket carries one label twice, a label that is neither an integer nor a text
+    /// string, or a label its unprotected bucket also carries, or it is no well-formed map of labels.
+    /// </exception>
     public static WriteCounterSignatureV2Delegate WriteCounterSignatureV2 { get; } = static (counterSignature, pool) =>
     {
         ArgumentNullException.ThrowIfNull(counterSignature);
         ArgumentNullException.ThrowIfNull(pool);
+        RefuseToWriteMalformedBuckets(
+            counterSignature.Component.ProtectedHeader.AsReadOnlyMemory(), counterSignature.Component.UnprotectedHeader, nameof(counterSignature));
 
         using var buffer = new SlabBufferWriter(pool);
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
@@ -1017,7 +1162,7 @@ public static class CoseSerialization
     /// The final switch arm guards a programming error, not wire data — every label this delegate is ever
     /// invoked with (7, 9, 11, or 12) is already enumerated above; a fifth value means a caller violated
     /// <see cref="ParseCounterSignatureHeaderValueDelegate"/>'s own contract. It therefore throws
-    /// <see cref="UnreachableException"/> rather than one of the types <see cref="IsFailClosedCoseSignParseException"/>
+    /// <see cref="UnreachableException"/> rather than one of the types <see cref="IsMalformedInputException"/>
     /// matches (which include <see cref="ArgumentException"/>, so <see cref="ArgumentOutOfRangeException"/>
     /// would have been laundered into an ordinary <see cref="CoseCounterSignatureParseResult.Failure"/> by the
     /// catch clause below) — a caller bug must surface, not be mistaken for malformed wire content.
@@ -1042,7 +1187,7 @@ public static class CoseSerialization
                 _ => throw new UnreachableException($"COSE header-parameter label {label} is not one of the four labels (7, 9, 11, 12) ParseCounterSignatureHeaderValueDelegate's own contract admits.")
             };
         }
-        catch(Exception ex) when(IsFailClosedCoseSignParseException(ex))
+        catch(Exception ex) when(IsMalformedInputException(ex))
         {
             return CoseCounterSignatureParseResult.Failure();
         }
@@ -1074,37 +1219,130 @@ public static class CoseSerialization
     /// Gets a delegate that parses protected header bytes into a dictionary.
     /// </summary>
     /// <remarks>
-    /// A label that appears twice in the map, judged on the decoded label so that one label written in
-    /// two widths is one label, makes the message malformed and throws <see cref="CborContentException"/>
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
-    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed.").
+    /// <para>
+    /// A label is any CBOR integer, read whole, or a text string, and a label that appears twice in the map, judged on
+    /// its decoded value so that one label written in two widths is one label, makes the message malformed
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed.").
+    /// </para>
+    /// <para>
+    /// The dictionary carries the integer labels within the 32-bit signed range. A well-formed label it does not carry,
+    /// a text string or an integer outside that range, is judged for a repeat and passed over with its value; it is
+    /// never read as another label (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052
+    /// Section 1.5</see>: "label = int / tstr").
+    /// </para>
+    /// <para>
+    /// Bytes after the map are refused: <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949
+    /// Section 1.2</see> defines a well-formed data item as one that "does not include following extraneous data".
+    /// </para>
     /// </remarks>
+    /// <exception cref="CborContentException">
+    /// The map carries one label twice, or a map key that is neither an integer nor a text string, or bytes after the
+    /// map, or the bytes are otherwise not a well-formed map.
+    /// </exception>
     public static ParseProtectedHeaderDelegate ParseProtectedHeader { get; } = static headerBytes =>
     {
         var reader = new CborReader(headerBytes.ToArray(), CborOptions.Lax);
         var result = new Dictionary<int, object>();
-        HashSet<int> seenLabels = [];
+        HashSet<(Int128 Number, string? Text)> seenLabels = [];
 
         int? mapLength = reader.ReadStartMap();
         for(int i = 0; i < mapLength; i++)
         {
-            int key = reader.ReadInt32();
-            RefuseRepeatedLabel(seenLabels, key);
-            object? value = CborValueConverter.ReadValue(reader);
-            if(value is not null)
-            {
-                result[key] = value;
-            }
+            ReadHeaderEntry(reader, seenLabels, result);
         }
+
         reader.ReadEndMap();
+        if(reader.BytesRemaining != 0)
+        {
+            throw new CborContentException("The protected header carries bytes after its map (RFC 9052 Section 3).");
+        }
 
         return result;
     };
 
 
     /// <summary>
+    /// Reads one COSE header-map label as RFC 9052 Section 1.5 defines it: any CBOR integer, negative or unsigned,
+    /// read whole and never cast down, or a text string. Two labels are the same when their decoded values are
+    /// equal: integers by value whatever their encoded width, text strings by their characters; an integer and a
+    /// text string are never the same. This is the one label read of the header maps this file reads and writes.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr"
+    /// and "In a CBOR map defined by this specification, the presence a label that is neither a text string nor an
+    /// integer is an error. Applications can either fail processing or process messages by ignoring incorrect labels;
+    /// however, they MUST NOT create messages with incorrect labels." This reader fails processing.
+    /// </remarks>
+    /// <param name="reader">The reader, positioned at a header-map label.</param>
+    /// <returns>The decoded label: its integer value, or its text when it is a text string.</returns>
+    /// <exception cref="CborContentException">The map key is neither an integer nor a text string.</exception>
+    private static (Int128 Number, string? Text) ReadLabel(CborReader reader)
+    {
+        return reader.PeekState() switch
+        {
+            CborReaderState.UnsignedInteger => ((Int128)reader.ReadUInt64(), null),
+            CborReaderState.NegativeInteger => (-1 - (Int128)reader.ReadCborNegativeIntegerRepresentation(), null),
+            CborReaderState.TextString => (Int128.Zero, reader.ReadTextString()),
+            CborReaderState otherState => throw new CborContentException(
+                $"A COSE header label is an integer or a text string; the map carries a {otherState} map key (RFC 9052 Section 1.5).")
+        };
+    }
+
+
+    /// <summary>
+    /// Tells whether a decoded label is one the header dictionary carries: an integer within the 32-bit signed range
+    /// of the dictionary's own label type.
+    /// </summary>
+    /// <param name="label">The decoded label.</param>
+    /// <param name="dictionaryLabel">The label as the dictionary carries it, when it does.</param>
+    /// <returns><see langword="true"/> when the dictionary carries the label.</returns>
+    private static bool IsDictionaryLabel((Int128 Number, string? Text) label, out int dictionaryLabel)
+    {
+        bool isCarried = label.Text is null && label.Number >= int.MinValue && label.Number <= int.MaxValue;
+        dictionaryLabel = isCarried ? (int)label.Number : 0;
+
+        return isCarried;
+    }
+
+
+    /// <summary>
+    /// Reads one entry of a COSE header map whose values the header dictionary decodes: its label is read and judged
+    /// for a repeat, and a label the dictionary carries is stored with its decoded value (a null value is not stored),
+    /// while any other well-formed label is passed over with its value. Every header map of this file whose values
+    /// are decoded reads its entries here.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of the
+    /// maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed."
+    /// </remarks>
+    /// <param name="reader">The reader, positioned at an entry's label.</param>
+    /// <param name="seenLabels">The labels already read from the same map.</param>
+    /// <param name="header">The dictionary the entry is stored into.</param>
+    /// <exception cref="CborContentException">The label repeats one the map already held, or is neither an integer nor a text string.</exception>
+    private static void ReadHeaderEntry(CborReader reader, HashSet<(Int128 Number, string? Text)> seenLabels, Dictionary<int, object> header)
+    {
+        (Int128 Number, string? Text) label = ReadLabel(reader);
+        RefuseRepeatedLabel(seenLabels, label);
+        if(!IsDictionaryLabel(label, out int dictionaryLabel))
+        {
+            reader.SkipValue();
+
+            return;
+        }
+
+        object? value = CborValueConverter.ReadValue(reader);
+        if(value is not null)
+        {
+            header[dictionaryLabel] = value;
+        }
+    }
+
+
+    /// <summary>
     /// Records <paramref name="label"/> as read from one COSE header map and refuses the message as
-    /// malformed when the same map already held that label. The label is the decoded integer, so one
+    /// malformed when the same map already held that label. The label is the decoded value, so one
     /// label written in two widths is one label.
     /// </summary>
     /// <remarks>
@@ -1117,50 +1355,178 @@ public static class CoseSerialization
     /// <param name="seenLabels">The labels already read from the same map.</param>
     /// <param name="label">The decoded label just read.</param>
     /// <exception cref="CborContentException">The map already held <paramref name="label"/>.</exception>
-    private static void RefuseRepeatedLabel(HashSet<int> seenLabels, int label)
+    private static void RefuseRepeatedLabel(HashSet<(Int128 Number, string? Text)> seenLabels, (Int128 Number, string? Text) label)
     {
         if(!seenLabels.Add(label))
         {
             throw new CborContentException(
-                $"COSE header label {label} appears more than once in one map; the message is malformed (RFC 9052 Section 3).");
+                $"COSE header label {DescribeLabel(label)} appears more than once in one map; the message is malformed (RFC 9052 Section 3).");
         }
     }
 
 
     /// <summary>
-    /// Refuses a message whose protected and unprotected buckets hold the same label, as malformed. The
-    /// protected bucket's labels are read for this check only; its bytes are handed on raw.
+    /// Judges a layer's protected bucket: its labels are read in wire order and each is judged as it is read, so a
+    /// label it carries twice refuses the message at its second occurrence, whatever the unprotected bucket holds and
+    /// whatever follows in the bucket, and a label it shares with the unprotected bucket refuses the message too. A
+    /// bucket carrying bytes after its map refuses the message. The protected bucket's labels are read for this
+    /// judgment only; its bytes are handed on raw.
     /// </summary>
     /// <remarks>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Applications
-    /// SHOULD verify that the same label does not occur in both the protected and unprotected header
-    /// parameters." Since such a message is refused, the precedence sentence that follows the clause has
-    /// nothing left to decide.
+    /// <para>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of the
+    /// maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be rejected
+    /// as malformed. Applications SHOULD verify that the same label does not occur in both the protected and
+    /// unprotected header parameters." Since a message holding one label in both buckets is refused, the precedence
+    /// sentence that follows the clause has nothing left to decide. The same section's
+    /// "empty_or_serialized_map = bstr .cbor header_map / bstr .size 0" makes the bucket one serialized map, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-1.2">RFC 8949 Section 1.2</see> defines a
+    /// well-formed data item as one that "does not include following extraneous data".
+    /// </para>
+    /// <para>
+    /// The labels of the bucket's map are judged; the value under each label is passed over whole and nothing inside
+    /// it is read here. A bucket whose labels cannot be read past the point read, one that is no well-formed map of
+    /// labels, is refused with <paramref name="isUnreadableBucketRefused"/> set and handed on raw with it clear, after
+    /// every label read before that point has been judged. The writing side and every parser but
+    /// <see cref="ParseCoseSign1"/> set the flag.
+    /// </para>
     /// </remarks>
     /// <param name="protectedHeaderBytes">The serialized protected bucket; empty when the bucket is empty.</param>
-    /// <param name="unprotectedLabels">The labels read from the unprotected bucket.</param>
-    /// <exception cref="CborContentException">A label is in both buckets, or the protected bucket repeats a label.</exception>
-    private static void RefuseLabelInBothBuckets(ReadOnlyMemory<byte> protectedHeaderBytes, HashSet<int> unprotectedLabels)
+    /// <param name="unprotectedLabels">The labels read from the same layer's unprotected bucket.</param>
+    /// <param name="isUnreadableBucketRefused">Whether a protected bucket whose labels cannot be read is refused here.</param>
+    /// <exception cref="CborContentException">
+    /// The protected bucket repeats a label, holds a label the unprotected bucket also holds, or carries bytes after its
+    /// map; or, with <paramref name="isUnreadableBucketRefused"/> set, its labels cannot be read.
+    /// </exception>
+    private static void RefuseRepeatedOrSharedLabel(
+        ReadOnlyMemory<byte> protectedHeaderBytes, HashSet<(Int128 Number, string? Text)> unprotectedLabels, bool isUnreadableBucketRefused)
     {
-        if(protectedHeaderBytes.IsEmpty || unprotectedLabels.Count == 0)
+        if(protectedHeaderBytes.IsEmpty)
         {
             return;
         }
 
         var reader = new CborReader(protectedHeaderBytes, CborOptions.Lax);
-        HashSet<int> protectedLabels = [];
-        _ = reader.ReadStartMap();
-        while(reader.PeekState() != CborReaderState.EndMap)
+        HashSet<(Int128 Number, string? Text)> protectedLabels = [];
+        bool isFirstEntry = true;
+        while(true)
         {
-            int label = reader.ReadInt32();
-            RefuseRepeatedLabel(protectedLabels, label);
-            reader.SkipValue();
-            if(unprotectedLabels.Contains(label))
+            (Int128 Number, string? Text)? label;
+            try
+            {
+                label = ReadProtectedLabel(reader, isFirstEntry);
+            }
+            catch(Exception exception) when(IsMalformedInputException(exception))
+            {
+                if(!isUnreadableBucketRefused)
+                {
+                    return;
+                }
+
+                throw new CborContentException(
+                    "The protected bucket is not a well-formed map of labels; the message is malformed (RFC 9052 Section 3).", exception);
+            }
+
+            if(label is not { } readLabel)
+            {
+                break;
+            }
+
+            isFirstEntry = false;
+            RefuseRepeatedLabel(protectedLabels, readLabel);
+            if(unprotectedLabels.Contains(readLabel))
             {
                 throw new CborContentException(
-                    $"COSE header label {label} is in both the protected and the unprotected bucket; the message is malformed (RFC 9052 Section 3).");
+                    $"COSE header label {DescribeLabel(readLabel)} is in both the protected and the unprotected bucket; the message is malformed (RFC 9052 Section 3).");
             }
         }
-        reader.ReadEndMap();
+
+        if(reader.BytesRemaining != 0)
+        {
+            throw new CborContentException(
+                "The protected bucket carries bytes after its map; the message is malformed (RFC 9052 Section 3).");
+        }
+    }
+
+
+    /// <summary>
+    /// Reads the next label of a serialized protected bucket through <see cref="ReadLabel"/>: before the first label the
+    /// map's start is read, and before every later label the value of the label read before it is passed over.
+    /// </summary>
+    /// <param name="reader">The reader over the serialized protected bucket.</param>
+    /// <param name="isFirstEntry">Whether no label of the bucket has been read yet.</param>
+    /// <returns>The decoded label, or <see langword="null"/> when the map has ended.</returns>
+    /// <exception cref="CborContentException">The bucket is not a well-formed map of labels.</exception>
+    private static (Int128 Number, string? Text)? ReadProtectedLabel(CborReader reader, bool isFirstEntry)
+    {
+        if(isFirstEntry)
+        {
+            _ = reader.ReadStartMap();
+        }
+        else
+        {
+            reader.SkipValue();
+        }
+
+        if(reader.PeekState() == CborReaderState.EndMap)
+        {
+            reader.ReadEndMap();
+
+            return null;
+        }
+
+        return ReadLabel(reader);
+    }
+
+
+    /// <summary>
+    /// Refuses, as the caller's own argument, a layer whose protected bucket the reading side would refuse: a label
+    /// carried twice, a map key that is neither an integer nor a text string, a label the layer's unprotected bucket
+    /// also carries, or a bucket that is no well-formed map of labels. The judgment is the reading side's own,
+    /// <see cref="RefuseRepeatedOrSharedLabel"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// generate messages with the same label used twice as a key in a single map."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "Applications can
+    /// either fail processing or process messages by ignoring incorrect labels; however, they MUST NOT create
+    /// messages with incorrect labels."
+    /// </remarks>
+    /// <param name="protectedHeaderBytes">The layer's serialized protected bucket.</param>
+    /// <param name="unprotectedHeader">The layer's unprotected bucket, or <see langword="null"/> when it is empty.</param>
+    /// <param name="parameterName">The name of the serializer's parameter that carries the layer.</param>
+    /// <exception cref="ArgumentException">The reading side would refuse the layer's buckets.</exception>
+    private static void RefuseToWriteMalformedBuckets(
+        ReadOnlyMemory<byte> protectedHeaderBytes, IReadOnlyDictionary<int, object>? unprotectedHeader, string parameterName)
+    {
+        HashSet<(Int128 Number, string? Text)> unprotectedLabels = [];
+        if(unprotectedHeader is not null)
+        {
+            foreach(int unprotectedLabel in unprotectedHeader.Keys)
+            {
+                _ = unprotectedLabels.Add((unprotectedLabel, null));
+            }
+        }
+
+        try
+        {
+            RefuseRepeatedOrSharedLabel(protectedHeaderBytes, unprotectedLabels, isUnreadableBucketRefused: true);
+        }
+        catch(Exception exception) when(IsMalformedInputException(exception))
+        {
+            throw new ArgumentException(
+                "The protected bucket repeats a label, carries a label that is neither an integer nor a text string, or shares a label with the unprotected bucket; such a message is not written (RFC 9052 Sections 1.5, 3 and 9).",
+                parameterName,
+                exception);
+        }
+    }
+
+
+    /// <summary>Answers the text a refusal names a decoded label by: its text, or its integer value.</summary>
+    /// <param name="label">The decoded label.</param>
+    /// <returns>The label's text or its integer value.</returns>
+    private static string DescribeLabel((Int128 Number, string? Text) label)
+    {
+        return label.Text ?? label.Number.ToString(CultureInfo.InvariantCulture);
     }
 }
